@@ -11,11 +11,14 @@ interface AppContextType {
   setActiveView: (view: string) => void;
   activeBusiness: Business;
   setActiveBusiness: (id: string) => void;
+  activeBranchId: string;
+  setActiveBranchId: (id: string) => void;
   activeUser: UserProfile;
   setActiveUser: (id: string) => void;
   
   // Data lists
   businesses: Business[];
+  allBusinesses: Business[];
   profiles: UserProfile[];
   products: Product[];
   customers: Customer[];
@@ -64,12 +67,14 @@ interface AppContextType {
   deleteEvent: (eventId: string) => void;
   clockInOut: (userId: string) => void;
   addAudit: (action: string, oldValue: string, newValue: string) => void;
-  registerBusiness: (name: string, branch: string) => void;
+  registerBusiness: (name: string, branch: string, currency?: string, businessType?: string, registrationNumber?: string) => void;
+  updateBusiness: (id: string, updates: Partial<Business>) => void;
+  deleteBusiness: (id: string) => void;
   registerTenant: (ownerName: string, businessName: string, email: string, password: string) => Promise<boolean>;
   addEmployee: (profile: Omit<UserProfile, 'id' | 'businessId' | 'onlineStatus'>) => void;
   updateEmployee: (userId: string, updates: Partial<UserProfile>) => void;
   removeEmployee: (userId: string) => void;
-  addBranch: (branch: { name: string; location?: string; status: 'Active' | 'Inactive' }) => void;
+  addBranch: (branch: { name: string; location?: string; status: 'Active' | 'Inactive'; managerId?: string; managerName?: string }) => void;
   updateBranch: (branchId: string, updates: Partial<Branch>) => void;
   deleteBranch: (branchId: string) => void;
   markNotificationsRead: () => void;
@@ -118,6 +123,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dbManager.setActiveBusiness(id);
       triggerRefresh();
     },
+    activeBranchId: dbManager.getActiveBranchId(),
+    setActiveBranchId: (id: string) => {
+      dbManager.setActiveBranchId(id);
+      triggerRefresh();
+    },
     activeUser,
     setActiveUser: (id: string) => {
       dbManager.setActiveUser(id);
@@ -126,7 +136,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     connectionStatus,
 
     // Retrieve live filtered lists from the DB manager
-    businesses: dbManager.getBusinesses(),
+    businesses: dbManager.getBusinesses(false),
+    allBusinesses: dbManager.getBusinesses(true),
     profiles: dbManager.getProfiles(),
     products: dbManager.getProducts(),
     customers: dbManager.getCustomers(),
@@ -251,8 +262,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dbManager.addAudit(action, oldValue, newValue);
       triggerRefresh();
     },
-    registerBusiness: (name, branch) => {
-      dbManager.registerBusiness(name, branch);
+    registerBusiness: (name, branch, currency, businessType, registrationNumber) => {
+      dbManager.registerBusiness(name, branch, currency, businessType, registrationNumber);
+      triggerRefresh();
+    },
+    updateBusiness: (id, updates) => {
+      dbManager.updateBusiness(id, updates);
+      triggerRefresh();
+    },
+    deleteBusiness: (id) => {
+      dbManager.deleteBusiness(id);
       triggerRefresh();
     },
     registerTenant: async (ownerName, businessName, email, password) => {

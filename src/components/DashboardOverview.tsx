@@ -24,13 +24,30 @@ export const DashboardOverview: React.FC = () => {
     setActiveView,
     activeUser,
     timelogs,
-    clockInOut
+    clockInOut,
+    businesses,
+    activeBusiness,
+    setActiveBusiness,
+    branches,
+    activeBranchId,
+    setActiveBranchId,
+    registerBusiness,
+    addBranch
   } = useApp();
 
   // Audit list filters states
   const [auditTime, setAuditTime] = useState('All Time');
   const [auditActivity, setAuditActivity] = useState('All Activities');
   const [auditUser, setAuditUser] = useState('All Users');
+
+  // Quick Add Business & Branch States
+  const [showBizModal, setShowBizModal] = useState(false);
+  const [showBranchModal, setShowBranchModal] = useState(false);
+  const [newBizName, setNewBizName] = useState('');
+  const [newBizBranch, setNewBizBranch] = useState('Main HQ');
+  const [newBranchName, setNewBranchName] = useState('');
+  const [newBranchLocation, setNewBranchLocation] = useState('');
+  const [newBranchStatus, setNewBranchStatus] = useState<'Active' | 'Inactive'>('Active');
 
   // Dynamic Metrics Calculations
   const totalRevenue = sales.reduce((acc, s) => acc + s.netAmount, 0);
@@ -134,12 +151,18 @@ export const DashboardOverview: React.FC = () => {
         {/* WELCOME BANNER & CLOCK CARD */}
         <div className="glass-panel p-6 rounded-2xl border-t-2 border-cyan-500/20 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <img 
-              src={activeUser.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'} 
-              alt={activeUser.name} 
-              className="w-16 h-16 rounded-full border-2 border-cyan-500/30 object-cover shadow-lg"
-              referrerPolicy="no-referrer"
-            />
+            {activeUser.avatarUrl ? (
+              <img 
+                src={activeUser.avatarUrl} 
+                alt={activeUser.name} 
+                className="w-16 h-16 rounded-full border-2 border-cyan-500/30 object-cover shadow-lg"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-cyan-950/60 border-2 border-cyan-500/30 flex items-center justify-center font-bold text-lg text-cyan-400 font-mono shadow-lg shrink-0 uppercase">
+                {activeUser.name ? activeUser.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) : 'U'}
+              </div>
+            )}
             <div>
               <h2 className="text-lg font-bold text-gray-100 flex items-center gap-2">
                 Welcome back, {activeUser.name}! 👋
@@ -383,8 +406,96 @@ export const DashboardOverview: React.FC = () => {
     );
   }
 
+  const handleQuickAddBusiness = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBizName) return;
+    registerBusiness(newBizName, newBizBranch);
+    setNewBizName('');
+    setNewBizBranch('Main HQ');
+    setShowBizModal(false);
+    alert(`Business "${newBizName}" has been successfully created!`);
+  };
+
+  const handleQuickAddBranch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBranchName) return;
+    addBranch({
+      name: newBranchName,
+      location: newBranchLocation || undefined,
+      status: newBranchStatus
+    });
+    setNewBranchName('');
+    setNewBranchLocation('');
+    setNewBranchStatus('Active');
+    setShowBranchModal(false);
+    alert(`Branch "${newBranchName}" has been successfully registered!`);
+  };
+
   return (
     <div className="space-y-6">
+      
+      {/* Dynamic Branch/Business Selection & Management Bar */}
+      <div className="glass-panel p-5 rounded-2xl border border-brand-border bg-gray-950/40 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+          {/* Business Selector Dropdown */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[9px] text-gray-500 font-mono uppercase font-bold tracking-wider">Active Workspace</label>
+            <div className="relative">
+              <select
+                value={activeBusiness?.id || ''}
+                onChange={(e) => setActiveBusiness(e.target.value)}
+                className="bg-gray-900 border border-brand-border text-gray-100 py-1.5 pl-3 pr-8 rounded-xl text-xs font-sans focus:outline-none focus:border-cyan-500/50 appearance-none cursor-pointer min-w-[160px]"
+              >
+                {businesses.map((biz) => (
+                  <option key={biz.id} value={biz.id}>
+                    🏢 {biz.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+          </div>
+
+          {/* Branch Selector Dropdown */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[9px] text-gray-500 font-mono uppercase font-bold tracking-wider">Active Branch / Station</label>
+            <div className="relative">
+              <select
+                value={activeBranchId}
+                onChange={(e) => setActiveBranchId(e.target.value)}
+                className="bg-gray-900 border border-brand-border text-gray-100 py-1.5 pl-3 pr-8 rounded-xl text-xs font-sans focus:outline-none focus:border-cyan-500/50 appearance-none cursor-pointer min-w-[180px]"
+              >
+                <option value="all">🌐 All Branches Combined</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    📍 {b.name} ({b.location || 'HQ'})
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+          </div>
+        </div>
+
+        {/* Create Workspace/Branch Controls */}
+        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-end">
+          <button
+            onClick={() => setShowBizModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-gray-900 hover:bg-cyan-950/20 border border-brand-border hover:border-cyan-500/30 rounded-xl text-xs font-medium text-gray-200 transition duration-150 cursor-pointer"
+          >
+            <Plus className="w-4 h-4 text-cyan-400" />
+            <span>Add Business</span>
+          </button>
+          
+          <button
+            onClick={() => setShowBranchModal(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-gray-900 hover:bg-emerald-950/20 border border-brand-border hover:border-emerald-500/30 rounded-xl text-xs font-medium text-gray-200 transition duration-150 cursor-pointer"
+          >
+            <Plus className="w-4 h-4 text-emerald-400" />
+            <span>Create Branch</span>
+          </button>
+        </div>
+      </div>
       
       {/* ==================== ROW 1: KEY PERFORMANCE INDICATORS ==================== */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -719,7 +830,7 @@ export const DashboardOverview: React.FC = () => {
 
           <div className="flex-1 overflow-y-auto space-y-3.5 pr-1 font-mono text-[11px]">
             {displayAudits.map((aud, index) => (
-              <div key={aud.id || index} className="flex items-start justify-between bg-gray-950/30 p-2.5 border border-brand-border/40 rounded-xl">
+              <div key={`${aud.id || 'aud'}-${index}`} className="flex items-start justify-between bg-gray-950/30 p-2.5 border border-brand-border/40 rounded-xl">
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-md shadow-cyan-400/40"></span>
@@ -940,6 +1051,137 @@ export const DashboardOverview: React.FC = () => {
         </div>
 
       </div>
+
+      {/* Add Business Modal */}
+      {showBizModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/80 backdrop-blur-sm p-4">
+          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-brand-border/80 shadow-2xl relative">
+            <button 
+              onClick={() => setShowBizModal(false)}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-300 transition"
+            >
+              ✕
+            </button>
+            <h3 className="text-base font-bold text-gray-100 flex items-center gap-2 mb-2">
+              🏢 Register New Corporate Business
+            </h3>
+            <p className="text-xs text-gray-400 mb-5">Create a clean, isolated multi-tenant commercial slate for your enterprise.</p>
+            
+            <form onSubmit={handleQuickAddBusiness} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-gray-400 font-mono uppercase tracking-wider block">Business / Company Name</label>
+                <input 
+                  type="text"
+                  required
+                  placeholder="e.g. Acme Kenya Limited"
+                  value={newBizName}
+                  onChange={(e) => setNewBizName(e.target.value)}
+                  className="w-full bg-gray-900 border border-brand-border rounded-xl px-3 py-2 text-xs text-gray-100 outline-none focus:border-cyan-500/50 transition font-sans"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-gray-400 font-mono uppercase tracking-wider block">Initial Principal Branch Name</label>
+                <input 
+                  type="text"
+                  required
+                  placeholder="e.g. Nairobi HQ"
+                  value={newBizBranch}
+                  onChange={(e) => setNewBizBranch(e.target.value)}
+                  className="w-full bg-gray-900 border border-brand-border rounded-xl px-3 py-2 text-xs text-gray-100 outline-none focus:border-cyan-500/50 transition font-sans"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-brand-border mt-5">
+                <button
+                  type="button"
+                  onClick={() => setShowBizModal(false)}
+                  className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-gray-400 rounded-xl text-xs font-medium border border-brand-border transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-gradient-to-r from-cyan-500/80 to-blue-600/80 hover:from-cyan-500 hover:to-blue-600 text-white rounded-xl text-xs font-semibold shadow-lg shadow-cyan-500/10 transition"
+                >
+                  Establish Workspace
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create Branch Modal */}
+      {showBranchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/80 backdrop-blur-sm p-4">
+          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-brand-border/80 shadow-2xl relative">
+            <button 
+              onClick={() => setShowBranchModal(false)}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-300 transition"
+            >
+              ✕
+            </button>
+            <h3 className="text-base font-bold text-gray-100 flex items-center gap-2 mb-2">
+              📍 Add Commercial Branch
+            </h3>
+            <p className="text-xs text-gray-400 mb-5">Create a distinct operating unit under <strong>{activeBusiness?.name}</strong> to isolate transactions.</p>
+            
+            <form onSubmit={handleQuickAddBranch} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-gray-400 font-mono uppercase tracking-wider block">Branch Name</label>
+                <input 
+                  type="text"
+                  required
+                  placeholder="e.g. Mombasa Port Vault"
+                  value={newBranchName}
+                  onChange={(e) => setNewBranchName(e.target.value)}
+                  className="w-full bg-gray-900 border border-brand-border rounded-xl px-3 py-2 text-xs text-gray-100 outline-none focus:border-cyan-500/50 transition font-sans"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-gray-400 font-mono uppercase tracking-wider block">Location / City</label>
+                <input 
+                  type="text"
+                  placeholder="e.g. Mombasa CBD (Optional)"
+                  value={newBranchLocation}
+                  onChange={(e) => setNewBranchLocation(e.target.value)}
+                  className="w-full bg-gray-900 border border-brand-border rounded-xl px-3 py-2 text-xs text-gray-100 outline-none focus:border-cyan-500/50 transition font-sans"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-gray-400 font-mono uppercase tracking-wider block">Operating Status</label>
+                <select
+                  value={newBranchStatus}
+                  onChange={(e) => setNewBranchStatus(e.target.value as 'Active' | 'Inactive')}
+                  className="w-full bg-gray-900 border border-brand-border rounded-xl px-3 py-2 text-xs text-gray-100 outline-none focus:border-cyan-500/50 transition font-sans font-medium"
+                >
+                  <option value="Active">🟢 Active & Trading</option>
+                  <option value="Inactive">🔴 Inactive / On Hold</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-brand-border mt-5">
+                <button
+                  type="button"
+                  onClick={() => setShowBranchModal(false)}
+                  className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-gray-400 rounded-xl text-xs font-medium border border-brand-border transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-gradient-to-r from-emerald-500/80 to-teal-600/80 hover:from-emerald-500 hover:to-teal-600 text-white rounded-xl text-xs font-semibold shadow-lg shadow-emerald-500/10 transition"
+                >
+                  Register Branch
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

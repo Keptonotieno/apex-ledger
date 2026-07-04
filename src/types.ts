@@ -23,6 +23,12 @@ export interface Business {
   logoUrl?: string;
   branch?: string;
   currency: string;
+  businessType?: string;
+  registrationNumber?: string;
+  status?: 'Active' | 'Inactive';
+  createdAt?: string;
+  lastActivity?: string;
+  archived?: boolean;
 }
 
 export interface Product {
@@ -195,4 +201,6 @@ export interface Branch {
   location?: string;
   status: 'Active' | 'Inactive';
   createdAt?: string;
+  managerId?: string;
+  managerName?: string;
 }

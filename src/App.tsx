@@ -23,6 +23,7 @@ import { AdminAnalytics } from './components/AdminAnalytics';
 import { ClientDirectory } from './components/ClientDirectory';
 import { SalesOrdersFeed } from './components/SalesOrdersFeed';
 import { Login } from './components/Login';
+import { WorkspacesModule } from './components/WorkspacesModule';
 import { motion, AnimatePresence } from 'motion/react';
 
 function DashboardLayout() {
@@ -38,6 +39,8 @@ function DashboardLayout() {
     switch (activeView) {
       case 'overview':
         return <DashboardOverview />;
+      case 'workspaces':
+        return <WorkspacesModule />;
       case 'sales':
         return <SalesModule />;
       case 'inventory':
@@ -75,6 +78,7 @@ function DashboardLayout() {
   const getViewTitle = () => {
     switch (activeView) {
       case 'overview': return 'Overview Dashboard';
+      case 'workspaces': return 'Workspaces & Corporate Branches';
       case 'sales': return 'POS Point-of-Sale Terminal';
       case 'inventory': return 'Enterprise Inventory Catalog';
       case 'debts': return 'Debt Ledger & Solvency Tracking';

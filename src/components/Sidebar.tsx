@@ -6,7 +6,7 @@ import {
   DollarSign, BarChart3, TrendingUp, Users, ClipboardList, 
   Calendar, CheckSquare, ShieldAlert, Settings, FileText, 
   ChevronLeft, ChevronRight, UserCheck, ShieldAlert as LockIcon,
-  LogOut, Database, Camera
+  LogOut, Database, Camera, Building2
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -33,6 +33,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
   // Define navigation items with their respective roles
   const navItems = [
     { id: 'overview', name: 'Overview', icon: LayoutDashboard, minRole: UserRole.EMPLOYEE },
+    { id: 'workspaces', name: 'Workspaces & Branches', icon: Building2, minRole: UserRole.MANAGER },
     { id: 'sales', name: 'Sales POS', icon: ShoppingCart, minRole: UserRole.EMPLOYEE },
     { id: 'inventory', name: 'Inventory', icon: Package, minRole: UserRole.EMPLOYEE },
     { id: 'debts', name: 'Debt Tracking', icon: CreditCard, minRole: UserRole.EMPLOYEE },
@@ -129,8 +130,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
         ) : (
           <div className="relative">
             <button 
-              onClick={() => setShowWorkspaceSwitcher(!showWorkspaceSwitcher)}
-              className="w-full flex items-center justify-between p-2 rounded-lg bg-gray-950/40 border border-brand-border hover:border-cyan-500/30 text-left transition"
+              onClick={() => {
+                if (activeUser.role !== UserRole.EMPLOYEE) {
+                  setShowWorkspaceSwitcher(!showWorkspaceSwitcher);
+                }
+              }}
+              disabled={activeUser.role === UserRole.EMPLOYEE}
+              className={`w-full flex items-center justify-between p-2 rounded-lg bg-gray-950/40 border border-brand-border text-left transition ${
+                activeUser.role === UserRole.EMPLOYEE ? 'cursor-not-allowed opacity-75' : 'hover:border-cyan-500/30'
+              }`}
             >
               <div className="flex items-center gap-2 overflow-hidden">
                 <Database className="w-4 h-4 text-cyan-500 shrink-0" />
@@ -139,10 +147,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
                   <div className="text-[10px] text-gray-500 font-mono truncate">{activeBusiness.branch || 'Branch'}</div>
                 </div>
               </div>
-              <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+              {activeUser.role !== UserRole.EMPLOYEE && <ChevronRight className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
             </button>
 
-            {showWorkspaceSwitcher && (
+            {showWorkspaceSwitcher && activeUser.role !== UserRole.EMPLOYEE && (
               <div className="absolute top-full left-0 w-full mt-1.5 p-1 bg-gray-900/95 border border-brand-border rounded-lg shadow-xl z-50">
                 <div className="px-2 py-1 text-[10px] text-gray-400 font-mono uppercase">Workspaces</div>
                 {businesses.map((biz) => (
@@ -223,12 +231,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
             }`}
           >
             <div className="relative shrink-0 group/avatar">
-              <img 
-                src={activeUser.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'} 
-                alt={activeUser.name} 
-                className="w-10 h-10 rounded-full border border-cyan-500/20 object-cover"
-                referrerPolicy="no-referrer"
-              />
+              {activeUser.avatarUrl ? (
+                <img 
+                  src={activeUser.avatarUrl} 
+                  alt={activeUser.name} 
+                  className="w-10 h-10 rounded-full border border-cyan-500/20 object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-cyan-950/60 border border-cyan-500/30 flex items-center justify-center font-bold text-sm text-cyan-400 font-mono uppercase">
+                  {activeUser.name ? activeUser.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) : 'U'}
+                </div>
+              )}
               <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-cyan-400 border-2 border-gray-950" />
               <label 
                 onClick={(e) => e.stopPropagation()}
@@ -255,13 +269,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
 
           {/* Upload Link under the Profile Card */}
           {!collapsed && (
-            <div className="mt-2 flex justify-center">
+            <div className="mt-2 flex justify-center gap-1.5">
               <label 
                 onClick={(e) => e.stopPropagation()}
                 className="text-[9px] text-gray-500 hover:text-cyan-400 font-mono uppercase tracking-wider cursor-pointer transition flex items-center gap-1.5 py-1 px-2.5 rounded-md border border-brand-border/40 hover:border-cyan-500/20 bg-gray-950/30"
               >
                 <Camera className="w-3 h-3 text-cyan-400" />
-                <span>Upload Profile Image</span>
+                <span>Upload</span>
                 <input 
                   type="file" 
                   accept="image/*" 
@@ -269,6 +283,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
                   onChange={handleAvatarUpload} 
                 />
               </label>
+              {activeUser.avatarUrl && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    updateEmployee(activeUser.id, { avatarUrl: undefined });
+                    alert("Profile photo removed successfully!");
+                  }}
+                  className="text-[9px] text-rose-500 hover:text-rose-400 font-mono uppercase tracking-wider cursor-pointer transition flex items-center gap-1.5 py-1 px-2.5 rounded-md border border-brand-border/40 hover:border-rose-500/20 bg-gray-950/30"
+                >
+                  <span>Remove</span>
+                </button>
+              )}
             </div>
           )}
 
@@ -286,7 +312,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
                     activeUser.id === p.id ? 'bg-cyan-950/40 text-cyan-400' : 'text-gray-300 hover:bg-gray-800'
                   }`}
                 >
-                  <img src={p.avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
+                  {p.avatarUrl ? (
+                    <img src={p.avatarUrl} alt="" className="w-6 h-6 rounded-full object-cover shrink-0" referrerPolicy="no-referrer" />
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-cyan-950/60 border border-cyan-500/30 flex items-center justify-center font-bold text-[9px] text-cyan-400 font-mono shrink-0 uppercase">
+                      {p.name ? p.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) : 'U'}
+                    </div>
+                  )}
                   <div className="overflow-hidden">
                     <div className="text-xs font-semibold truncate capitalize">{p.name}</div>
                     <div className="text-[9px] text-gray-500 font-mono truncate">{p.role}</div>

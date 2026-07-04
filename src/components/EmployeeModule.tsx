@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { UserRole, UserProfile } from '../types';
-import { Users, Plus, UserPlus, Clock, Trash2, Shield, X, Lock, Edit, Ban, Check } from 'lucide-react';
+import { Users, Plus, UserPlus, Clock, Trash2, Shield, X, Lock, Edit, Ban, Check, Camera } from 'lucide-react';
 
 export const EmployeeModule: React.FC = () => {
   const { 
@@ -10,7 +10,8 @@ export const EmployeeModule: React.FC = () => {
     activeUser, 
     addEmployee, 
     updateEmployee,
-    removeEmployee 
+    removeEmployee,
+    branches
   } = useApp();
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -19,6 +20,7 @@ export const EmployeeModule: React.FC = () => {
   const [formEmail, setFormEmail] = useState('');
   const [formRole, setFormRole] = useState<UserRole>(UserRole.EMPLOYEE);
   const [formBranch, setFormBranch] = useState('Main HQ');
+  const [formAvatarUrl, setFormAvatarUrl] = useState<string | null>(null);
 
   // Custom high-fidelity delete confirmation state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -42,6 +44,7 @@ export const EmployeeModule: React.FC = () => {
     setFormEmail('');
     setFormRole(UserRole.EMPLOYEE);
     setFormBranch('Main HQ');
+    setFormAvatarUrl(null);
     setShowAddModal(true);
   };
 
@@ -55,6 +58,7 @@ export const EmployeeModule: React.FC = () => {
     setFormEmail(p.email);
     setFormRole(p.role);
     setFormBranch(p.branch || 'HQ');
+    setFormAvatarUrl(p.avatarUrl || null);
     setShowAddModal(true);
   };
 
@@ -76,7 +80,8 @@ export const EmployeeModule: React.FC = () => {
         name: formName,
         email: formEmail,
         role: formRole,
-        branch: formBranch
+        branch: formBranch,
+        avatarUrl: formAvatarUrl || undefined
       });
       alert(`Employee profile: "${formName}" successfully updated!`);
     } else {
@@ -85,7 +90,7 @@ export const EmployeeModule: React.FC = () => {
         email: formEmail,
         role: formRole,
         branch: formBranch,
-        avatarUrl: `https://images.unsplash.com/photo-${Math.floor(1500000000000 + Math.random() * 90000000000)}?w=100`
+        avatarUrl: formAvatarUrl || undefined
       });
       alert(`Employee profile: "${formName}" successfully registered and issued credentials!`);
     }
@@ -94,6 +99,7 @@ export const EmployeeModule: React.FC = () => {
     setEditingEmployee(null);
     setFormName('');
     setFormEmail('');
+    setFormAvatarUrl(null);
   };
 
   const handleToggleSuspend = (p: UserProfile) => {
@@ -197,7 +203,13 @@ export const EmployeeModule: React.FC = () => {
                   {profiles.map((p) => (
                     <tr key={p.id} className="hover:bg-gray-900/30 transition">
                       <td className="p-4 flex items-center gap-3">
-                        <img src={p.avatarUrl} alt="" className="w-8 h-8 rounded-full border border-cyan-500/10 object-cover shrink-0" referrerPolicy="no-referrer" />
+                        {p.avatarUrl ? (
+                          <img src={p.avatarUrl} alt="" className="w-8 h-8 rounded-full border border-cyan-500/10 object-cover shrink-0" referrerPolicy="no-referrer" />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-cyan-950/60 border border-cyan-500/30 flex items-center justify-center font-bold text-[10px] text-cyan-400 font-mono shrink-0 uppercase">
+                            {p.name ? p.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) : 'U'}
+                          </div>
+                        )}
                         <div>
                           <span className="font-semibold text-gray-100 capitalize">{p.name}</span>
                           <span className="text-[9px] text-gray-500 font-mono block mt-0.5">{p.branch || 'HQ'}</span>
@@ -349,6 +361,61 @@ export const EmployeeModule: React.FC = () => {
             </h3>
 
             <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono">
+              {/* Optional Photo Upload */}
+              <div className="flex flex-col items-center justify-center p-3.5 bg-gray-950/40 rounded-xl border border-brand-border/60 space-y-2">
+                <div className="relative">
+                  {formAvatarUrl ? (
+                    <img 
+                      src={formAvatarUrl} 
+                      alt="Avatar Preview" 
+                      className="w-16 h-16 rounded-full border border-cyan-500/20 object-cover shadow-md"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-cyan-950/40 border border-cyan-500/10 flex flex-col items-center justify-center text-cyan-400 font-bold font-mono text-xs">
+                      No Photo
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <label className="px-2.5 py-1 bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/30 text-cyan-400 rounded text-[10px] font-mono font-bold cursor-pointer transition flex items-center gap-1">
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>{formAvatarUrl ? 'Change Photo' : 'Upload Photo'}</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          if (file.size > 2 * 1024 * 1024) {
+                            alert("Image is too large. Choose under 2MB.");
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const base64 = event.target?.result as string;
+                            if (base64) {
+                              setFormAvatarUrl(base64);
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }} 
+                    />
+                  </label>
+                  {formAvatarUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setFormAvatarUrl(null)}
+                      className="px-2.5 py-1 bg-rose-950/40 hover:bg-rose-900/30 border border-rose-500/30 text-rose-400 rounded text-[10px] font-mono font-bold transition cursor-pointer"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <span className="text-[10px] text-gray-500 font-sans">Optional profile photo (max 2MB)</span>
+              </div>
+
               <div>
                 <label className="text-gray-400 block mb-1 font-sans">Staff Full Name</label>
                 <input
@@ -393,13 +460,16 @@ export const EmployeeModule: React.FC = () => {
 
                 <div>
                   <label className="text-gray-400 block mb-1">Assigned Branch</label>
-                  <input
-                    type="text"
-                    required
+                  <select
                     value={formBranch}
                     onChange={(e) => setFormBranch(e.target.value)}
-                    className="w-full bg-gray-950/60 border border-brand-border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/30"
-                  />
+                    className="w-full bg-gray-950/60 border border-brand-border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/30 font-sans"
+                  >
+                    <option value="Main HQ">Main HQ</option>
+                    {branches.map(b => (
+                      <option key={b.id} value={b.name}>{b.name}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

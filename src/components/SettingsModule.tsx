@@ -585,12 +585,18 @@ export const SettingsModule: React.FC = () => {
               {/* Left Col: Upload Profile Image */}
               <div className="md:col-span-4 flex flex-col items-center justify-center p-4 bg-gray-950/45 rounded-xl border border-brand-border/60 space-y-3">
                 <div className="relative group/settings-avatar">
-                  <img 
-                    src={activeUser.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'} 
-                    alt={activeUser.name} 
-                    className="w-20 h-20 rounded-full border border-cyan-500/20 object-cover"
-                    referrerPolicy="no-referrer"
-                  />
+                  {activeUser.avatarUrl ? (
+                    <img 
+                      src={activeUser.avatarUrl} 
+                      alt={activeUser.name} 
+                      className="w-20 h-20 rounded-full border border-cyan-500/20 object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-cyan-950/60 border border-cyan-500/30 flex items-center justify-center font-bold text-2xl text-cyan-400 font-mono shadow-inner uppercase">
+                      {activeUser.name ? activeUser.name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) : 'U'}
+                    </div>
+                  )}
                   <label className="absolute inset-0 bg-gray-950/85 rounded-full flex flex-col items-center justify-center opacity-0 group-hover/settings-avatar:opacity-100 transition duration-150 cursor-pointer text-cyan-400 text-[10px] font-mono font-bold uppercase text-center p-1">
                     <Camera className="w-5 h-5 mb-1" />
                     <span>Upload Image</span>
@@ -624,32 +630,46 @@ export const SettingsModule: React.FC = () => {
                   <span className="text-[10px] text-cyan-400 font-mono block uppercase">{activeUser.role}</span>
                 </div>
 
-                <label className="px-3 py-1.5 bg-cyan-950 border border-cyan-500/30 text-cyan-400 hover:bg-cyan-900 transition rounded-lg text-xs font-mono font-bold cursor-pointer flex items-center gap-1">
-                  <Camera className="w-3.5 h-3.5" />
-                  <span>Choose Custom Photo</span>
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    className="hidden" 
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        if (file.size > 2 * 1024 * 1024) {
-                          alert("Image is too large. Choose under 2MB.");
-                          return;
-                        }
-                        const reader = new FileReader();
-                        reader.onload = (event) => {
-                          const base64 = event.target?.result as string;
-                          if (base64) {
-                            updateEmployee(activeUser.id, { avatarUrl: base64 });
+                <div className="flex flex-col gap-1.5 w-full items-center">
+                  <label className="px-3 py-1.5 bg-cyan-950 hover:bg-cyan-900 border border-cyan-500/30 text-cyan-400 transition rounded-lg text-xs font-mono font-bold cursor-pointer flex items-center gap-1">
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>Choose Photo</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          if (file.size > 2 * 1024 * 1024) {
+                            alert("Image is too large. Choose under 2MB.");
+                            return;
                           }
-                        };
-                        reader.readAsDataURL(file);
-                      }
-                    }} 
-                  />
-                </label>
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const base64 = event.target?.result as string;
+                            if (base64) {
+                              updateEmployee(activeUser.id, { avatarUrl: base64 });
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }} 
+                    />
+                  </label>
+                  {activeUser.avatarUrl && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateEmployee(activeUser.id, { avatarUrl: undefined });
+                        alert("Profile photo removed successfully!");
+                      }}
+                      className="px-3 py-1 bg-rose-950/40 hover:bg-rose-900/30 border border-rose-500/30 text-rose-400 rounded-lg text-[10px] font-mono font-bold transition cursor-pointer"
+                    >
+                      Remove Photo
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Right Col: Details form */}

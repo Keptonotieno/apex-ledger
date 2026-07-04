@@ -16,6 +16,10 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
     activeView,
     activeUser, 
     activeBusiness, 
+    setActiveBusiness,
+    businesses,
+    activeBranchId,
+    branches,
     connectionStatus, 
     notifications, 
     markNotificationsRead,
@@ -28,6 +32,11 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
 
   const [showNotificationDrawer, setShowNotificationDrawer] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showBusinessDropdown, setShowBusinessDropdown] = useState(false);
+
+  const currentBranchName = activeBranchId === 'all' 
+    ? 'All Branches' 
+    : (branches.find(b => b.id === activeBranchId)?.name || 'Main HQ');
 
   // Determine current day time logged state
   const todayStr = new Date().toISOString().split('T')[0];
@@ -44,6 +53,7 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
   const getViewTitle = () => {
     switch (activeView) {
       case 'overview': return 'Overview';
+      case 'workspaces': return 'Workspaces & Branches';
       case 'sales': return 'Sales';
       case 'inventory': return 'Inventory';
       case 'debts': return 'Debt Tracking';
@@ -83,9 +93,76 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
           <h1 className="text-lg font-bold text-gray-100 tracking-tight font-sans capitalize">
             {getViewTitle()}
           </h1>
-          <p className="text-xs text-gray-400">
+          <p className="hidden min-[450px]:block text-xs text-gray-400">
             Welcome back, <span className="text-cyan-400 font-medium capitalize">{activeUser.name}</span>
           </p>
+        </div>
+
+        {/* High-fidelity Multi-Business and Branch Indicator Badge */}
+        <div className="flex items-center gap-2 sm:gap-3 bg-gray-950/65 border border-cyan-500/10 px-2 sm:px-3.5 py-1 sm:py-1.5 rounded-xl ml-2 sm:ml-4">
+          <div className="relative">
+            <button 
+              onClick={() => setShowBusinessDropdown(!showBusinessDropdown)}
+              className="text-left flex items-center gap-2 hover:text-cyan-400 transition cursor-pointer select-none"
+              id="header-business-selector-btn"
+            >
+              <div>
+                <span className="text-[8px] text-gray-500 font-mono block uppercase leading-none">Current Business</span>
+                <span className="text-xs font-bold text-gray-200 mt-0.5 flex items-center gap-1 sm:gap-1.5" id="header-current-business-name">
+                  <span className="truncate max-w-[70px] min-[400px]:max-w-[120px] sm:max-w-none">{activeBusiness?.name || 'Corporate Workspace'}</span>
+                  <ChevronDown className="w-3 h-3 text-gray-400 shrink-0" />
+                </span>
+              </div>
+            </button>
+
+            {/* Custom Interactive Dropdown list of businesses */}
+            {showBusinessDropdown && (
+              <>
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setShowBusinessDropdown(false)} 
+                />
+                <div className="absolute left-0 top-full mt-2 w-64 p-1 bg-gray-900/95 border border-brand-border rounded-xl shadow-2xl z-50">
+                  <div className="px-2.5 py-1.5 text-[9px] text-gray-500 font-mono uppercase border-b border-brand-border/60 font-semibold">
+                    Select Active Workspace
+                  </div>
+                  <div className="max-h-60 overflow-y-auto mt-1 space-y-0.5">
+                    {businesses.map((biz) => {
+                      const isActive = biz.id === activeBusiness?.id;
+                      return (
+                        <button
+                          key={biz.id}
+                          onClick={() => {
+                            setActiveBusiness(biz.id);
+                            setShowBusinessDropdown(false);
+                          }}
+                          className={`w-full text-left px-2.5 py-2 rounded-lg flex items-center justify-between transition ${
+                            isActive 
+                              ? 'bg-cyan-950/40 text-cyan-400 font-medium' 
+                              : 'text-gray-300 hover:bg-gray-800'
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold truncate capitalize">{biz.name}</div>
+                            <div className="text-[9px] text-gray-500 font-mono truncate uppercase">
+                              {biz.businessType || 'Retail'} • {biz.currency || 'KSh'}
+                            </div>
+                          </div>
+                          {isActive && <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0 ml-2" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="hidden min-[500px]:block h-5 w-px bg-brand-border/60" />
+          <div className="hidden min-[500px]:block text-left">
+            <span className="text-[8px] text-gray-500 font-mono block uppercase leading-none">Current Branch</span>
+            <span className="text-xs font-semibold text-cyan-400 mt-0.5 block truncate max-w-[80px] sm:max-w-none" id="header-current-branch-name">{currentBranchName}</span>
+          </div>
         </div>
       </div>
 
@@ -193,10 +270,14 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
               </div>
             </div>
             
-            {/* User Initials Avatar with green indicator circle */}
-            <div className="relative w-9 h-9 rounded-full bg-cyan-950/60 border border-cyan-500/30 flex items-center justify-center font-bold text-xs text-cyan-400 glow-cyan shrink-0">
-              {getInitials(activeUser.name)}
-              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-gray-950" />
+            {/* User Avatar with green indicator circle */}
+            <div className="relative w-9 h-9 rounded-full bg-cyan-950/60 border border-cyan-500/30 flex items-center justify-center font-bold text-xs text-cyan-400 glow-cyan shrink-0 overflow-hidden">
+              {activeUser.avatarUrl ? (
+                <img src={activeUser.avatarUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                getInitials(activeUser.name)
+              )}
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-gray-950 z-10" />
             </div>
             <ChevronDown className="w-3.5 h-3.5 text-gray-400 shrink-0" />
           </button>
@@ -218,8 +299,12 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
                     activeUser.id === p.id ? 'bg-cyan-950/40 text-cyan-400' : 'text-gray-300 hover:bg-gray-800'
                   }`}
                 >
-                  <div className="w-6 h-6 rounded-full bg-gray-800 flex items-center justify-center text-[10px] font-bold text-gray-300">
-                    {getInitials(p.name)}
+                  <div className="w-6 h-6 rounded-full bg-gray-800 flex items-center justify-center text-[10px] font-bold text-gray-300 overflow-hidden">
+                    {p.avatarUrl ? (
+                      <img src={p.avatarUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      getInitials(p.name)
+                    )}
                   </div>
                   <div>
                     <div className="text-xs font-semibold capitalize">{p.name}</div>

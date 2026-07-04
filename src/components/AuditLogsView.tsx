@@ -77,8 +77,8 @@ export const AuditLogsView: React.FC = () => {
               No audit records matching criteria.
             </div>
           ) : (
-            filteredAudits.map((aud) => (
-              <div key={aud.id} className="p-4 hover:bg-gray-900/10 transition space-y-2 text-gray-300">
+            filteredAudits.map((aud, idx) => (
+              <div key={`${aud.id}-${idx}`} className="p-4 hover:bg-gray-900/10 transition space-y-2 text-gray-300">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                   
                   {/* Timestamp & User */}

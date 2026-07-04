@@ -256,7 +256,7 @@ export const PerformanceDashboard: React.FC = () => {
         salesVolume,
         salesCount,
         hoursWorked: hoursWorked || (profile.id === 'u3' ? 9 : 0),
-        avatarUrl: profile.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'
+        avatarUrl: profile.avatarUrl || ''
       };
     }).sort((a, b) => b.salesVolume - a.salesVolume);
   }, [filteredSales, profiles, timelogs]);
@@ -330,7 +330,7 @@ export const PerformanceDashboard: React.FC = () => {
       // Draw KPI cards helper
       const drawKpiCard = (x: number, y: number, w: number, h: number, title: string, value: string, color: [number, number, number] = [6, 182, 212]) => {
         doc.setFillColor(15, 23, 42); // slate-900
-        doc.setStrokeColor(30, 41, 59); // slate-800
+        doc.setDrawColor(30, 41, 59); // slate-800
         doc.setLineWidth(0.4);
         doc.roundedRect(x, y, w, h, 3, 3, 'FD');
 
@@ -441,7 +441,7 @@ export const PerformanceDashboard: React.FC = () => {
       if (chartImgData) {
         // Draw elegant slate dark container background for chart
         doc.setFillColor(9, 13, 22);
-        doc.setStrokeColor(30, 41, 59);
+        doc.setDrawColor(30, 41, 59);
         doc.setLineWidth(0.4);
         doc.roundedRect(15, 30, 180, 85, 3, 3, 'FD');
 
@@ -459,7 +459,7 @@ export const PerformanceDashboard: React.FC = () => {
       } else {
         // Fallback placeholder if chart not found
         doc.setFillColor(241, 245, 249);
-        doc.setStrokeColor(226, 232, 240);
+        doc.setDrawColor(226, 232, 240);
         doc.roundedRect(15, 30, 180, 60, 3, 3, 'FD');
         doc.setFont('Helvetica', 'normal');
         doc.setFontSize(9);
@@ -1038,7 +1038,13 @@ export const PerformanceDashboard: React.FC = () => {
                     <div className="w-6 h-6 rounded-full bg-gray-900 border border-brand-border flex items-center justify-center text-xs font-mono font-bold text-cyan-400">
                       {idx + 1}
                     </div>
-                    <img src={user.avatarUrl} alt="" className="w-8.5 h-8.5 rounded-full object-cover border border-cyan-500/20" referrerPolicy="no-referrer" />
+                    {user.avatarUrl ? (
+                      <img src={user.avatarUrl} alt="" className="w-8.5 h-8.5 rounded-full object-cover border border-cyan-500/20" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="w-8.5 h-8.5 rounded-full bg-cyan-950/60 border border-cyan-500/30 flex items-center justify-center font-bold text-[10px] text-cyan-400 font-mono shrink-0 uppercase">
+                        {user.name ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().substring(0, 2) : 'U'}
+                      </div>
+                    )}
                     <div>
                       <h4 className="text-xs font-bold text-gray-200 capitalize">{user.name}</h4>
                       <p className="text-[9px] text-gray-500 font-mono tracking-wider uppercase">{user.role} • {user.branch}</p>

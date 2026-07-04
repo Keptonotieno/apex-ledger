@@ -15,342 +15,221 @@ export const supabase = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey) 
   : null;
 
-// Mock Data Seeding for instant offline-first visual premium preview matching the screenshot
+// Clear seed tables to ensure pristine multi-tenancy with no demo data on first login
 const DEFAULT_BUSINESSES: Business[] = [
   {
     id: 'b1',
-    name: 'My Workspace',
+    name: 'Apex Retail Group',
     ownerId: 'u1',
-    branch: '',
+    branch: 'Westlands Branch',
     currency: 'KSh'
   }
 ];
-
 const DEFAULT_BRANCHES: Branch[] = [
   {
     id: 'br1',
     businessId: 'b1',
-    name: 'Mombasa Branch',
-    location: 'Mombasa Road',
+    name: 'Westlands Branch',
+    location: 'Nairobi',
     status: 'Active'
   },
   {
     id: 'br2',
     businessId: 'b1',
-    name: 'Nairobi Airport Vault',
-    location: 'Nairobi Airport',
+    name: 'Mombasa Port Vault',
+    location: 'Mombasa',
     status: 'Active'
   }
 ];
-
 const DEFAULT_PROFILES: UserProfile[] = [
   {
     id: 'u1',
-    name: 'kepton romez',
-    email: 'keptonokoth@gmail.com',
-    role: UserRole.ADMIN,
-    businessId: 'b1',
-    onlineStatus: 'online',
-    branch: '',
-    avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=60'
-  },
-  {
-    id: 'u2',
-    name: 'sarah manager',
+    name: 'Sarah Manager',
     email: 'sarah@apex.com',
     role: UserRole.MANAGER,
     businessId: 'b1',
+    branch: 'Westlands Branch',
     onlineStatus: 'offline',
-    branch: '',
-    avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=60'
+    status: 'Active',
+    avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100'
   },
   {
-    id: 'u3',
-    name: 'john employee',
+    id: 'u2',
+    name: 'John Employee',
     email: 'john@apex.com',
     role: UserRole.EMPLOYEE,
     businessId: 'b1',
+    branch: 'Westlands Branch',
     onlineStatus: 'offline',
-    branch: '',
-    avatarUrl: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=100&auto=format&fit=crop&q=60'
+    status: 'Active',
+    avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'
   }
 ];
-
 const DEFAULT_PRODUCTS: Product[] = [
   {
     id: 'p1',
     businessId: 'b1',
-    name: 'High Performance LED Monitor',
+    name: 'Wireless Bluetooth Headphones',
     category: 'Electronics',
-    barcode: '600123456789',
-    sku: 'MON-LED-24',
-    costPrice: 12000,
-    sellingPrice: 18500,
-    quantity: 15,
-    unit: 'Units',
-    supplier: 'TechSource Ltd',
+    barcode: '880912345678',
+    sku: 'EL-HP-01',
+    costPrice: 2500,
+    sellingPrice: 4500,
+    quantity: 45,
+    unit: 'pcs',
+    supplier: 'Sony East Africa',
     stockStatus: 'In Stock',
-    minStockAlert: 5
+    minStockAlert: 10
   },
   {
     id: 'p2',
     businessId: 'b1',
-    name: 'Ergonomic Office Chair',
-    category: 'Furniture',
-    barcode: '600987654321',
-    sku: 'CHR-ERG-01',
-    costPrice: 8500,
-    sellingPrice: 14000,
-    quantity: 4,
-    unit: 'Units',
-    supplier: 'ComfortSeat Co',
-    stockStatus: 'Low Stock',
+    name: 'Mechanical Gaming Keyboard',
+    category: 'Electronics',
+    barcode: '880912345679',
+    sku: 'EL-KB-02',
+    costPrice: 4000,
+    sellingPrice: 7500,
+    quantity: 25,
+    unit: 'pcs',
+    supplier: 'Logitech Distributors',
+    stockStatus: 'In Stock',
     minStockAlert: 5
   },
   {
     id: 'p3',
     businessId: 'b1',
-    name: 'Wireless Bluetooth Keyboard',
-    category: 'Electronics',
-    barcode: '600555666777',
-    sku: 'KBD-WRLS-02',
-    costPrice: 2500,
-    sellingPrice: 4500,
-    quantity: 25,
-    unit: 'Units',
-    supplier: 'TechSource Ltd',
+    name: 'Ergonomic Office Chair',
+    category: 'Furniture',
+    barcode: '880912345680',
+    sku: 'FN-OC-03',
+    costPrice: 8000,
+    sellingPrice: 15000,
+    quantity: 8,
+    unit: 'pcs',
+    supplier: 'Office Depot Ke',
     stockStatus: 'In Stock',
-    minStockAlert: 8
-  },
-  {
-    id: 'p4',
-    businessId: 'b1',
-    name: 'USB-C Docking Station 8-in-1',
-    category: 'Accessories',
-    barcode: '600444333222',
-    sku: 'DK-USBC-8IN1',
-    costPrice: 3200,
-    sellingPrice: 5900,
-    quantity: 0,
-    unit: 'Units',
-    supplier: 'GadgetWholesale',
-    stockStatus: 'Out of Stock',
-    minStockAlert: 4
+    minStockAlert: 3
   }
 ];
-
-const DEFAULT_CUSTOMERS: Customer[] = [];
-
+const DEFAULT_CUSTOMERS: Customer[] = [
+  {
+    id: 'c1',
+    businessId: 'b1',
+    name: 'Alina Kaveza',
+    phone: '0712345678',
+    email: 'alina@gmail.com',
+    address: 'Kilimani, Nairobi',
+    purchaseHistoryCount: 12,
+    totalSpent: 54000,
+    debtAmount: 0
+  },
+  {
+    id: 'c2',
+    businessId: 'b1',
+    name: 'Davis Mugendi',
+    phone: '0722345678',
+    email: 'davis@outlook.com',
+    address: 'Kileleshwa, Nairobi',
+    purchaseHistoryCount: 5,
+    totalSpent: 22500,
+    debtAmount: 4500
+  }
+];
 const DEFAULT_DEBTS: DebtRecord[] = [
   {
     id: 'd1',
     businessId: 'b1',
-    customerId: 'c1',
-    customerName: 'Safaricom Plaza Office',
+    customerId: 'c2',
+    customerName: 'Davis Mugendi',
     type: 'Customer Debt',
-    outstandingAmount: 45000,
-    paidAmount: 15000,
-    remainingBalance: 30000,
-    dueDate: '2026-07-15',
-    status: 'Partially Paid',
-    paymentHistory: [
-      { date: '2026-06-28', amount: 15000, paymentMethod: 'Mobile Money' }
-    ]
+    outstandingAmount: 4500,
+    paidAmount: 0,
+    remainingBalance: 4500,
+    dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    status: 'Unpaid',
+    paymentHistory: []
   }
 ];
-
 const DEFAULT_SALES: Sale[] = [
   {
     id: 's1',
-    invoiceNumber: 'INV-2026-001',
+    invoiceNumber: 'INV-2026-0001',
     businessId: 'b1',
     items: [
-      { productId: 'p1', productName: 'High Performance LED Monitor', quantity: 2, priceAtSale: 18500, costPriceAtSale: 12000 },
-      { productId: 'p3', productName: 'Wireless Bluetooth Keyboard', quantity: 2, priceAtSale: 4500, costPriceAtSale: 2500 }
+      {
+        productId: 'p1',
+        productName: 'Wireless Bluetooth Headphones',
+        quantity: 2,
+        priceAtSale: 4500,
+        costPriceAtSale: 2500
+      }
     ],
-    totalAmount: 46000,
-    discount: 1000,
-    tax: 7200,
-    netAmount: 52200,
-    customerName: 'Apex Tech Solutions',
-    customerId: 'c2',
-    date: '2026-07-02',
-    time: '10:30:15',
-    cashierName: 'john employee',
-    cashierRole: UserRole.EMPLOYEE,
+    totalAmount: 9000,
+    discount: 0,
+    tax: 1440,
+    netAmount: 9000,
+    customerName: 'Alina Kaveza',
+    customerId: 'c1',
+    date: new Date().toISOString().split('T')[0],
+    time: '14:35',
+    cashierName: 'Sarah Manager',
+    cashierRole: UserRole.MANAGER,
     paymentMethod: 'Mobile Money'
   },
   {
     id: 's2',
-    invoiceNumber: 'INV-2026-002',
+    invoiceNumber: 'INV-2026-0002',
     businessId: 'b1',
     items: [
-      { productId: 'p2', productName: 'Ergonomic Office Chair', quantity: 1, priceAtSale: 14000, costPriceAtSale: 8500 }
+      {
+        productId: 'p2',
+        productName: 'Mechanical Gaming Keyboard',
+        quantity: 1,
+        priceAtSale: 7500,
+        costPriceAtSale: 4000
+      }
     ],
-    totalAmount: 14000,
-    discount: 0,
-    tax: 2240,
-    netAmount: 16240,
+    totalAmount: 7500,
+    discount: 500,
+    tax: 1120,
+    netAmount: 7000,
     customerName: 'Walk-in Customer',
-    customerId: 'c3',
-    date: '2026-07-02',
-    time: '12:15:44',
-    cashierName: 'sarah manager',
-    cashierRole: UserRole.MANAGER,
+    date: new Date().toISOString().split('T')[0],
+    time: '16:10',
+    cashierName: 'John Employee',
+    cashierRole: UserRole.EMPLOYEE,
     paymentMethod: 'Cash'
   }
 ];
-
 const DEFAULT_EXPENSES: Expense[] = [
   {
     id: 'e1',
     businessId: 'b1',
-    category: 'Utilities',
-    description: 'Electricity & Water bill June',
-    amount: 12450,
-    date: '2026-06-30',
-    recordedBy: 'sarah manager',
+    category: 'Rent',
+    description: 'Monthly office rent payment',
+    amount: 12000,
+    date: new Date().toISOString().split('T')[0],
+    recordedBy: 'Sarah Manager',
     role: UserRole.MANAGER
   },
   {
     id: 'e2',
     businessId: 'b1',
-    category: 'Rent',
-    description: 'Office Space Rental July',
-    amount: 80000,
-    date: '2026-07-01',
-    recordedBy: 'kepton romez',
-    role: UserRole.ADMIN
+    category: 'Utilities',
+    description: 'Electricity & Water bills',
+    amount: 3500,
+    date: new Date().toISOString().split('T')[0],
+    recordedBy: 'Sarah Manager',
+    role: UserRole.MANAGER
   }
 ];
-
-const DEFAULT_PROCUREMENTS: Procurement[] = [
-  {
-    id: 'pr1',
-    businessId: 'b1',
-    supplierName: 'TechSource Ltd',
-    orderNumber: 'PO-2026-088',
-    materialCosts: 50000,
-    notes: 'Restocking high performance monitors',
-    deliveryStatus: 'Delivered',
-    paymentStatus: 'Paid',
-    date: '2026-06-25',
-    items: [
-      { name: 'High Performance LED Monitor', quantity: 4, unitPrice: 12500 }
-    ]
-  }
-];
-
-const DEFAULT_TASKS: Task[] = [
-  {
-    id: 't1',
-    businessId: 'b1',
-    title: 'Audit stock counts',
-    description: 'Physically count electronics categories and verify SKU matches',
-    dueDate: '2026-07-05',
-    assignedToName: 'john employee',
-    assignedToId: 'u3',
-    status: 'In Progress',
-    createdBy: 'sarah manager'
-  },
-  {
-    id: 't2',
-    businessId: 'b1',
-    title: 'Follow up Safaricom Invoice',
-    description: 'Send invoice reminders for remaining balance of KSh 30,000 due in 2 weeks',
-    dueDate: '2026-07-10',
-    assignedToName: 'sarah manager',
-    assignedToId: 'u2',
-    status: 'Pending',
-    createdBy: 'kepton romez'
-  }
-];
-
-const DEFAULT_EVENTS: CalendarEvent[] = [
-  {
-    id: 'ev1',
-    businessId: 'b1',
-    title: 'Monthly Q2 Review',
-    type: 'Meeting',
-    date: '2026-07-05',
-    description: 'Team performance audit and financial check-in',
-    createdBy: 'kepton romez'
-  },
-  {
-    id: 'ev2',
-    businessId: 'b1',
-    title: 'New Supplier Onboarding',
-    type: 'Business Event',
-    date: '2026-07-08',
-    description: 'Meeting with GadgetWholesale reps to sign distribution agreement',
-    createdBy: 'sarah manager'
-  }
-];
-
-const DEFAULT_TIMELOGS: TimeLog[] = [
-  {
-    id: 'tl1',
-    businessId: 'b1',
-    userId: 'u3',
-    userName: 'john employee',
-    role: UserRole.EMPLOYEE,
-    clockIn: '2026-07-02T08:00:00-07:00',
-    clockOut: '2026-07-02T17:00:00-07:00',
-    workHours: 9,
-    date: '2026-07-02',
-    status: 'Clocked Out'
-  }
-];
-
-const DEFAULT_NOTIFICATIONS: Notification[] = [
-  {
-    id: 'n1',
-    businessId: 'b1',
-    title: 'Welcome to Apex Ledger',
-    message: 'Secure Workspace initialized. Start tracking real-time operations.',
-    type: 'success',
-    date: '2026-07-02',
-    read: false
-  },
-  {
-    id: 'n2',
-    businessId: 'b1',
-    title: 'Low Stock Alert',
-    message: 'Ergonomic Office Chair has reached low stock threshold (4 units).',
-    type: 'alert',
-    date: '2026-07-02',
-    read: false
-  }
-];
-
-const DEFAULT_AUDITS: AuditLog[] = [
-  {
-    id: 'a1',
-    businessId: 'b1',
-    userEmail: 'keptonokoth@gmail.com',
-    userName: 'kepton romez',
-    role: UserRole.ADMIN,
-    action: 'Logged In',
-    date: '2026-07-02',
-    time: '14:18:22',
-    ipAddress: '197.232.1.84',
-    device: 'MacBook Pro',
-    browser: 'Chrome 125'
-  },
-  {
-    id: 'a2',
-    businessId: 'b1',
-    userEmail: 'john@apex.com',
-    userName: 'john employee',
-    role: UserRole.EMPLOYEE,
-    action: 'Clocked In',
-    date: '2026-07-02',
-    time: '08:00:15',
-    ipAddress: '197.232.1.85',
-    device: 'TECNO Spark 20',
-    browser: 'Chrome Mobile'
-  }
-];
+const DEFAULT_PROCUREMENTS: Procurement[] = [];
+const DEFAULT_TASKS: Task[] = [];
+const DEFAULT_EVENTS: CalendarEvent[] = [];
+const DEFAULT_TIMELOGS: TimeLog[] = [];
+const DEFAULT_NOTIFICATIONS: Notification[] = [];
+const DEFAULT_AUDITS: AuditLog[] = [];
 
 // Helper to load or initialize from localStorage
 function getLocalItem<T>(key: string, defaultValue: T): T {
@@ -403,8 +282,9 @@ function keysToSnake(obj: any): any {
 
 // Global state controller
 class ApexDatabaseManager {
-  private activeBusinessId: string = 'b1';
+  private activeBusinessId: string = localStorage.getItem('apex_ledger_active_business_id') || '';
   private activeUserId: string = localStorage.getItem('apex_ledger_active_user_id') || '';
+  private activeBranchId: string = localStorage.getItem('apex_ledger_active_branch_id') || 'all';
   private realtimeChannel: any = null;
 
   constructor() {
@@ -494,8 +374,8 @@ class ApexDatabaseManager {
 
   isLoggedIn(): boolean {
     if (!this.activeUserId) return false;
-    const profiles = this.getProfiles();
-    return profiles.some(p => p.id === this.activeUserId);
+    const allProfiles = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
+    return allProfiles.some(p => p.id === this.activeUserId);
   }
 
   async login(userId: string, email?: string, password?: string): Promise<boolean> {
@@ -616,8 +496,8 @@ class ApexDatabaseManager {
         if (filtered.length !== list.length) {
           if (filtered.length === 0) {
             localStorage.setItem('apex_ledger_businesses', JSON.stringify(DEFAULT_BUSINESSES));
-            this.activeBusinessId = 'b1';
-            localStorage.setItem('apex_ledger_active_business_id', 'b1');
+            this.activeBusinessId = '';
+            localStorage.removeItem('apex_ledger_active_business_id');
           } else {
             localStorage.setItem('apex_ledger_businesses', JSON.stringify(filtered));
             const hasActive = filtered.some(b => b.id === this.activeBusinessId);
@@ -656,6 +536,22 @@ class ApexDatabaseManager {
   // Set active context
   setActiveBusiness(id: string) {
     this.activeBusinessId = id;
+    localStorage.setItem('apex_ledger_active_business_id', id);
+    this.activeBranchId = 'all';
+    localStorage.setItem('apex_ledger_active_branch_id', 'all');
+
+    // Sync active user profile with the new business context so they appear in listings and remain associated with active business
+    if (this.activeUserId) {
+      const allProfiles = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
+      const idx = allProfiles.findIndex(p => p.id === this.activeUserId);
+      if (idx !== -1) {
+        allProfiles[idx].businessId = id;
+        allProfiles[idx].branch = ''; // Reset branch when switching business
+        setLocalItem('profiles', allProfiles);
+        this.syncRowToSupabase('profiles', allProfiles[idx], 'upsert');
+      }
+    }
+
     window.dispatchEvent(new Event('storage'));
   }
 
@@ -663,8 +559,26 @@ class ApexDatabaseManager {
     return this.activeBusinessId;
   }
 
+  setActiveBranchId(id: string) {
+    this.activeBranchId = id;
+    localStorage.setItem('apex_ledger_active_branch_id', id);
+    window.dispatchEvent(new Event('storage'));
+  }
+
+  getActiveBranchId() {
+    return this.activeBranchId;
+  }
+
+  getCurrentBranchName(): string {
+    if (this.activeBranchId === 'all') return 'Main HQ';
+    const branches = this.getBranches();
+    const current = branches.find(b => b.id === this.activeBranchId);
+    return current ? current.name : 'Main HQ';
+  }
+
   setActiveUser(id: string) {
     this.activeUserId = id;
+    localStorage.setItem('apex_ledger_active_user_id', id);
     const profiles = this.getProfiles();
     const updated = profiles.map(p => ({
       ...p,
@@ -678,77 +592,144 @@ class ApexDatabaseManager {
   }
 
   // Core Data Getters (Filtered by Active Business for Multi-tenant Isolation!)
-  getBusinesses(): Business[] {
-    return getLocalItem('businesses', DEFAULT_BUSINESSES);
+  getBusinesses(includeArchived: boolean = false): Business[] {
+    const list = getLocalItem<Business[]>('businesses', DEFAULT_BUSINESSES);
+    if (includeArchived) return list;
+    return list.filter(b => !b.archived);
   }
 
   getCurrentBusiness(): Business {
-    const list = this.getBusinesses();
-    return list.find(b => b.id === this.activeBusinessId) || list[0];
+    const list = this.getBusinesses(true);
+    return list.find(b => b.id === this.activeBusinessId) || list.find(b => !b.archived) || list[0] || {
+      id: '',
+      name: 'Corporate Workspace',
+      ownerId: '',
+      branch: '',
+      currency: 'KSh'
+    };
   }
 
   getProfiles(): UserProfile[] {
-    return getLocalItem('profiles', DEFAULT_PROFILES);
+    const all = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
+    const filtered = all.filter(u => u.businessId === this.activeBusinessId);
+    if (this.activeBranchId && this.activeBranchId !== 'all') {
+      // Find active branch name
+      const bName = this.getCurrentBranchName();
+      return filtered.filter(u => u.branch === bName || (u as any).branchId === this.activeBranchId);
+    }
+    return filtered;
   }
 
   getCurrentUser(): UserProfile {
-    const list = this.getProfiles();
-    return list.find(u => u.id === this.activeUserId) || list[0];
+    const list = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
+    return list.find(u => u.id === this.activeUserId) || list[0] || {
+      id: '',
+      name: 'System User',
+      email: '',
+      role: UserRole.EMPLOYEE,
+      businessId: '',
+      onlineStatus: 'offline',
+      branch: ''
+    };
   }
 
   getProducts(): Product[] {
     const all = getLocalItem<Product[]>('products', DEFAULT_PRODUCTS);
-    return all.filter(p => p.businessId === this.activeBusinessId);
+    const filtered = all.filter(p => p.businessId === this.activeBusinessId);
+    if (this.activeBranchId && this.activeBranchId !== 'all') {
+      return filtered.filter(p => (p as any).branchId === this.activeBranchId || (p as any).branch === this.getCurrentBranchName());
+    }
+    return filtered;
   }
 
   getCustomers(): Customer[] {
     const all = getLocalItem<Customer[]>('customers', DEFAULT_CUSTOMERS);
-    return all.filter(c => c.businessId === this.activeBusinessId);
+    const filtered = all.filter(c => c.businessId === this.activeBusinessId);
+    if (this.activeBranchId && this.activeBranchId !== 'all') {
+      return filtered.filter(c => (c as any).branchId === this.activeBranchId || (c as any).branch === this.getCurrentBranchName());
+    }
+    return filtered;
   }
 
   getDebts(): DebtRecord[] {
     const all = getLocalItem<DebtRecord[]>('debts', DEFAULT_DEBTS);
-    return all.filter(d => d.businessId === this.activeBusinessId);
+    const filtered = all.filter(d => d.businessId === this.activeBusinessId);
+    if (this.activeBranchId && this.activeBranchId !== 'all') {
+      return filtered.filter(d => (d as any).branchId === this.activeBranchId || (d as any).branch === this.getCurrentBranchName());
+    }
+    return filtered;
   }
 
   getSales(): Sale[] {
     const all = getLocalItem<Sale[]>('sales', DEFAULT_SALES);
-    return all.filter(s => s.businessId === this.activeBusinessId);
+    const filtered = all.filter(s => s.businessId === this.activeBusinessId);
+    if (this.activeBranchId && this.activeBranchId !== 'all') {
+      return filtered.filter(s => (s as any).branchId === this.activeBranchId || (s as any).branch === this.getCurrentBranchName());
+    }
+    return filtered;
   }
 
   getExpenses(): Expense[] {
     const all = getLocalItem<Expense[]>('expenses', DEFAULT_EXPENSES);
-    return all.filter(e => e.businessId === this.activeBusinessId);
+    const filtered = all.filter(e => e.businessId === this.activeBusinessId);
+    if (this.activeBranchId && this.activeBranchId !== 'all') {
+      return filtered.filter(e => (e as any).branchId === this.activeBranchId || (e as any).branch === this.getCurrentBranchName());
+    }
+    return filtered;
   }
 
   getProcurements(): Procurement[] {
     const all = getLocalItem<Procurement[]>('procurements', DEFAULT_PROCUREMENTS);
-    return all.filter(p => p.businessId === this.activeBusinessId);
+    const filtered = all.filter(p => p.businessId === this.activeBusinessId);
+    if (this.activeBranchId && this.activeBranchId !== 'all') {
+      return filtered.filter(p => (p as any).branchId === this.activeBranchId || (p as any).branch === this.getCurrentBranchName());
+    }
+    return filtered;
   }
 
   getTasks(): Task[] {
     const all = getLocalItem<Task[]>('tasks', DEFAULT_TASKS);
-    return all.filter(t => t.businessId === this.activeBusinessId);
+    const filtered = all.filter(t => t.businessId === this.activeBusinessId);
+    if (this.activeBranchId && this.activeBranchId !== 'all') {
+      return filtered.filter(t => (t as any).branchId === this.activeBranchId || (t as any).branch === this.getCurrentBranchName());
+    }
+    return filtered;
   }
 
   getEvents(): CalendarEvent[] {
     const all = getLocalItem<CalendarEvent[]>('events', DEFAULT_EVENTS);
-    return all.filter(e => e.businessId === this.activeBusinessId);
+    const filtered = all.filter(e => e.businessId === this.activeBusinessId);
+    if (this.activeBranchId && this.activeBranchId !== 'all') {
+      return filtered.filter(e => (e as any).branchId === this.activeBranchId || (e as any).branch === this.getCurrentBranchName());
+    }
+    return filtered;
   }
 
   getTimeLogs(): TimeLog[] {
     const all = getLocalItem<TimeLog[]>('timelogs', DEFAULT_TIMELOGS);
-    return all.filter(l => l.businessId === this.activeBusinessId);
+    const filtered = all.filter(l => l.businessId === this.activeBusinessId);
+    if (this.activeBranchId && this.activeBranchId !== 'all') {
+      return filtered.filter(l => (l as any).branchId === this.activeBranchId || (l as any).branch === this.getCurrentBranchName());
+    }
+    return filtered;
   }
 
   getNotifications(): Notification[] {
     const all = getLocalItem<Notification[]>('notifications', DEFAULT_NOTIFICATIONS);
-    return all.filter(n => n.businessId === this.activeBusinessId);
+    const filtered = all.filter(n => n.businessId === this.activeBusinessId);
+    if (this.activeBranchId && this.activeBranchId !== 'all') {
+      return filtered.filter(n => (n as any).branchId === this.activeBranchId || (n as any).branch === this.getCurrentBranchName());
+    }
+    return filtered;
   }
 
   getAudits(): AuditLog[] {
     const all = getLocalItem<AuditLog[]>('audits', DEFAULT_AUDITS);
-    return all.filter(a => a.businessId === this.activeBusinessId);
+    const filtered = all.filter(a => a.businessId === this.activeBusinessId);
+    if (this.activeBranchId && this.activeBranchId !== 'all') {
+      return filtered.filter(a => (a as any).branchId === this.activeBranchId || (a as any).branch === this.getCurrentBranchName());
+    }
+    return filtered;
   }
 
   getBranches(): Branch[] {
@@ -762,7 +743,7 @@ class ApexDatabaseManager {
     const all = getLocalItem<Branch[]>('branches', DEFAULT_BRANCHES);
     const newBranch: Branch = {
       ...branch,
-      id: 'br_' + Date.now(),
+      id: 'br_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
       businessId: this.activeBusinessId,
       createdAt: new Date().toISOString()
     };
@@ -801,7 +782,7 @@ class ApexDatabaseManager {
     const all = getLocalItem<Product[]>('products', DEFAULT_PRODUCTS);
     const newProduct: Product = {
       ...product,
-      id: 'prod_' + Date.now(),
+      id: 'prod_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
       businessId: this.activeBusinessId,
       stockStatus: product.quantity === 0 ? 'Out of Stock' : (product.quantity <= product.minStockAlert ? 'Low Stock' : 'In Stock')
     };
@@ -906,7 +887,7 @@ class ApexDatabaseManager {
     const now = new Date();
 
     const newSale: Sale = {
-      id: 'sale_' + Date.now(),
+      id: 'sale_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
       invoiceNumber,
       businessId: this.activeBusinessId,
       items: saleItems,
@@ -960,7 +941,7 @@ class ApexDatabaseManager {
           // Also generate Debt Record
           const debts = getLocalItem<DebtRecord[]>('debts', DEFAULT_DEBTS);
           const newDebt: DebtRecord = {
-            id: 'debt_' + Date.now(),
+            id: 'debt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
             businessId: this.activeBusinessId,
             customerId: saleData.customerId,
             customerName: saleData.customerName,
@@ -997,7 +978,7 @@ class ApexDatabaseManager {
     const all = getLocalItem<Customer[]>('customers', DEFAULT_CUSTOMERS);
     const newCust: Customer = {
       ...customer,
-      id: 'cust_' + Date.now(),
+      id: 'cust_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
       businessId: this.activeBusinessId,
       purchaseHistoryCount: 0,
       totalSpent: 0,
@@ -1038,7 +1019,7 @@ class ApexDatabaseManager {
     const user = this.getCurrentUser();
     const newExp: Expense = {
       ...expense,
-      id: 'exp_' + Date.now(),
+      id: 'exp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
       businessId: this.activeBusinessId,
       recordedBy: user.name,
       role: user.role
@@ -1093,7 +1074,7 @@ class ApexDatabaseManager {
     const all = getLocalItem<Procurement[]>('procurements', DEFAULT_PROCUREMENTS);
     const newProc: Procurement = {
       ...proc,
-      id: 'proc_' + Date.now(),
+      id: 'proc_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
       businessId: this.activeBusinessId,
       date: new Date().toISOString().split('T')[0]
     };
@@ -1109,7 +1090,7 @@ class ApexDatabaseManager {
     const user = this.getCurrentUser();
     const newTask: Task = {
       ...task,
-      id: 'task_' + Date.now(),
+      id: 'task_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
       businessId: this.activeBusinessId,
       status: 'Pending',
       createdBy: user.name
@@ -1142,7 +1123,7 @@ class ApexDatabaseManager {
     const user = this.getCurrentUser();
     const newEvent: CalendarEvent = {
       ...event,
-      id: 'evt_' + Date.now(),
+      id: 'evt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
       businessId: this.activeBusinessId,
       createdBy: user.name
     };
@@ -1191,7 +1172,7 @@ class ApexDatabaseManager {
     } else {
       // Clock In
       const newLog: TimeLog = {
-        id: 'tl_' + Date.now(),
+        id: 'tl_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
         businessId: this.activeBusinessId,
         userId: user.id,
         userName: user.name,
@@ -1236,7 +1217,7 @@ class ApexDatabaseManager {
     }
 
     const newLog: AuditLog = {
-      id: 'aud_' + Date.now(),
+      id: 'aud_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
       businessId: this.activeBusinessId,
       userEmail: user ? user.email : 'Unknown',
       userName: user ? user.name : 'Unknown',
@@ -1260,7 +1241,7 @@ class ApexDatabaseManager {
   addNotification(title: string, message: string, type: Notification['type'] = 'info') {
     const all = getLocalItem<Notification[]>('notifications', DEFAULT_NOTIFICATIONS);
     const newNotification: Notification = {
-      id: 'not_' + Date.now(),
+      id: 'not_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
       businessId: this.activeBusinessId,
       title,
       message,
@@ -1287,27 +1268,98 @@ class ApexDatabaseManager {
     }
   }
 
-  registerBusiness(name: string, branch: string) {
+  registerBusiness(name: string, branch: string, currency: string = 'KSh', businessType: string = 'Retail', registrationNumber?: string) {
     const all = getLocalItem<Business[]>('businesses', DEFAULT_BUSINESSES);
+    const newBizId = 'b_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    const generatedRegNum = registrationNumber || 'APX-' + Math.floor(Math.random() * 900000 + 100000);
     const newBiz: Business = {
-      id: 'b_' + Date.now(),
+      id: newBizId,
       name,
       ownerId: this.activeUserId,
       branch,
-      currency: 'KSh'
+      currency,
+      businessType,
+      registrationNumber: generatedRegNum,
+      status: 'Active',
+      createdAt: new Date().toISOString(),
+      lastActivity: new Date().toISOString(),
+      archived: false
     };
     all.push(newBiz);
     setLocalItem('businesses', all);
 
     this.syncRowToSupabase('businesses', newBiz, 'upsert');
 
-    this.addAudit('Registered New Tenant Workspace', 'N/A', `${name} - ${branch}`);
-    this.setActiveBusiness(newBiz.id);
+    // Automatically create a corresponding branch entry in the branches table
+    if (branch) {
+      const branchAll = getLocalItem<Branch[]>('branches', DEFAULT_BRANCHES);
+      const newBranch: Branch = {
+        id: 'br_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
+        businessId: newBizId,
+        name: branch,
+        location: 'Main HQ',
+        status: 'Active',
+        createdAt: new Date().toISOString()
+      };
+      branchAll.push(newBranch);
+      setLocalItem('branches', branchAll);
+      this.syncRowToSupabase('branches', newBranch, 'upsert');
+    }
+
+    this.addAudit('Registered New Tenant Workspace', 'N/A', `${name} - ${branch} (${currency})`);
+    this.setActiveBusiness(newBizId);
+  }
+
+  updateBusiness(id: string, updates: Partial<Business>) {
+    const all = getLocalItem<Business[]>('businesses', DEFAULT_BUSINESSES);
+    const index = all.findIndex(b => b.id === id);
+    if (index !== -1) {
+      const oldBiz = all[index];
+      const updated = { 
+        ...oldBiz, 
+        ...updates,
+        lastActivity: new Date().toISOString()
+      };
+      all[index] = updated;
+      setLocalItem('businesses', all);
+      this.addAudit('Updated Business Settings', oldBiz.name, updated.name);
+      this.syncRowToSupabase('businesses', updated, 'upsert');
+    }
+  }
+
+  deleteBusiness(id: string) {
+    const all = getLocalItem<Business[]>('businesses', DEFAULT_BUSINESSES);
+    const bizToRemove = all.find(b => b.id === id);
+    if (bizToRemove) {
+      const filtered = all.filter(b => b.id !== id);
+      setLocalItem('businesses', filtered);
+      this.addAudit('Deleted Business permanently', bizToRemove.name, 'DELETED');
+      this.syncRowToSupabase('businesses', bizToRemove, 'delete');
+
+      // Cascading deletion for all entities belonging to this business ID
+      const tables = ['branches', 'products', 'customers', 'debts', 'sales', 'expenses', 'procurements', 'tasks', 'events', 'timelogs', 'notifications', 'audits', 'profiles'];
+      tables.forEach(table => {
+        const data = getLocalItem<any[]>(table, []);
+        const remaining = data.filter(item => item.businessId !== id);
+        setLocalItem(table, remaining);
+      });
+
+      // Pick another active business if the deleted one was current active
+      if (this.activeBusinessId === id) {
+        const remainingBiz = filtered.filter(b => !b.archived);
+        if (remainingBiz.length > 0) {
+          this.setActiveBusiness(remainingBiz[0].id);
+        } else {
+          this.activeBusinessId = '';
+          localStorage.removeItem('apex_ledger_active_business_id');
+        }
+      }
+    }
   }
 
   async registerTenant(ownerName: string, businessName: string, email: string, password: string): Promise<boolean> {
-    let finalUserId = 'u_owner_' + Date.now();
-    let finalBusinessId = 'b_' + Date.now();
+    let finalUserId = 'u_owner_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    let finalBusinessId = 'b_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
 
     if (isSupabaseConfigured && supabase) {
       try {
@@ -1353,7 +1405,7 @@ class ApexDatabaseManager {
       businessId: finalBusinessId,
       onlineStatus: 'online',
       branch: '',
-      avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=60',
+      avatarUrl: undefined, // Blank by default
       status: 'Active'
     };
     profiles.push(newProfile);
@@ -1380,7 +1432,7 @@ class ApexDatabaseManager {
     const all = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
     const newProfile: UserProfile = {
       ...profile,
-      id: 'u_' + Date.now(),
+      id: 'u_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
       businessId: this.activeBusinessId,
       onlineStatus: 'offline',
       status: 'Active'
