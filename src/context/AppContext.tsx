@@ -2,7 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   UserProfile, Business, Product, Sale, 
   Customer, DebtRecord, Expense, Procurement, 
-  CalendarEvent, Task, TimeLog, AuditLog, Notification, UserRole, Branch
+  CalendarEvent, Task, TimeLog, AuditLog, Notification, UserRole, Branch,
+  Budget, Invoice, BankTransaction, Reconciliation, Category
 } from '../types';
 import { dbManager } from '../lib/database';
 
@@ -32,8 +33,27 @@ interface AppContextType {
   notifications: Notification[];
   audits: AuditLog[];
   branches: Branch[];
+  budgets: Budget[];
+  invoices: Invoice[];
+  bankTransactions: BankTransaction[];
+  reconciliations: Reconciliation[];
+  categories: Category[];
+  isCategoriesEnabled: boolean;
+  setCategoriesEnabled: (enabled: boolean) => void;
 
   // Database Actions
+  addCategory: (category: Omit<Category, 'id' | 'businessId'>) => void;
+  updateCategory: (categoryId: string, updates: Partial<Category>) => void;
+  deleteCategory: (categoryId: string, reassignToCategoryName?: string) => void;
+  addBudget: (budget: Omit<Budget, 'id' | 'businessId' | 'createdAt' | 'updatedAt'>) => void;
+  updateBudget: (budgetId: string, updates: Partial<Budget>) => void;
+  deleteBudget: (budgetId: string) => void;
+  addInvoice: (invoice: Omit<Invoice, 'id' | 'businessId' | 'invoiceNumber' | 'createdAt' | 'updatedAt'>) => Invoice | undefined;
+  updateInvoice: (invoiceId: string, updates: Partial<Invoice>) => void;
+  deleteInvoice: (invoiceId: string) => void;
+  updateBankTransaction: (btId: string, updates: Partial<BankTransaction>) => void;
+  addReconciliation: (rec: Omit<Reconciliation, 'id' | 'businessId' | 'timestamp'>) => void;
+  syncBankTransactions: () => void;
   addProduct: (product: Omit<Product, 'id' | 'businessId' | 'stockStatus'>) => void;
   updateProduct: (productId: string, updates: Partial<Product>) => void;
   deleteProduct: (productId: string) => void;
@@ -77,6 +97,7 @@ interface AppContextType {
   addBranch: (branch: { name: string; location?: string; status: 'Active' | 'Inactive'; managerId?: string; managerName?: string }) => void;
   updateBranch: (branchId: string, updates: Partial<Branch>) => void;
   deleteBranch: (branchId: string) => void;
+  revertAction: (auditId: string) => boolean;
   markNotificationsRead: () => void;
   connectionStatus: 'Connected' | 'Local Syncing';
   isLoggedIn: boolean;
@@ -151,8 +172,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notifications: dbManager.getNotifications(),
     audits: dbManager.getAudits(),
     branches: dbManager.getBranches(),
+    budgets: dbManager.getBudgets(),
+    invoices: dbManager.getInvoices(),
+    bankTransactions: dbManager.getBankTransactions(),
+    reconciliations: dbManager.getReconciliations(),
+    categories: dbManager.getCategories(),
+    isCategoriesEnabled: dbManager.isCategoriesEnabled(),
+    setCategoriesEnabled: (enabled) => {
+      dbManager.setCategoriesEnabled(enabled);
+      triggerRefresh();
+    },
 
     // Action wrappers
+    addCategory: (category) => {
+      dbManager.addCategory(category);
+      triggerRefresh();
+    },
+    updateCategory: (categoryId, updates) => {
+      dbManager.updateCategory(categoryId, updates);
+      triggerRefresh();
+    },
+    deleteCategory: (categoryId, reassignToCategoryName) => {
+      dbManager.deleteCategory(categoryId, reassignToCategoryName);
+      triggerRefresh();
+    },
     addProduct: (product) => {
       dbManager.addProduct(product);
       triggerRefresh();
@@ -303,6 +346,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dbManager.deleteBranch(branchId);
       triggerRefresh();
     },
+    revertAction: (auditId) => {
+      const res = dbManager.revertAction(auditId);
+      triggerRefresh();
+      return res;
+    },
     markNotificationsRead: () => {
       dbManager.markNotificationsRead();
       triggerRefresh();
@@ -318,6 +366,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setActiveView('overview');
       triggerRefresh();
       window.location.replace('/');
+    },
+    addBudget: (budget) => {
+      dbManager.addBudget(budget);
+      triggerRefresh();
+    },
+    updateBudget: (budgetId, updates) => {
+      dbManager.updateBudget(budgetId, updates);
+      triggerRefresh();
+    },
+    deleteBudget: (budgetId) => {
+      dbManager.deleteBudget(budgetId);
+      triggerRefresh();
+    },
+    addInvoice: (invoice) => {
+      const res = dbManager.addInvoice(invoice);
+      triggerRefresh();
+      return res;
+    },
+    updateInvoice: (invoiceId, updates) => {
+      dbManager.updateInvoice(invoiceId, updates);
+      triggerRefresh();
+    },
+    deleteInvoice: (invoiceId) => {
+      dbManager.deleteInvoice(invoiceId);
+      triggerRefresh();
+    },
+    updateBankTransaction: (btId, updates) => {
+      dbManager.updateBankTransaction(btId, updates);
+      triggerRefresh();
+    },
+    addReconciliation: (rec) => {
+      dbManager.addReconciliation(rec);
+      triggerRefresh();
+    },
+    syncBankTransactions: () => {
+      dbManager.syncBankTransactions();
+      triggerRefresh();
     }
   };
 

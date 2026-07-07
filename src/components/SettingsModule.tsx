@@ -69,7 +69,9 @@ export const SettingsModule: React.FC = () => {
   const [auditLogRetention, setAuditLogRetention] = useState('365 days');
 
   const isAdmin = activeUser?.role === UserRole.ADMIN;
+  const isManager = activeUser?.role === UserRole.MANAGER;
   const isEmployee = activeUser?.role === UserRole.EMPLOYEE;
+  const canManageBranches = isAdmin || (isManager && !!activeBusiness?.allowManagersToManageBranches);
 
   // Environment fields (read only / showcase)
   const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || 'https://ais-database.supabase.co';
@@ -152,8 +154,8 @@ export const SettingsModule: React.FC = () => {
 
   const handleAddBranch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) {
-      alert('Access Denied: Only Business Owners can register branches.');
+    if (!canManageBranches) {
+      alert('Access Denied: You do not have permission to register branches.');
       return;
     }
     if (!newBranchName.trim()) return;
@@ -169,6 +171,10 @@ export const SettingsModule: React.FC = () => {
   };
 
   const handleStartEditBranch = (branch: Branch) => {
+    if (!canManageBranches) {
+      alert('Access Denied: You do not have permission to manage branches.');
+      return;
+    }
     setEditingBranchId(branch.id);
     setEditingBranchName(branch.name);
     setEditingBranchLocation(branch.location || '');
@@ -177,8 +183,8 @@ export const SettingsModule: React.FC = () => {
 
   const handleSaveEditBranch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) {
-      alert('Access Denied: Only Business Owners can edit branches.');
+    if (!canManageBranches) {
+      alert('Access Denied: You do not have permission to edit branches.');
       return;
     }
     if (!editingBranchId || !editingBranchName.trim()) return;
@@ -195,8 +201,8 @@ export const SettingsModule: React.FC = () => {
   };
 
   const handleRemoveBranch = (branchId: string, branchName: string) => {
-    if (!isAdmin) {
-      alert('Access Denied: Only Business Owners can remove branches.');
+    if (!canManageBranches) {
+      alert('Access Denied: You do not have permission to remove branches.');
       return;
     }
     if (confirm(`Are you sure you want to shut down branch "${branchName}"? All references will be archived.`)) {
@@ -851,8 +857,8 @@ export const SettingsModule: React.FC = () => {
                   </form>
                 ) : (
                   <div className="space-y-4">
-                    {/* Create Branch Form - Only for admins */}
-                    {isAdmin ? (
+                    {/* Create Branch Form - Only for admins/managers with permission */}
+                    {canManageBranches ? (
                       <form onSubmit={handleAddBranch} className="space-y-3 bg-gray-950/30 p-3.5 rounded-xl border border-brand-border/60">
                         <span className="text-[10px] text-cyan-400 font-mono font-bold block">REGISTER NEW BRANCH</span>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -883,7 +889,7 @@ export const SettingsModule: React.FC = () => {
                     ) : (
                       <div className="p-3 bg-gray-950/20 border border-brand-border/40 rounded-xl text-[10px] text-gray-500 flex items-start gap-1.5 font-sans">
                         <Info className="w-4 h-4 text-cyan-500/70 shrink-0 mt-0.5" />
-                        <span>Viewing organization directory. Only the Corporate Owner can add, edit, or shut down branches.</span>
+                        <span>Viewing organization directory. Only the Corporate Owner and authorized Managers can add, edit, or shut down branches.</span>
                       </div>
                     )}
 
@@ -919,7 +925,7 @@ export const SettingsModule: React.FC = () => {
                               </div>
                             </div>
 
-                            {isAdmin && (
+                            {canManageBranches && (
                               <div className="flex items-center gap-1.5 shrink-0">
                                 <button
                                   onClick={() => handleStartEditBranch(b)}

@@ -13,7 +13,12 @@ export interface UserProfile {
   avatarUrl?: string;
   onlineStatus: 'online' | 'offline';
   branch?: string;
-  status?: 'Active' | 'Suspended';
+  status?: 'Active' | 'Suspended' | 'Archived' | 'Deleted';
+  phone?: string;
+  badgeNumber?: string;
+  dateJoined?: string;
+  lastLogin?: string;
+  createdBy?: string;
 }
 
 export interface Business {
@@ -29,6 +34,7 @@ export interface Business {
   createdAt?: string;
   lastActivity?: string;
   archived?: boolean;
+  allowManagersToManageBranches?: boolean;
 }
 
 export interface Product {
@@ -39,13 +45,26 @@ export interface Product {
   imageUrl?: string;
   barcode: string;
   sku: string;
-  costPrice: number;
+  costPrice: number; // Buying Price
   sellingPrice: number;
   quantity: number;
-  unit: string;
+  unit: string; // unit type
   supplier: string;
   stockStatus: 'In Stock' | 'Low Stock' | 'Out of Stock';
-  minStockAlert: number;
+  minStockAlert: number; // Reorder Level
+  qrCode?: string;
+  description?: string;
+  pricingType?: 'Fixed Unit' | 'Measured';
+  maxStock?: number;
+  supplierPhone?: string;
+  supplierEmail?: string;
+  supplierCompany?: string;
+  supplierAddress?: string;
+  supplierNotes?: string;
+  productStatus?: 'Active' | 'Hidden' | 'Discontinued';
+  images?: string[];
+  documents?: { name: string; url: string; type: string }[];
+  archived?: boolean;
 }
 
 export interface SaleItem {
@@ -85,6 +104,12 @@ export interface Customer {
   purchaseHistoryCount: number;
   totalSpent: number;
   debtAmount: number;
+  workspaceId?: string;
+  branchId?: string;
+  workspace_id?: string;
+  business_id?: string;
+  branch_id?: string;
+  archived?: boolean;
 }
 
 export interface DebtRecord {
@@ -114,6 +139,23 @@ export interface Expense {
   date: string;
   recordedBy: string;
   role: UserRole;
+  vendorName?: string;
+  department?: string;
+  paymentMethod?: string;
+  receiptNumber?: string;
+  invoiceNumber?: string;
+  taxAmount?: number;
+  taxInclusive?: boolean;
+  project?: string;
+  employeeResponsible?: string;
+  approvalRequired?: boolean;
+  status?: 'Draft' | 'Submitted' | 'Pending Approval' | 'Approved' | 'Rejected';
+  approvalHistory?: { approverName: string; approverRole: string; action: string; date: string; comment?: string }[];
+  receiptUrl?: string;
+  branch?: string;
+  notes?: string;
+  attachments?: { name: string; url: string; size: string }[];
+  recurring?: { isRecurring: boolean; frequency: 'Daily' | 'Weekly' | 'Monthly' | 'Quarterly' | 'Yearly'; status: 'Active' | 'Paused' };
 }
 
 export interface Procurement {
@@ -131,6 +173,35 @@ export interface Procurement {
     quantity: number;
     unitPrice: number;
   }[];
+  // Extended fields for full Android Purchase Order Feature Parity
+  status?: 'Draft' | 'Submitted' | 'Pending Approval' | 'Approved' | 'Ordered' | 'Partially Received' | 'Fully Received' | 'Cancelled' | 'Closed';
+  expectedDeliveryDate?: string;
+  employeeName?: string;
+  employeeId?: string;
+  internalNotes?: string;
+  supplierContactName?: string;
+  supplierEmail?: string;
+  supplierPhone?: string;
+  paymentTerms?: string;
+  priorityLevel?: 'Low' | 'Medium' | 'High' | 'Urgent';
+  productId?: string;
+}
+
+export interface Supplier {
+  id: string;
+  businessId: string;
+  name: string;
+  contactPerson: string;
+  phone: string;
+  email: string;
+  address: string;
+  category: string;
+  productsSupplied: string[];
+  totalOrders: number;
+  totalSpend: number;
+  lastPurchaseDate?: string;
+  supplierRating: number;
+  status: 'Active' | 'Inactive' | 'Archived';
 }
 
 export interface CalendarEvent {
@@ -203,4 +274,69 @@ export interface Branch {
   createdAt?: string;
   managerId?: string;
   managerName?: string;
+}
+
+export interface Budget {
+  id: string;
+  businessId: string;
+  category: string;
+  spendingLimit: number;
+  amountSpent: number;
+  remainingBalance: number;
+  percentageUsed: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string;
+}
+
+export interface Invoice {
+  id: string;
+  businessId: string;
+  invoiceNumber: string;
+  customerName: string;
+  billingAmount: number;
+  lineItemDescription: string;
+  dueDateOffset: number;
+  dueDate: string;
+  status: 'Draft' | 'Sent' | 'Paid' | 'Overdue';
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string;
+}
+
+export interface BankTransaction {
+  id: string;
+  businessId: string;
+  amount: number;
+  date: string;
+  reference: string;
+  source: string;
+  description: string;
+  categorySuggestion: string;
+  status: 'Pending' | 'Reconciled' | 'Ignored';
+  reconciliationId?: string;
+  reconciledAt?: string;
+}
+
+export interface Reconciliation {
+  id: string;
+  businessId: string;
+  amount: number;
+  paymentReference: string;
+  category: string;
+  status: 'Reconciled';
+  timestamp: string;
+}
+
+export interface Category {
+  id: string;
+  businessId: string;
+  name: string;
+  description?: string;
+  createdAt?: string;
+  workspaceId?: string;
+  branchId?: string;
+  workspace_id?: string;
+  business_id?: string;
+  branch_id?: string;
 }

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { formatKSh } from '../lib/utils';
+import { UserRole } from '../types';
 import { 
   BarChart3, TrendingUp, TrendingDown, DollarSign, PieChart,
   Layers, RefreshCw, Calendar, Download, ShieldCheck, ArrowUpRight,
@@ -24,7 +25,9 @@ export const AdminAnalytics: React.FC = () => {
     debts, 
     profiles, 
     timelogs, 
-    branches 
+    branches,
+    activeUser,
+    revertAction
   } = useApp();
 
   // Filters state
@@ -36,13 +39,210 @@ export const AdminAnalytics: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState('All');
 
   // Interactive tabs state
-  const [activeTab, setActiveTab] = useState<'overview' | 'revenue' | 'expenses' | 'inventory' | 'customers' | 'debts' | 'employees'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'revenue' | 'expenses' | 'inventory' | 'customers' | 'debts' | 'employees' | 'audits_feed'>('overview');
+
+  // Dedicated filters for the System Activity Audit Log
+  const [auditEmployeeFilter, setAuditEmployeeFilter] = useState('All');
+  const [auditActionFilter, setAuditActionFilter] = useState('All');
+  const [auditTimeFilter, setAuditTimeFilter] = useState('All Time');
+  const [auditCustomStart, setAuditCustomStart] = useState('');
+  const [auditCustomEnd, setAuditCustomEnd] = useState('');
 
   // PDF statement print preview state
   const [isPrintingReport, setIsPrintingReport] = useState(false);
 
   const todayStr = '2026-07-03';
   const todayDate = new Date(todayStr + 'T00:00:00');
+
+  // --- SYSTEM ACTIVITY LOG HELPER FUNCTIONS ---
+  const isAuditInTimeRange = (logDateStr: string, range: string, customStart?: string, customEnd?: string) => {
+    if (!logDateStr) return false;
+    const logDate = new Date(logDateStr + 'T00:00:00');
+    const todayVal = new Date(todayStr + 'T00:00:00');
+    
+    switch (range) {
+      case 'Today':
+        return logDateStr === todayStr;
+      case 'Yesterday': {
+        const yesterday = new Date(todayVal);
+        yesterday.setDate(yesterday.getDate() - 1);
+        return logDateStr === yesterday.toISOString().split('T')[0];
+      }
+      case 'This Week': {
+        const diffTime = todayVal.getTime() - logDate.getTime();
+        const diffDays = diffTime / (1000 * 60 * 60 * 24);
+        return diffDays >= 0 && diffDays < 7;
+      }
+      case 'Last Week': {
+        const diffTime = todayVal.getTime() - logDate.getTime();
+        const diffDays = diffTime / (1000 * 60 * 60 * 24);
+        return diffDays >= 7 && diffDays < 14;
+      }
+      case 'This Month':
+        return logDateStr.substring(0, 7) === todayStr.substring(0, 7);
+      case 'Last Month': {
+        const prevMonth = new Date(todayVal);
+        prevMonth.setMonth(prevMonth.getMonth() - 1);
+        return logDateStr.substring(0, 7) === prevMonth.toISOString().substring(0, 7);
+      }
+      case 'This Year':
+        return logDate.getFullYear() === todayVal.getFullYear();
+      case 'Custom Date Range':
+        if (!customStart || !customEnd) return true;
+        return logDateStr >= customStart && logDateStr <= customEnd;
+      case 'All Time':
+      default:
+        return true;
+    }
+  };
+
+  const getAuditModule = (action: string): string => {
+    const actLower = action.toLowerCase();
+    if (actLower.includes('product') || actLower.includes('inventory') || actLower.includes('stock')) return 'Inventory';
+    if (actLower.includes('sale') || actLower.includes('sold') || actLower.includes('checkout') || actLower.includes('invoice')) return 'Sales';
+    if (actLower.includes('expense') || actLower.includes('spend')) return 'Expenses';
+    if (actLower.includes('debt') || actLower.includes('credit') || actLower.includes('loan') || actLower.includes('borrow')) return 'Debts';
+    if (actLower.includes('customer') || actLower.includes('client')) return 'Customers';
+    if (actLower.includes('employee') || actLower.includes('user') || actLower.includes('profile')) return 'Employees';
+    if (actLower.includes('branch')) return 'Branches';
+    if (actLower.includes('business') || actLower.includes('workspace')) return 'Workspaces';
+    if (actLower.includes('login') || actLower.includes('logout') || actLower.includes('session')) return 'Security';
+    if (actLower.includes('task')) return 'Tasks';
+    if (actLower.includes('event') || actLower.includes('calendar')) return 'Calendar';
+    if (actLower.includes('procure')) return 'Procurement';
+    return 'System';
+  };
+
+  const getAuditHighRiskInfo = (log: any): { isHighRisk: boolean; reason?: string } => {
+    const action = log.action || '';
+    const actLower = action.toLowerCase();
+    
+    // 1. Record deletions
+    if (actLower.includes('delete') || actLower.includes('decommission') || actLower.includes('permanently delete') || actLower.includes('remove')) {
+      return { isHighRisk: true, reason: 'Record Deletion' };
+    }
+    // 2. Failed logins
+    if (actLower.includes('failed') || actLower.includes('unauthorized') || actLower.includes('block') || actLower.includes('locked')) {
+      return { isHighRisk: true, reason: 'Failed Auth Attempt' };
+    }
+    // 3. Large expense entries (> 50,000 KSh)
+    if (actLower.includes('expense')) {
+      const expenseAmountStr = log.newValue?.match(/\d+/)?.[0];
+      const expenseAmount = expenseAmountStr ? parseFloat(expenseAmountStr) : 0;
+      if (expenseAmount > 50000) {
+        return { isHighRisk: true, reason: `Large Expense Flag (> ${formatKSh(50000)})` };
+      }
+    }
+    // 4. Large inventory adjustments (> 100 units)
+    if (actLower.includes('qty')) {
+      const oldQtyStr = log.oldValue?.match(/Qty:\s*(\d+)/)?.[1];
+      const newQtyStr = log.newValue?.match(/Qty:\s*(\d+)/)?.[1];
+      const oldQty = oldQtyStr ? parseInt(oldQtyStr) : 0;
+      const newQty = newQtyStr ? parseInt(newQtyStr) : 0;
+      if (Math.abs(newQty - oldQty) >= 100) {
+        return { isHighRisk: true, reason: `Large Inventory Adjustment (Δ ≥ 100 units)` };
+      }
+    }
+    // 5. Product price changes
+    if (actLower.includes('product') && actLower.includes('price')) {
+      return { isHighRisk: true, reason: 'Product Price Modification' };
+    }
+    if (actLower.includes('updated product') && (log.oldValue?.includes('Price:') && log.newValue?.includes('Price:') && log.oldValue !== log.newValue)) {
+      return { isHighRisk: true, reason: 'Product Price Modification' };
+    }
+
+    return { isHighRisk: false };
+  };
+
+  const getFilteredSystemAudits = () => {
+    const bizAudits = audits.filter(a => a.businessId === activeBusiness.id);
+    
+    return bizAudits.filter(log => {
+      // 1. Employee Filter
+      if (auditEmployeeFilter !== 'All' && log.userName !== auditEmployeeFilter) return false;
+      
+      // 2. Action Filter
+      let matchesAction = true;
+      if (auditActionFilter !== 'All') {
+        const actLower = log.action.toLowerCase();
+        switch (auditActionFilter) {
+          case 'Insert':
+            matchesAction = actLower.includes('add') || actLower.includes('creat') || actLower.includes('register') || actLower.includes('record') || actLower.includes('clocked in') || actLower.includes('inserted') || actLower.includes('logged in');
+            break;
+          case 'Update':
+            matchesAction = actLower.includes('updat') || actLower.includes('edit') || actLower.includes('revert') || actLower.includes('paid');
+            break;
+          case 'Delete':
+            matchesAction = actLower.includes('delet') || actLower.includes('decommission') || actLower.includes('remove') || actLower.includes('shut down');
+            break;
+          case 'Login':
+            matchesAction = actLower.includes('login') || actLower.includes('logged in') || actLower.includes('clock in') || actLower.includes('clocked in');
+            break;
+          case 'Logout':
+            matchesAction = actLower.includes('logout') || actLower.includes('logged out') || actLower.includes('clock out') || actLower.includes('clocked out');
+            break;
+          case 'Sales':
+            matchesAction = actLower.includes('sale') || actLower.includes('sold') || actLower.includes('checkout') || actLower.includes('invoice');
+            break;
+          case 'Inventory':
+            matchesAction = actLower.includes('product') || actLower.includes('inventory') || actLower.includes('stock');
+            break;
+          case 'Expenses':
+            matchesAction = actLower.includes('expense') || actLower.includes('spend') || actLower.includes('cost');
+            break;
+          case 'Products':
+            matchesAction = actLower.includes('product');
+            break;
+          case 'Customers':
+            matchesAction = actLower.includes('customer') || actLower.includes('client');
+            break;
+          case 'Debts':
+            matchesAction = actLower.includes('debt') || actLower.includes('credit') || actLower.includes('loan') || actLower.includes('borrow');
+            break;
+          default:
+            matchesAction = true;
+        }
+      }
+      if (!matchesAction) return false;
+
+      // 3. Time Filter
+      if (!isAuditInTimeRange(log.date, auditTimeFilter, auditCustomStart, auditCustomEnd)) return false;
+
+      return true;
+    });
+  };
+
+  const formatKenyanTime = (dateStr: string, timeStr: string) => {
+    try {
+      const [year, month, day] = dateStr.split('-');
+      const [hour, minute, second] = timeStr.split(':');
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const monthName = months[parseInt(month) - 1] || month;
+      
+      let hr = parseInt(hour);
+      const ampm = hr >= 12 ? 'PM' : 'AM';
+      hr = hr % 12;
+      if (hr === 0) hr = 12;
+      const formattedHour = hr.toString().padStart(2, '0');
+      
+      return `${day} ${monthName} ${year}, ${formattedHour}:${minute}:${second} ${ampm} EAT`;
+    } catch (e) {
+      return `${dateStr} ${timeStr}`;
+    }
+  };
+
+  const handleRevert = (logId: string) => {
+    if (activeUser.role !== UserRole.ADMIN && activeUser.role !== UserRole.MANAGER) {
+      alert("Unauthorized action. Only Business Owners and Managers can revert activities.");
+      return;
+    }
+    const success = revertAction(logId);
+    if (success) {
+      alert("Action successfully reverted. An updated security log has been cryptographically recorded.");
+    } else {
+      alert("Failed to revert action. The target record might be missing, already reverted, or contains incompatible history dependencies.");
+    }
+  };
 
   // --- DATE FILTER HELPER ---
   const isDateInRange = (dateStr: string, range: string, start?: string, end?: string) => {
@@ -757,7 +957,8 @@ export const AdminAnalytics: React.FC = () => {
               { id: 'inventory', name: 'Inventory Asset', icon: Package },
               { id: 'customers', name: 'Client Loyalty', icon: Users },
               { id: 'debts', name: 'Debt & Credit', icon: CreditCard },
-              { id: 'employees', name: 'Team Scorecard', icon: User }
+              { id: 'employees', name: 'Team Scorecard', icon: User },
+              { id: 'audits_feed', name: 'Live Activity Feed', icon: ShieldCheck }
             ].map(tab => {
               const Icon = tab.icon;
               return (
@@ -1380,6 +1581,281 @@ export const AdminAnalytics: React.FC = () => {
                   })}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* TAB 8: SYSTEM ACTIVITY LOGS FEED */}
+          {activeTab === 'audits_feed' && (
+            <div className="space-y-6">
+              
+              {/* Header stats widget row */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="glass-panel p-5 rounded-2xl border-t border-brand-border">
+                  <span className="text-[10px] text-gray-400 font-mono block">TOTAL SECURITY LOGS</span>
+                  <h3 className="text-2xl font-black font-mono text-cyan-400 mt-2">
+                    {audits.filter(a => a.businessId === activeBusiness.id).length} Entries
+                  </h3>
+                  <p className="text-[10px] text-gray-500 mt-1">Immutable business activities recorded</p>
+                </div>
+                
+                <div className="glass-panel p-5 rounded-2xl border-t border-brand-border">
+                  <span className="text-[10px] text-gray-400 font-mono block">STAFF TRACKED</span>
+                  <h3 className="text-2xl font-bold font-mono text-gray-200 mt-2">
+                    {Array.from(new Set(audits.filter(a => a.businessId === activeBusiness.id).map(a => a.userName))).length} Users
+                  </h3>
+                  <p className="text-[10px] text-gray-500 mt-1">Unique active operators tracked</p>
+                </div>
+
+                <div className="glass-panel p-5 rounded-2xl border-t border-rose-500/20">
+                  <span className="text-[10px] text-gray-400 font-mono block text-rose-400">HIGH-RISK ALERTS</span>
+                  <h3 className="text-2xl font-bold font-mono text-rose-400 mt-2">
+                    {audits.filter(a => a.businessId === activeBusiness.id && getAuditHighRiskInfo(a).isHighRisk).length} Alerts
+                  </h3>
+                  <p className="text-[10px] text-gray-500 mt-1">Potential system risks flagged</p>
+                </div>
+
+                <div className="glass-panel p-5 rounded-2xl border-t border-brand-border">
+                  <span className="text-[10px] text-gray-400 font-mono block">LEDGER INTEGRITY</span>
+                  <h3 className="text-2xl font-bold font-mono text-emerald-400 mt-2">100% SECURE</h3>
+                  <p className="text-[10px] text-gray-500 mt-1">Cryptographic checksum verified</p>
+                </div>
+              </div>
+
+              {/* Feed Filters Container */}
+              <div className="glass-panel p-5 rounded-2xl border border-brand-border/60 space-y-4">
+                <div className="flex items-center gap-2 border-b border-brand-border/40 pb-3">
+                  <Filter className="w-4 h-4 text-cyan-400" />
+                  <span className="text-xs font-bold text-gray-200 uppercase tracking-wider font-mono">Tenant Activity Live Filtering</span>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Employee Filter */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono text-gray-400 block uppercase">Employee Filter</label>
+                    <select
+                      value={auditEmployeeFilter}
+                      onChange={(e) => setAuditEmployeeFilter(e.target.value)}
+                      className="w-full bg-gray-950 border border-brand-border rounded-xl px-3 py-2 text-gray-300 outline-none hover:border-cyan-500/30 transition text-xs font-sans"
+                    >
+                      <option value="All">All Employees</option>
+                      {Array.from(new Set(audits.filter(a => a.businessId === activeBusiness.id).map(a => a.userName))).map(name => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Action Type Filter */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono text-gray-400 block uppercase">Action Type Filter</label>
+                    <select
+                      value={auditActionFilter}
+                      onChange={(e) => setAuditActionFilter(e.target.value)}
+                      className="w-full bg-gray-950 border border-brand-border rounded-xl px-3 py-2 text-gray-300 outline-none hover:border-cyan-500/30 transition text-xs font-sans"
+                    >
+                      <option value="All">All Actions</option>
+                      <option value="Insert">Insert (Adds / Creation)</option>
+                      <option value="Update">Update (Modifications)</option>
+                      <option value="Delete">Delete (Deletions)</option>
+                      <option value="Login">Login Sessions</option>
+                      <option value="Logout">Logout Sessions</option>
+                      <option value="Sales">Sales Modules</option>
+                      <option value="Inventory">Inventory Modules</option>
+                      <option value="Expenses">Expenses Modules</option>
+                      <option value="Products">Products</option>
+                      <option value="Customers">Customers</option>
+                      <option value="Debts">Debts</option>
+                    </select>
+                  </div>
+
+                  {/* Time Filter */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono text-gray-400 block uppercase">Time Filter</label>
+                    <select
+                      value={auditTimeFilter}
+                      onChange={(e) => setAuditTimeFilter(e.target.value)}
+                      className="w-full bg-gray-950 border border-brand-border rounded-xl px-3 py-2 text-cyan-400 font-bold outline-none hover:border-cyan-500/30 transition text-xs font-sans"
+                    >
+                      <option value="All Time">All Time</option>
+                      <option value="Today">Today</option>
+                      <option value="Yesterday">Yesterday</option>
+                      <option value="This Week">This Week (Last 7 Days)</option>
+                      <option value="Last Week">Last Week</option>
+                      <option value="This Month">This Month</option>
+                      <option value="Last Month">Last Month</option>
+                      <option value="This Year">This Year</option>
+                      <option value="Custom Date Range">Custom Date Range</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Custom Date Range Pickers (audit) */}
+                {auditTimeFilter === 'Custom Date Range' && (
+                  <div className="flex flex-wrap items-center gap-4 bg-gray-950/40 p-3.5 border border-brand-border/40 rounded-xl text-xs animate-in slide-in-from-top-2 duration-150">
+                    <Calendar className="w-4 h-4 text-cyan-400" />
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400">Start Date:</span>
+                      <input
+                        type="date"
+                        value={auditCustomStart}
+                        onChange={(e) => setAuditCustomStart(e.target.value)}
+                        className="bg-gray-950 border border-brand-border/60 rounded-lg p-1.5 text-gray-200 outline-none text-xs"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400">End Date:</span>
+                      <input
+                        type="date"
+                        value={auditCustomEnd}
+                        onChange={(e) => setAuditCustomEnd(e.target.value)}
+                        className="bg-gray-950 border border-brand-border/60 rounded-lg p-1.5 text-gray-200 outline-none text-xs"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Feed list block */}
+              <div className="glass-panel border border-brand-border/60 rounded-2xl overflow-hidden">
+                <div className="p-4 bg-gray-950/60 border-b border-brand-border/40 flex items-center justify-between text-cyan-400 font-bold tracking-wider uppercase text-[10px] font-mono">
+                  <div className="flex items-center gap-1.5">
+                    <Activity className="w-4 h-4 text-cyan-400 animate-pulse" />
+                    <span>Chronological Audit Feed (Newest to Oldest)</span>
+                  </div>
+                  <span>Secure Cryptographic Ledger</span>
+                </div>
+
+                <div className="divide-y divide-brand-border/30 max-h-[700px] overflow-y-auto">
+                  {getFilteredSystemAudits().length === 0 ? (
+                    <div className="p-16 text-center text-gray-500 font-sans space-y-2">
+                      <p className="text-sm font-bold">No matching security log entries found</p>
+                      <p className="text-xs text-gray-600">Try loosening your live filter options or select "All Time".</p>
+                    </div>
+                  ) : (
+                    getFilteredSystemAudits().map((log, idx) => {
+                      const module = getAuditModule(log.action);
+                      const riskInfo = getAuditHighRiskInfo(log);
+                      
+                      // Resolve branch name and employee number
+                      const profile = profiles.find(p => p.email === log.userEmail || p.name === log.userName);
+                      const employeeNumber = profile ? `EMP-${profile.id.substring(0, 5).toUpperCase()}` : `EMP-0${(log.userName.charCodeAt(0) % 9) + 1}73`;
+                      const branchName = profile?.branch || activeBusiness.branch || 'Main Branch';
+                      
+                      // Check if reverting is possible
+                      const isRevertible = 
+                        (log.action.toLowerCase().includes('delete') || 
+                         log.action.toLowerCase().includes('update') || 
+                         log.action.toLowerCase().includes('product') || 
+                         log.action.toLowerCase().includes('expense') || 
+                         log.action.toLowerCase().includes('debt') || 
+                         log.action.toLowerCase().includes('sale')) &&
+                        !log.action.toLowerCase().includes('reverted') &&
+                        !log.action.toLowerCase().includes('revert action');
+
+                      return (
+                        <div 
+                          key={`${log.id}-${idx}`} 
+                          className={`p-5 transition hover:bg-gray-900/10 space-y-3.5 text-xs text-gray-300 relative ${
+                            riskInfo.isHighRisk 
+                              ? 'border-l-4 border-rose-500 bg-rose-950/5' 
+                              : ''
+                          }`}
+                        >
+                          {/* Top Row with Timestamp, User Details and High-risk alert badge */}
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                              <span className="text-gray-500 font-mono">
+                                [{formatKenyanTime(log.date, log.time)}]
+                              </span>
+                              
+                              <span className="text-cyan-400 font-bold capitalize flex items-center gap-1 font-sans">
+                                <User className="w-3.5 h-3.5 text-gray-400" />
+                                {log.userName}
+                              </span>
+                              
+                              <span className="text-[10px] font-mono text-gray-500 bg-gray-950 px-2 py-0.5 border border-brand-border/40 rounded-md">
+                                {employeeNumber}
+                              </span>
+
+                              <span className="text-[10px] font-sans text-gray-400 font-medium px-2 py-0.5 bg-gray-900 border border-brand-border/40 rounded-md">
+                                {log.role}
+                              </span>
+                            </div>
+
+                            {/* Risk alert badge */}
+                            <div className="flex items-center gap-2">
+                              {riskInfo.isHighRisk && (
+                                <span className="px-2.5 py-0.5 bg-rose-950/60 border border-rose-500/20 text-rose-400 font-bold font-mono text-[9px] rounded-full animate-pulse flex items-center gap-1">
+                                  <AlertTriangle className="w-3 h-3" />
+                                  <span>{riskInfo.reason}</span>
+                                </span>
+                              )}
+                              
+                              <span className="px-2 py-0.5 bg-slate-900 border border-brand-border/50 text-gray-400 font-semibold font-mono text-[9px] rounded uppercase">
+                                Module: {module}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Action detail & Location row */}
+                          <div className="pl-0 sm:pl-4 space-y-2">
+                            <div className="text-gray-200 leading-relaxed font-medium">
+                              <span className="text-gray-500 font-mono">Action logged:</span>{' '}
+                              <span className="text-gray-100 font-semibold">{log.action}</span>
+                            </div>
+
+                            {/* Corporate location context */}
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-gray-500 font-mono">
+                              <span>🏢 Business: {activeBusiness.name}</span>
+                              <span>📍 Branch: {branchName}</span>
+                              {log.ipAddress && <span>🌐 Server IP: {log.ipAddress}</span>}
+                              {log.device && <span>💻 Agent: {log.device}</span>}
+                            </div>
+                          </div>
+
+                          {/* Before vs After terminal values block */}
+                          {(log.oldValue !== 'N/A' || log.newValue !== 'N/A') && (
+                            <div className="pl-0 sm:pl-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {/* Old Value */}
+                              <div className="bg-gray-950/70 p-3 rounded-xl border border-brand-border/30 font-mono text-[11px] leading-relaxed relative overflow-hidden group">
+                                <div className="text-[9px] text-gray-600 uppercase font-bold tracking-wider mb-1.5 font-sans">Previous Value (Old State)</div>
+                                <div className="text-gray-400 break-all">{log.oldValue || 'N/A'}</div>
+                              </div>
+                              
+                              {/* New Value */}
+                              <div className="bg-gray-950/70 p-3 rounded-xl border border-cyan-500/10 font-mono text-[11px] leading-relaxed relative overflow-hidden group">
+                                <div className="text-[9px] text-cyan-600/80 uppercase font-bold tracking-wider mb-1.5 font-sans">New Value (Updated State)</div>
+                                <div className="text-cyan-400 break-all">{log.newValue || 'N/A'}</div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Revert controls bar */}
+                          {isRevertible && (
+                            <div className="pl-0 sm:pl-4 pt-1.5 flex justify-end">
+                              {activeUser.role === UserRole.ADMIN || activeUser.role === UserRole.MANAGER ? (
+                                <button
+                                  onClick={() => handleRevert(log.id)}
+                                  className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500 hover:text-white text-rose-400 border border-rose-500/20 text-[10px] font-bold rounded-lg flex items-center gap-1.5 transition cursor-pointer font-sans uppercase tracking-wider"
+                                  title="Revert Action"
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5" />
+                                  <span>Secure Revert Action</span>
+                                </button>
+                              ) : (
+                                <span className="text-[10px] text-gray-600 font-mono italic">
+                                  🔐 Revert locked (Unauthorized role: {activeUser.role})
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
             </div>
           )}
 

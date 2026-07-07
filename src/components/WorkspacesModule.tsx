@@ -30,12 +30,14 @@ export const WorkspacesModule: React.FC = () => {
     products,
     profiles,
     procurements,
-    debts
+    debts,
+    updateEmployee
   } = useApp();
 
   const isOwner = activeUser?.role === UserRole.ADMIN;
   const isManager = activeUser?.role === UserRole.MANAGER;
   const hasManagementAccess = isOwner || isManager;
+  const canManageBranches = isOwner || (isManager && !!activeBusiness?.allowManagersToManageBranches);
 
   // Active Tab: 'workspaces' | 'archived' | 'branches'
   const [activeTab, setActiveTab] = useState<'workspaces' | 'archived' | 'branches'>('workspaces');
@@ -47,6 +49,20 @@ export const WorkspacesModule: React.FC = () => {
   
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
+
+  // Transfer ownership states
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferTargetId, setTransferTargetId] = useState('');
+
+  // Workspace Metrics calculations
+  const ownerProfile = profiles.find(p => p.businessId === activeBusiness?.id && (p.id === activeBusiness?.ownerId || p.role === UserRole.ADMIN));
+  const ownerName = ownerProfile ? ownerProfile.name : 'Unknown Owner';
+  const workspaceStatus = activeBusiness?.status || 'Active';
+
+  const totalEmployeesCount = profiles.filter(p => p.businessId === activeBusiness?.id && p.role === UserRole.EMPLOYEE).length;
+  const totalManagersCount = profiles.filter(p => p.businessId === activeBusiness?.id && p.role === UserRole.MANAGER).length;
+  const activeUsersCount = profiles.filter(p => p.businessId === activeBusiness?.id && p.status !== 'Suspended').length;
+  const suspendedUsersCount = profiles.filter(p => p.businessId === activeBusiness?.id && p.status === 'Suspended').length;
 
   // Form states - Edit Business
   const [editBizName, setEditBizName] = useState('');
@@ -79,6 +95,35 @@ export const WorkspacesModule: React.FC = () => {
   // Switch Business Workspace (Instant change!)
   const handleSwitchWorkspace = (bizId: string) => {
     setActiveBusiness(bizId);
+  };
+
+  const handleToggleWorkspaceStatus = () => {
+    if (!isOwner || !activeBusiness) return;
+    const currentStatus = activeBusiness.status || 'Active';
+    const nextStatus = currentStatus === 'Active' ? 'Inactive' : 'Active';
+    const actionText = nextStatus === 'Inactive' ? 'suspend' : 'reactivate';
+    if (confirm(`Are you sure you want to ${actionText} this workspace?\n\nWhen suspended, users cannot perform sales or other operations.`)) {
+      updateBusiness(activeBusiness.id, { status: nextStatus });
+    }
+  };
+
+  const handleTransferOwnership = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isOwner || !activeBusiness || !transferTargetId) return;
+    const targetUser = profiles.find(p => p.id === transferTargetId);
+    if (!targetUser) return;
+    if (confirm(`⚠️ CRITICAL SECURITY WARNING ⚠️\n\nAre you sure you want to permanently transfer ownership of workspace "${activeBusiness.name}" to ${targetUser.name} (${targetUser.email})?\n\nThis will instantly downgrade your role to Manager and grant them full Owner permissions over this tenant.`)) {
+      // Step 1: Grant admin to target
+      updateEmployee(targetUser.id, { role: UserRole.ADMIN });
+      // Step 2: Set current user to MANAGER (or step down)
+      updateEmployee(activeUser.id, { role: UserRole.MANAGER });
+      // Step 3: Set ownerId on Business
+      updateBusiness(activeBusiness.id, { ownerId: targetUser.id });
+      
+      setShowTransferModal(false);
+      setTransferTargetId('');
+      alert('Ownership transferred successfully!');
+    }
   };
 
   // Add Business Workspace Handler
@@ -198,6 +243,10 @@ export const WorkspacesModule: React.FC = () => {
   // Add Branch Handler
   const handleAddBranchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageBranches) {
+      alert("Permission Denied: You do not have permission to manage branches.");
+      return;
+    }
     if (!newBranchName.trim()) return;
 
     const assignedManager = profiles.find(p => p.id === newBranchManagerId);
@@ -219,6 +268,10 @@ export const WorkspacesModule: React.FC = () => {
 
   // Start Editing Branch
   const handleStartEditBranch = (b: Branch) => {
+    if (!canManageBranches) {
+      alert("Permission Denied: You do not have permission to edit branches.");
+      return;
+    }
     setEditingBranch(b);
     setEditBranchName(b.name);
     setEditBranchLocation(b.location || '');
@@ -229,6 +282,10 @@ export const WorkspacesModule: React.FC = () => {
   // Save Branch Edits
   const handleSaveEditBranch = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageBranches) {
+      alert("Permission Denied: You do not have permission to save branch changes.");
+      return;
+    }
     if (!editingBranch || !editBranchName.trim()) return;
 
     const assignedManager = profiles.find(p => p.id === editBranchManagerId);
@@ -246,6 +303,10 @@ export const WorkspacesModule: React.FC = () => {
 
   // Delete Branch Handler with detailed dependency reporting
   const handleDeleteBranch = (branchId: string, name: string) => {
+    if (!canManageBranches) {
+      alert("Permission Denied: You do not have permission to delete branches.");
+      return;
+    }
     const deps = getBranchDependencies(branchId, name);
     if (deps.length > 0) {
       setBlockingDependencies(deps);
@@ -353,6 +414,10 @@ export const WorkspacesModule: React.FC = () => {
               {/* Business Metadata Metrics */}
               <div className="mt-5 space-y-2.5 pt-4 border-t border-brand-border/60 text-xs font-mono">
                 <div className="flex justify-between items-center">
+                  <span className="text-gray-500">OWNER NAME:</span>
+                  <span className="text-gray-300 font-semibold uppercase">{ownerName}</span>
+                </div>
+                <div className="flex justify-between items-center">
                   <span className="text-gray-500">REGISTRATION NO:</span>
                   <span className="text-gray-300 font-semibold">{activeBusiness?.registrationNumber || 'APX-592183'}</span>
                 </div>
@@ -362,10 +427,17 @@ export const WorkspacesModule: React.FC = () => {
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500">OPERATIONAL STATUS:</span>
-                  <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>ACTIVE</span>
-                  </span>
+                  {workspaceStatus === 'Inactive' ? (
+                    <span className="text-rose-400 font-semibold flex items-center gap-1 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded text-[10px]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                      <span>SUSPENDED</span>
+                    </span>
+                  ) : (
+                    <span className="text-emerald-400 font-semibold flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded text-[10px]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>ACTIVE</span>
+                    </span>
+                  )}
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-500">CREATED TIMESTAMP:</span>
@@ -373,11 +445,21 @@ export const WorkspacesModule: React.FC = () => {
                     {activeBusiness?.createdAt ? new Date(activeBusiness.createdAt).toLocaleDateString() : '04/07/2026'}
                   </span>
                 </div>
+                <div className="flex justify-between items-center pt-2 border-t border-brand-border/30">
+                  <span className="text-gray-500">TOTAL EMPLOYEES:</span>
+                  <span className="text-gray-300 font-semibold">{totalEmployeesCount}</span>
+                </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-500">LAST ACTIVITY REPORT:</span>
-                  <span className="text-gray-400 text-[11px] font-sans">
-                    {activeBusiness?.lastActivity ? new Date(activeBusiness.lastActivity).toLocaleDateString() : '04/07/2026'}
-                  </span>
+                  <span className="text-gray-500">TOTAL MANAGERS:</span>
+                  <span className="text-gray-300 font-semibold">{totalManagersCount}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">ACTIVE USERS:</span>
+                  <span className="text-emerald-400 font-semibold">{activeUsersCount}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-500">SUSPENDED USERS:</span>
+                  <span className="text-rose-400 font-semibold">{suspendedUsersCount}</span>
                 </div>
               </div>
 
@@ -401,21 +483,43 @@ export const WorkspacesModule: React.FC = () => {
 
               {/* Owner Edit Actions */}
               {isOwner && (
-                <div className="mt-5 pt-4 border-t border-brand-border/60 flex items-center gap-2">
-                  <button
-                    onClick={() => handleStartEditBusiness(activeBusiness!)}
-                    className="flex-1 py-2 bg-gray-900 hover:bg-gray-800 border border-brand-border hover:border-cyan-500/25 text-gray-300 hover:text-cyan-400 rounded-xl text-xs font-mono font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <Edit className="w-3.5 h-3.5" />
-                    <span>Edit Profile</span>
-                  </button>
-                  <button
-                    onClick={() => handleArchiveBusiness(activeBusiness!)}
-                    className="py-2 px-3 bg-gray-900 hover:bg-rose-950/20 border border-brand-border hover:border-rose-500/20 text-gray-400 hover:text-rose-400 rounded-xl transition cursor-pointer"
-                    title="Archive Workspace"
-                  >
-                    <Archive className="w-3.5 h-3.5" />
-                  </button>
+                <div className="mt-5 pt-4 border-t border-brand-border/60 space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleStartEditBusiness(activeBusiness!)}
+                      className="flex-1 py-2 bg-gray-900 hover:bg-gray-800 border border-brand-border hover:border-cyan-500/25 text-gray-300 hover:text-cyan-400 rounded-xl text-xs font-mono font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                      <span>Edit Settings</span>
+                    </button>
+                    <button
+                      onClick={() => handleArchiveBusiness(activeBusiness!)}
+                      className="py-2 px-3 bg-gray-900 hover:bg-rose-950/20 border border-brand-border hover:border-rose-500/20 text-gray-400 hover:text-rose-400 rounded-xl transition cursor-pointer"
+                      title="Archive Workspace"
+                    >
+                      <Archive className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleToggleWorkspaceStatus}
+                      className={`flex-1 py-2 rounded-xl text-xs font-mono font-semibold transition flex items-center justify-center gap-1 border cursor-pointer ${
+                        workspaceStatus === 'Inactive'
+                          ? 'bg-emerald-950/30 border-emerald-500/20 text-emerald-400 hover:bg-emerald-950/50 hover:border-emerald-400/40'
+                          : 'bg-rose-950/30 border-rose-500/20 text-rose-400 hover:bg-rose-950/50 hover:border-rose-400/40'
+                      }`}
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>{workspaceStatus === 'Inactive' ? 'Reactivate Tenant' : 'Suspend Tenant'}</span>
+                    </button>
+                    <button
+                      onClick={() => setShowTransferModal(true)}
+                      className="flex-1 py-2 bg-gray-900 hover:bg-cyan-950/20 border border-brand-border hover:border-cyan-500/20 text-gray-300 hover:text-cyan-400 rounded-xl text-xs font-mono font-semibold transition flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Transfer Owner</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -660,7 +764,7 @@ export const WorkspacesModule: React.FC = () => {
                 By default, selecting <strong>"All Branches"</strong> rolls up reports from all corporate units. Activating a specific branch isolates all dashboard widgets, products list, and transactions to that segment.
               </p>
 
-              {hasManagementAccess && (
+              {canManageBranches && (
                 <button
                   onClick={() => setShowBranchModal(true)}
                   className="w-full py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold rounded-xl text-xs transition duration-150 flex items-center justify-center gap-1.5 shadow-md shadow-cyan-500/10 cursor-pointer"
@@ -668,6 +772,28 @@ export const WorkspacesModule: React.FC = () => {
                   <Plus className="w-4 h-4" />
                   <span>Register Commercial Branch</span>
                 </button>
+              )}
+
+              {isOwner && activeBusiness && (
+                <div className="border-t border-brand-border/40 pt-4 space-y-3">
+                  <span className="text-[10px] font-mono text-cyan-400 uppercase tracking-wider block font-bold">Delegated Management Permissions</span>
+                  <label className="flex items-start gap-2.5 text-xs text-gray-300 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={!!activeBusiness.allowManagersToManageBranches}
+                      onChange={(e) => {
+                        updateBusiness(activeBusiness.id, {
+                          allowManagersToManageBranches: e.target.checked
+                        });
+                      }}
+                      className="mt-0.5 rounded border-brand-border text-cyan-500 focus:ring-cyan-500 bg-gray-950"
+                    />
+                    <div>
+                      <span className="font-semibold block text-gray-200">Allow Managers to Manage Branches</span>
+                      <span className="text-[10px] text-gray-500 block leading-tight mt-0.5">When checked, Managers are permitted to register, edit, and decommission regional corporate branches.</span>
+                    </div>
+                  </label>
+                </div>
               )}
             </div>
           </div>
@@ -797,7 +923,7 @@ export const WorkspacesModule: React.FC = () => {
                           </button>
                         )}
 
-                        {hasManagementAccess && (
+                        {canManageBranches && (
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => handleStartEditBranch(b)}
@@ -1169,6 +1295,82 @@ export const WorkspacesModule: React.FC = () => {
                 Acknowledge & Dismiss
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* TRANSFER OWNERSHIP MODAL */}
+      {showTransferModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/85 backdrop-blur-md p-4 animate-fade-in">
+          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-brand-border shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
+            <button 
+              onClick={() => {
+                setShowTransferModal(false);
+                setTransferTargetId('');
+              }}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-300 transition cursor-pointer"
+            >
+              ✕
+            </button>
+            
+            <div className="flex items-start gap-3.5 mb-4">
+              <div className="w-11 h-11 rounded-xl bg-cyan-950/40 border border-cyan-500/40 flex items-center justify-center shrink-0">
+                <RefreshCw className="w-5 h-5 text-cyan-400" />
+              </div>
+              <div>
+                <h3 className="text-md font-bold text-gray-100 font-sans">
+                  Transfer Workspace Ownership
+                </h3>
+                <p className="text-xs text-cyan-400 font-mono mt-0.5">
+                  Tenant: {activeBusiness?.name}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-400 leading-relaxed mb-4 font-sans">
+              Choose a trusted manager or employee to become the new primary corporate owner of this workspace. <strong>Warning:</strong> You will immediately step down to Manager access once this action is completed.
+            </p>
+
+            <form onSubmit={handleTransferOwnership} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-gray-400 font-mono uppercase block">Select New Owner</label>
+                <select
+                  required
+                  value={transferTargetId}
+                  onChange={(e) => setTransferTargetId(e.target.value)}
+                  className="w-full bg-gray-900 border border-brand-border rounded-xl px-3 py-2 text-xs text-gray-100 outline-none focus:border-cyan-500/50 transition cursor-pointer font-sans"
+                >
+                  <option value="">-- Choose Profile --</option>
+                  {profiles
+                    .filter(p => p.businessId === activeBusiness?.id && p.id !== activeUser.id)
+                    .map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.role}) - {p.email}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-brand-border mt-5 font-sans">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTransferModal(false);
+                    setTransferTargetId('');
+                  }}
+                  className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-gray-400 rounded-xl text-xs font-semibold border border-brand-border transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!transferTargetId}
+                  className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white rounded-xl text-xs font-bold transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Transfer Ownership
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

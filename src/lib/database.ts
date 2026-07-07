@@ -2,7 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import { 
   UserRole, UserProfile, Business, Product, Sale, SaleItem,
   Customer, DebtRecord, Expense, Procurement, 
-  CalendarEvent, Task, TimeLog, AuditLog, Notification, Branch
+  CalendarEvent, Task, TimeLog, AuditLog, Notification, Branch,
+  Budget, Invoice, BankTransaction, Reconciliation, Category
 } from '../types';
 
 // Supabase client lazy initialization
@@ -40,6 +41,15 @@ const DEFAULT_BRANCHES: Branch[] = [
     location: 'Mombasa',
     status: 'Active'
   }
+];
+const DEFAULT_CATEGORIES: Category[] = [
+  { id: 'cat_1', businessId: 'b1', name: 'Electronics', description: 'Computing devices, smartphones, and accessories' },
+  { id: 'cat_2', businessId: 'b1', name: 'Furniture', description: 'Ergonomic desks, seating, and office fixtures' },
+  { id: 'cat_3', businessId: 'b1', name: 'Accessories', description: 'Peripherals, cables, chargers, and small attachments' },
+  { id: 'cat_4', businessId: 'b1', name: 'Merchandise', description: 'Branded clothing, stationary, and promotional materials' },
+  { id: 'cat_5', businessId: 'b1', name: 'Beverages', description: 'Sodas, mineral water, tea bags, and coffee blends' },
+  { id: 'cat_6', businessId: 'b1', name: 'Services', description: 'Contracted consultancy, maintenance, and expert services' },
+  { id: 'cat_7', businessId: 'b1', name: 'SaaS Licensing', description: 'Software subscriptions, API tokens, and licenses' }
 ];
 const DEFAULT_PROFILES: UserProfile[] = [
   {
@@ -230,6 +240,156 @@ const DEFAULT_EVENTS: CalendarEvent[] = [];
 const DEFAULT_TIMELOGS: TimeLog[] = [];
 const DEFAULT_NOTIFICATIONS: Notification[] = [];
 const DEFAULT_AUDITS: AuditLog[] = [];
+
+const DEFAULT_BUDGETS: Budget[] = [
+  {
+    id: 'bgt1',
+    businessId: 'b1',
+    category: 'Utilities',
+    spendingLimit: 10000,
+    amountSpent: 3500,
+    remainingBalance: 6500,
+    percentageUsed: 35,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'bgt2',
+    businessId: 'b1',
+    category: 'Rent',
+    spendingLimit: 15000,
+    amountSpent: 12000,
+    remainingBalance: 3000,
+    percentageUsed: 80,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'bgt3',
+    businessId: 'b1',
+    category: 'Marketing',
+    spendingLimit: 5000,
+    amountSpent: 0,
+    remainingBalance: 5000,
+    percentageUsed: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'bgt4',
+    businessId: 'b1',
+    category: 'Payroll',
+    spendingLimit: 50000,
+    amountSpent: 0,
+    remainingBalance: 50000,
+    percentageUsed: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'bgt5',
+    businessId: 'b1',
+    category: 'Supplies',
+    spendingLimit: 20000,
+    amountSpent: 0,
+    remainingBalance: 20000,
+    percentageUsed: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+];
+
+const DEFAULT_INVOICES: Invoice[] = [
+  {
+    id: 'inv1',
+    businessId: 'b1',
+    invoiceNumber: 'INV-2026-001',
+    customerName: 'Davis Mugendi',
+    billingAmount: 15000,
+    lineItemDescription: 'Professional Advisory Services',
+    dueDateOffset: 15,
+    dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    status: 'Sent',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'inv2',
+    businessId: 'b1',
+    invoiceNumber: 'INV-2026-002',
+    customerName: 'Alina Kaveza',
+    billingAmount: 9000,
+    lineItemDescription: 'Bulk Retail Products Delivery',
+    dueDateOffset: 7,
+    dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    status: 'Paid',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'inv3',
+    businessId: 'b1',
+    invoiceNumber: 'INV-2026-003',
+    customerName: 'Walk-in Customer',
+    billingAmount: 4500,
+    lineItemDescription: 'Retail Hardware Accessories',
+    dueDateOffset: 1,
+    dueDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    status: 'Overdue',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+];
+
+const DEFAULT_BANK_TRANSACTIONS: BankTransaction[] = [
+  {
+    id: 'bt1',
+    businessId: 'b1',
+    amount: 15000,
+    date: new Date().toISOString().split('T')[0],
+    reference: 'TXN-81928',
+    source: 'M-Pesa',
+    description: 'Davis Mugendi Invoice Pay',
+    categorySuggestion: 'Revenue',
+    status: 'Pending'
+  },
+  {
+    id: 'bt2',
+    businessId: 'b1',
+    amount: -3500,
+    date: new Date().toISOString().split('T')[0],
+    reference: 'TXN-92182',
+    source: 'Equity Bank',
+    description: 'Kenya Power Bill Payment',
+    categorySuggestion: 'Utilities',
+    status: 'Pending'
+  },
+  {
+    id: 'bt3',
+    businessId: 'b1',
+    amount: -12000,
+    date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    reference: 'TXN-12839',
+    source: 'Stripe',
+    description: 'Rent Payout',
+    categorySuggestion: 'Rent',
+    status: 'Reconciled',
+    reconciliationId: 'rec1',
+    reconciledAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+  }
+];
+
+const DEFAULT_RECONCILIATIONS: Reconciliation[] = [
+  {
+    id: 'rec1',
+    businessId: 'b1',
+    amount: 12000,
+    paymentReference: 'TXN-12839',
+    category: 'Rent',
+    status: 'Reconciled',
+    timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+  }
+];
 
 // Helper to load or initialize from localStorage
 function getLocalItem<T>(key: string, defaultValue: T): T {
@@ -527,8 +687,25 @@ class ApexDatabaseManager {
       setLocalItem('notifications', DEFAULT_NOTIFICATIONS);
       setLocalItem('audits', DEFAULT_AUDITS);
       setLocalItem('branches', DEFAULT_BRANCHES);
+      setLocalItem('budgets', DEFAULT_BUDGETS);
+      setLocalItem('invoices', DEFAULT_INVOICES);
+      setLocalItem('bank_transactions', DEFAULT_BANK_TRANSACTIONS);
+      setLocalItem('reconciliations', DEFAULT_RECONCILIATIONS);
     } else if (!localStorage.getItem('apex_ledger_branches')) {
       setLocalItem('branches', DEFAULT_BRANCHES);
+    }
+
+    if (!localStorage.getItem('apex_ledger_budgets')) {
+      setLocalItem('budgets', DEFAULT_BUDGETS);
+    }
+    if (!localStorage.getItem('apex_ledger_invoices')) {
+      setLocalItem('invoices', DEFAULT_INVOICES);
+    }
+    if (!localStorage.getItem('apex_ledger_bank_transactions')) {
+      setLocalItem('bank_transactions', DEFAULT_BANK_TRANSACTIONS);
+    }
+    if (!localStorage.getItem('apex_ledger_reconciliations')) {
+      setLocalItem('reconciliations', DEFAULT_RECONCILIATIONS);
     }
 
   }
@@ -644,9 +821,9 @@ class ApexDatabaseManager {
 
   getCustomers(): Customer[] {
     const all = getLocalItem<Customer[]>('customers', DEFAULT_CUSTOMERS);
-    const filtered = all.filter(c => c.businessId === this.activeBusinessId);
+    const filtered = all.filter(c => c.businessId === this.activeBusinessId || c.business_id === this.activeBusinessId || c.workspaceId === this.activeBusinessId || c.workspace_id === this.activeBusinessId);
     if (this.activeBranchId && this.activeBranchId !== 'all') {
-      return filtered.filter(c => (c as any).branchId === this.activeBranchId || (c as any).branch === this.getCurrentBranchName());
+      return filtered.filter(c => c.branchId === this.activeBranchId || c.branch_id === this.activeBranchId || (c as any).branch === this.getCurrentBranchName());
     }
     return filtered;
   }
@@ -676,6 +853,26 @@ class ApexDatabaseManager {
       return filtered.filter(e => (e as any).branchId === this.activeBranchId || (e as any).branch === this.getCurrentBranchName());
     }
     return filtered;
+  }
+
+  getBudgets(): Budget[] {
+    const all = getLocalItem<Budget[]>('budgets', DEFAULT_BUDGETS);
+    return all.filter(b => b.businessId === this.activeBusinessId);
+  }
+
+  getInvoices(): Invoice[] {
+    const all = getLocalItem<Invoice[]>('invoices', DEFAULT_INVOICES);
+    return all.filter(i => i.businessId === this.activeBusinessId && !i.deletedAt);
+  }
+
+  getBankTransactions(): BankTransaction[] {
+    const all = getLocalItem<BankTransaction[]>('bank_transactions', DEFAULT_BANK_TRANSACTIONS);
+    return all.filter(b => b.businessId === this.activeBusinessId);
+  }
+
+  getReconciliations(): Reconciliation[] {
+    const all = getLocalItem<Reconciliation[]>('reconciliations', DEFAULT_RECONCILIATIONS);
+    return all.filter(r => r.businessId === this.activeBusinessId);
   }
 
   getProcurements(): Procurement[] {
@@ -737,6 +934,57 @@ class ApexDatabaseManager {
     return all.filter(b => b.businessId === this.activeBusinessId);
   }
 
+  getCategories(): Category[] {
+    const all = getLocalItem<Category[]>('categories', []);
+    
+    // Filter by business / workspace synonyms
+    let filtered = all.filter(c => 
+      c.businessId === this.activeBusinessId || 
+      (c as any).business_id === this.activeBusinessId ||
+      c.workspaceId === this.activeBusinessId ||
+      (c as any).workspace_id === this.activeBusinessId
+    );
+
+    const isSeeded = getLocalItem<boolean>(`categories_seeded_${this.activeBusinessId}`, false);
+    if (filtered.length === 0 && !isSeeded) {
+      const seeded = DEFAULT_CATEGORIES.map(c => ({
+        ...c,
+        id: 'cat_' + Date.now() + '_' + Math.random().toString(36).substring(2, 5),
+        businessId: this.activeBusinessId,
+        workspaceId: this.activeBusinessId,
+        branchId: this.activeBranchId || 'all',
+        workspace_id: this.activeBusinessId,
+        business_id: this.activeBusinessId,
+        branch_id: this.activeBranchId || 'all'
+      }));
+      const updatedAll = [...all, ...seeded];
+      setLocalItem('categories', updatedAll);
+      setLocalItem(`categories_seeded_${this.activeBusinessId}`, true);
+      filtered = seeded;
+    }
+
+    // Branch isolation
+    if (this.activeBranchId && this.activeBranchId !== 'all') {
+      filtered = filtered.filter(c => {
+        const bId = c.branchId || (c as any).branch_id;
+        return bId === this.activeBranchId || !bId || bId === 'all';
+      });
+    }
+
+    return filtered;
+  }
+
+  isCategoriesEnabled(): boolean {
+    const val = localStorage.getItem(`categories_enabled_${this.activeBusinessId}`);
+    return val !== 'false'; // Enabled by default
+  }
+
+  setCategoriesEnabled(enabled: boolean) {
+    localStorage.setItem(`categories_enabled_${this.activeBusinessId}`, enabled ? 'true' : 'false');
+    this.addAudit('Updated Categories Settings', enabled ? 'DISABLED' : 'ENABLED', enabled ? 'ENABLED' : 'DISABLED');
+    this.addNotification('Categories Toggle Updated', `Product categories are now ${enabled ? 'enabled' : 'disabled'} for this business.`, 'info');
+  }
+
   // State modification Mutators
   // Every mutation registers audit logs & handles notifications and state constraints
   addBranch(branch: { name: string; location?: string; status: 'Active' | 'Inactive' }) {
@@ -778,6 +1026,98 @@ class ApexDatabaseManager {
     }
   }
 
+  addCategory(category: Omit<Category, 'id' | 'businessId'>) {
+    const all = getLocalItem<Category[]>('categories', []);
+    const newCat: Category = {
+      ...category,
+      id: 'cat_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
+      businessId: this.activeBusinessId,
+      workspaceId: this.activeBusinessId,
+      branchId: this.activeBranchId || 'all',
+      workspace_id: this.activeBusinessId,
+      business_id: this.activeBusinessId,
+      branch_id: this.activeBranchId || 'all',
+      createdAt: new Date().toISOString()
+    };
+    all.push(newCat);
+    setLocalItem('categories', all);
+    this.addAudit('Created Category', 'N/A', `${newCat.name}`);
+    this.syncRowToSupabase('categories', newCat, 'upsert');
+    this.addNotification('Category Created', `New product category "${newCat.name}" created successfully.`, 'success');
+  }
+
+  updateCategory(categoryId: string, updates: Partial<Category>) {
+    const all = getLocalItem<Category[]>('categories', []);
+    const idx = all.findIndex(c => c.id === categoryId);
+    if (idx !== -1) {
+      const oldVal = { ...all[idx] };
+      const updated = { ...all[idx], ...updates };
+      all[idx] = updated;
+      setLocalItem('categories', all);
+      
+      // Referential Update: if category name changed, update products using this old name!
+      if (updates.name && oldVal.name !== updates.name) {
+        const products = getLocalItem<Product[]>('products', DEFAULT_PRODUCTS);
+        let updatedCount = 0;
+        const updatedProducts = products.map(p => {
+          if (p.businessId === this.activeBusinessId && p.category.toLowerCase() === oldVal.name.toLowerCase()) {
+            updatedCount++;
+            const updatedProd = { ...p, category: updates.name! };
+            this.syncRowToSupabase('products', updatedProd, 'upsert');
+            return updatedProd;
+          }
+          return p;
+        });
+        if (updatedCount > 0) {
+          setLocalItem('products', updatedProducts);
+          this.addNotification('Products Categorization Synced', `Auto-migrated category name to "${updates.name}" for ${updatedCount} products.`, 'info');
+        }
+      }
+
+      this.addAudit('Updated Category', oldVal.name, updated.name);
+      this.syncRowToSupabase('categories', updated, 'upsert');
+    }
+  }
+
+  deleteCategory(categoryId: string, reassignToCategoryName?: string) {
+    const all = getLocalItem<Category[]>('categories', []);
+    const target = all.find(c => c.id === categoryId);
+    if (target) {
+      // Enforce ownership check
+      if (target.businessId !== this.activeBusinessId && (target as any).business_id !== this.activeBusinessId) {
+        throw new Error("Access Denied: You do not own this category.");
+      }
+
+      // Referential Integrity Check: verify if any products are in this category
+      const products = getLocalItem<Product[]>('products', DEFAULT_PRODUCTS);
+      const affectedProducts = products.filter(p => p.businessId === this.activeBusinessId && p.category.toLowerCase() === target.name.toLowerCase());
+      
+      if (affectedProducts.length > 0) {
+        if (!reassignToCategoryName) {
+          throw new Error(`Cannot delete category "${target.name}" because there are active products cataloged under it.`);
+        }
+        
+        // Reassign affected products
+        const updatedProducts = products.map(p => {
+          if (p.businessId === this.activeBusinessId && p.category.toLowerCase() === target.name.toLowerCase()) {
+            const updated = { ...p, category: reassignToCategoryName };
+            this.syncRowToSupabase('products', updated, 'upsert');
+            return updated;
+          }
+          return p;
+        });
+        setLocalItem('products', updatedProducts);
+        this.addNotification('Products Reassigned', `Reassigned ${affectedProducts.length} products to "${reassignToCategoryName}".`, 'info');
+      }
+
+      const filtered = all.filter(c => c.id !== categoryId);
+      setLocalItem('categories', filtered);
+      this.addAudit('Deleted Category', target.name, 'N/A');
+      this.syncRowToSupabase('categories', target, 'delete');
+      this.addNotification('Category Deleted', `Successfully deleted category "${target.name}".`, 'info');
+    }
+  }
+
   addProduct(product: Omit<Product, 'id' | 'businessId' | 'stockStatus'>) {
     const all = getLocalItem<Product[]>('products', DEFAULT_PRODUCTS);
     const newProduct: Product = {
@@ -815,7 +1155,10 @@ class ApexDatabaseManager {
 
     all[index] = updated;
     setLocalItem('products', all);
-    this.addAudit('Updated Product', `${oldVal.name} - Price: ${oldVal.sellingPrice}, Qty: ${oldVal.quantity}`, `${updated.name} - Price: ${updated.sellingPrice}, Qty: ${updated.quantity}`);
+    
+    const auditId = 'aud_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    this.addRevertBackup(auditId, 'products', 'update', oldVal);
+    this.addAudit('Updated Product', `${oldVal.name} - Price: ${oldVal.sellingPrice}, Qty: ${oldVal.quantity}`, `${updated.name} - Price: ${updated.sellingPrice}, Qty: ${updated.quantity}`, undefined, auditId);
 
     this.syncRowToSupabase('products', updated, 'upsert');
 
@@ -831,7 +1174,10 @@ class ApexDatabaseManager {
 
     const updated = all.filter(p => p.id !== productId);
     setLocalItem('products', updated);
-    this.addAudit('Deleted Product', target.name, 'N/A');
+    
+    const auditId = 'aud_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    this.addRevertBackup(auditId, 'products', 'delete', target);
+    this.addAudit('Deleted Product', target.name, 'N/A', undefined, auditId);
 
     this.syncRowToSupabase('products', target, 'delete');
   }
@@ -980,9 +1326,15 @@ class ApexDatabaseManager {
       ...customer,
       id: 'cust_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
       businessId: this.activeBusinessId,
+      business_id: this.activeBusinessId,
+      workspaceId: this.activeBusinessId,
+      workspace_id: this.activeBusinessId,
+      branchId: this.activeBranchId || 'all',
+      branch_id: this.activeBranchId || 'all',
       purchaseHistoryCount: 0,
       totalSpent: 0,
-      debtAmount: 0
+      debtAmount: 0,
+      archived: false
     };
     all.push(newCust);
     setLocalItem('customers', all);
@@ -1030,10 +1382,213 @@ class ApexDatabaseManager {
     
     this.syncRowToSupabase('expenses', newExp, 'upsert');
 
+    // Auto-update budget spending when expense is logged
+    const budgets = getLocalItem<Budget[]>('budgets', DEFAULT_BUDGETS);
+    const bIdx = budgets.findIndex(b => b.businessId === this.activeBusinessId && b.category.toLowerCase() === newExp.category.toLowerCase());
+    if (bIdx !== -1) {
+      budgets[bIdx].amountSpent += newExp.amount;
+      budgets[bIdx].remainingBalance = budgets[bIdx].spendingLimit - budgets[bIdx].amountSpent;
+      budgets[bIdx].percentageUsed = budgets[bIdx].spendingLimit > 0 
+        ? Math.round((budgets[bIdx].amountSpent / budgets[bIdx].spendingLimit) * 100) 
+        : 0;
+      budgets[bIdx].updatedAt = new Date().toISOString();
+      setLocalItem('budgets', budgets);
+      this.syncRowToSupabase('budgets', budgets[bIdx], 'upsert');
+
+      if (budgets[bIdx].amountSpent > budgets[bIdx].spendingLimit) {
+        this.addNotification('Budget Exceeded', `Warning: Budget limit of KSh ${budgets[bIdx].spendingLimit} exceeded for category ${budgets[bIdx].category}!`, 'alert');
+      }
+    }
+
     // Send notifications for larger expenses
     if (newExp.amount >= 15000) {
       this.addNotification(`Significant Expense`, `Expense of KSh ${newExp.amount} logged under ${newExp.category} by ${user.name}`, 'info');
     }
+  }
+
+  addBudget(budget: Omit<Budget, 'id' | 'businessId' | 'createdAt' | 'updatedAt'>) {
+    const all = getLocalItem<Budget[]>('budgets', DEFAULT_BUDGETS);
+    const newBudget: Budget = {
+      ...budget,
+      id: 'bgt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
+      businessId: this.activeBusinessId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    all.push(newBudget);
+    setLocalItem('budgets', all);
+    this.addAudit('Created Budget', 'N/A', `${newBudget.category}: Limit ${newBudget.spendingLimit}`);
+    this.syncRowToSupabase('budgets', newBudget, 'upsert');
+  }
+
+  updateBudget(budgetId: string, updates: Partial<Budget>) {
+    const all = getLocalItem<Budget[]>('budgets', DEFAULT_BUDGETS);
+    const idx = all.findIndex(b => b.id === budgetId);
+    if (idx !== -1) {
+      const oldVal = { ...all[idx] };
+      all[idx] = { 
+        ...all[idx], 
+        ...updates, 
+        updatedAt: new Date().toISOString() 
+      };
+      
+      // Re-calculate remaining balance and percentage used
+      all[idx].remainingBalance = all[idx].spendingLimit - all[idx].amountSpent;
+      all[idx].percentageUsed = all[idx].spendingLimit > 0 
+        ? Math.round((all[idx].amountSpent / all[idx].spendingLimit) * 100) 
+        : 0;
+
+      setLocalItem('budgets', all);
+      this.addAudit('Updated Budget', `Limit: ${oldVal.spendingLimit}`, `Limit: ${all[idx].spendingLimit}`);
+      this.syncRowToSupabase('budgets', all[idx], 'upsert');
+    }
+  }
+
+  deleteBudget(budgetId: string) {
+    const all = getLocalItem<Budget[]>('budgets', DEFAULT_BUDGETS);
+    const target = all.find(b => b.id === budgetId);
+    if (target) {
+      const updated = all.filter(b => b.id !== budgetId);
+      setLocalItem('budgets', updated);
+      this.addAudit('Deleted Budget', `${target.category}: Limit ${target.spendingLimit}`, 'N/A');
+      this.syncRowToSupabase('budgets', target, 'delete');
+    }
+  }
+
+  addInvoice(invoice: Omit<Invoice, 'id' | 'businessId' | 'invoiceNumber' | 'createdAt' | 'updatedAt'>) {
+    const all = getLocalItem<Invoice[]>('invoices', DEFAULT_INVOICES);
+    const businessInvoices = all.filter(i => i.businessId === this.activeBusinessId);
+    let nextNum = 1;
+    if (businessInvoices.length > 0) {
+      const numbers = businessInvoices
+        .map(i => {
+          const match = i.invoiceNumber.match(/INV-\d+-(\d+)/);
+          return match ? parseInt(match[1], 10) : 0;
+        })
+        .filter(n => n > 0);
+      if (numbers.length > 0) {
+        nextNum = Math.max(...numbers) + 1;
+      }
+    }
+    const currentYear = new Date().getFullYear();
+    const invoiceNumber = `INV-${currentYear}-${String(nextNum).padStart(3, '0')}`;
+
+    const newInvoice: Invoice = {
+      ...invoice,
+      id: 'inv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
+      businessId: this.activeBusinessId,
+      invoiceNumber,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    all.push(newInvoice);
+    setLocalItem('invoices', all);
+    this.addAudit('Created Invoice', 'N/A', `${invoiceNumber}: Customer: ${newInvoice.customerName}, Amount: ${newInvoice.billingAmount}`);
+    this.syncRowToSupabase('invoices', newInvoice, 'upsert');
+
+    this.addNotification('Invoice Sent', `Invoice ${invoiceNumber} for ${newInvoice.customerName} of KSh ${newInvoice.billingAmount} has been generated.`, 'success');
+    return newInvoice;
+  }
+
+  updateInvoice(invoiceId: string, updates: Partial<Invoice>) {
+    const all = getLocalItem<Invoice[]>('invoices', DEFAULT_INVOICES);
+    const idx = all.findIndex(i => i.id === invoiceId);
+    if (idx !== -1) {
+      const oldVal = { ...all[idx] };
+      all[idx] = { 
+        ...all[idx], 
+        ...updates, 
+        updatedAt: new Date().toISOString() 
+      };
+      setLocalItem('invoices', all);
+      this.addAudit('Updated Invoice', `${oldVal.invoiceNumber} Status: ${oldVal.status}`, `${all[idx].invoiceNumber} Status: ${all[idx].status}`);
+      this.syncRowToSupabase('invoices', all[idx], 'upsert');
+
+      if (updates.status === 'Paid' && oldVal.status !== 'Paid') {
+        this.addNotification('Invoice Paid', `Invoice ${all[idx].invoiceNumber} for ${all[idx].customerName} of KSh ${all[idx].billingAmount} was marked as Paid.`, 'success');
+        this.addAudit('Invoice Fully Paid', `${all[idx].invoiceNumber}`, `KSh ${all[idx].billingAmount}`);
+      }
+    }
+  }
+
+  deleteInvoice(invoiceId: string) {
+    const all = getLocalItem<Invoice[]>('invoices', DEFAULT_INVOICES);
+    const idx = all.findIndex(i => i.id === invoiceId);
+    if (idx !== -1) {
+      const target = all[idx];
+      all[idx].deletedAt = new Date().toISOString();
+      setLocalItem('invoices', all);
+      this.addAudit('Deleted Invoice', target.invoiceNumber, 'N/A');
+      this.syncRowToSupabase('invoices', target, 'upsert');
+    }
+  }
+
+  updateBankTransaction(btId: string, updates: Partial<BankTransaction>) {
+    const all = getLocalItem<BankTransaction[]>('bank_transactions', DEFAULT_BANK_TRANSACTIONS);
+    const idx = all.findIndex(b => b.id === btId);
+    if (idx !== -1) {
+      all[idx] = { ...all[idx], ...updates };
+      setLocalItem('bank_transactions', all);
+      this.syncRowToSupabase('bank_transactions', all[idx], 'upsert');
+    }
+  }
+
+  addReconciliation(rec: Omit<Reconciliation, 'id' | 'businessId' | 'timestamp'>) {
+    const all = getLocalItem<Reconciliation[]>('reconciliations', DEFAULT_RECONCILIATIONS);
+    const newRec: Reconciliation = {
+      ...rec,
+      id: 'rec_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
+      businessId: this.activeBusinessId,
+      timestamp: new Date().toISOString()
+    };
+    all.push(newRec);
+    setLocalItem('reconciliations', all);
+    this.addAudit('Reconciled Bank Transaction', 'N/A', `Ref: ${newRec.paymentReference}, Category: ${newRec.category}, Amount: ${newRec.amount}`);
+    this.syncRowToSupabase('reconciliations', newRec, 'upsert');
+    this.addNotification('Transaction Reconciled', `Reconciliation completed for reference ${newRec.paymentReference} (KSh ${newRec.amount}).`, 'success');
+  }
+
+  syncBankTransactions() {
+    const bts = getLocalItem<BankTransaction[]>('bank_transactions', DEFAULT_BANK_TRANSACTIONS);
+    const currentBusinessId = this.activeBusinessId;
+
+    const sources = ['M-Pesa', 'Stripe', 'Equity Bank', 'Co-op Bank'];
+    const descriptions = [
+      'Lipa Na M-Pesa Customer Pay',
+      'Stripe Transfer USD Payout',
+      'Direct Wire Rent Payout',
+      'Utility Bill Water & Sewerage'
+    ];
+    const categorySuggestions = ['Revenue', 'Revenue', 'Rent', 'Utilities'];
+    const amounts = [4500, 8500, -12000, -2500];
+
+    const newBts: BankTransaction[] = [];
+    for (let i = 0; i < 3; i++) {
+      const source = sources[Math.floor(Math.random() * sources.length)];
+      const idx = Math.floor(Math.random() * descriptions.length);
+      const description = descriptions[idx];
+      const categorySuggestion = categorySuggestions[idx];
+      const amount = amounts[idx] + (Math.random() > 0.5 ? 500 : -200);
+
+      const newBt: BankTransaction = {
+        id: 'bt_sync_' + Date.now() + '_' + i,
+        businessId: currentBusinessId,
+        amount,
+        date: new Date().toISOString().split('T')[0],
+        reference: 'TXN-' + Math.floor(10000 + Math.random() * 90000),
+        source,
+        description,
+        categorySuggestion,
+        status: 'Pending'
+      };
+      bts.push(newBt);
+      newBts.push(newBt);
+      this.syncRowToSupabase('bank_transactions', newBt, 'upsert');
+    }
+    setLocalItem('bank_transactions', bts);
+    this.addNotification('Sync Completed', `Successfully synchronized with payment APIs. 3 new transactions available.`, 'success');
+    this.addAudit('Synchronized Bank Transactions', 'N/A', 'Fetched 3 pending transaction records from bank APIs');
+    return newBts;
   }
 
   addDebtPayment(debtId: string, amount: number, paymentMethod: string) {
@@ -1190,7 +1745,7 @@ class ApexDatabaseManager {
     }
   }
 
-  addAudit(action: string, oldValue: string, newValue: string, customIp?: string) {
+  addAudit(action: string, oldValue: string, newValue: string, customIp?: string, customAuditId?: string) {
     const all = getLocalItem<AuditLog[]>('audits', DEFAULT_AUDITS);
     const user = this.getCurrentUser();
     const now = new Date();
@@ -1217,7 +1772,7 @@ class ApexDatabaseManager {
     }
 
     const newLog: AuditLog = {
-      id: 'aud_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
+      id: customAuditId || 'aud_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
       businessId: this.activeBusinessId,
       userEmail: user ? user.email : 'Unknown',
       userName: user ? user.name : 'Unknown',
@@ -1533,11 +2088,14 @@ class ApexDatabaseManager {
     const all = getLocalItem<Expense[]>('expenses', DEFAULT_EXPENSES);
     const idx = all.findIndex(e => e.id === expenseId);
     if (idx === -1) return;
-    const oldVal = all[idx];
+    const oldVal = { ...all[idx] };
     const updated = { ...oldVal, ...updates };
     all[idx] = updated;
     setLocalItem('expenses', all);
-    this.addAudit('Updated Expense', `${oldVal.category}: ${oldVal.amount}`, `${updated.category}: ${updated.amount}`);
+    
+    const auditId = 'aud_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    this.addRevertBackup(auditId, 'expenses', 'update', oldVal);
+    this.addAudit('Updated Expense', `${oldVal.category}: ${oldVal.amount}`, `${updated.category}: ${updated.amount}`, undefined, auditId);
 
     this.syncRowToSupabase('expenses', updated, 'upsert');
 
@@ -1550,7 +2108,10 @@ class ApexDatabaseManager {
     if (!target) return;
     const updated = all.filter(e => e.id !== expenseId);
     setLocalItem('expenses', updated);
-    this.addAudit('Deleted Expense', `${target.category}: ${target.amount}`, 'N/A');
+    
+    const auditId = 'aud_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    this.addRevertBackup(auditId, 'expenses', 'delete', target);
+    this.addAudit('Deleted Expense', `${target.category}: ${target.amount}`, 'N/A', undefined, auditId);
 
     this.syncRowToSupabase('expenses', target, 'delete');
 
@@ -1561,11 +2122,14 @@ class ApexDatabaseManager {
     const all = getLocalItem<Sale[]>('sales', DEFAULT_SALES);
     const idx = all.findIndex(s => s.id === saleId);
     if (idx === -1) return;
-    const oldVal = all[idx];
+    const oldVal = { ...all[idx] };
     const updated = { ...oldVal, ...updates };
     all[idx] = updated;
     setLocalItem('sales', all);
-    this.addAudit('Updated Sale', `${oldVal.invoiceNumber}`, `${updated.invoiceNumber}`);
+    
+    const auditId = 'aud_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    this.addRevertBackup(auditId, 'sales', 'update', oldVal);
+    this.addAudit('Updated Sale', `${oldVal.invoiceNumber}`, `${updated.invoiceNumber}`, undefined, auditId);
 
     this.syncRowToSupabase('sales', updated, 'upsert');
 
@@ -1578,7 +2142,10 @@ class ApexDatabaseManager {
     if (!target) return;
     const updated = all.filter(s => s.id !== saleId);
     setLocalItem('sales', updated);
-    this.addAudit('Deleted Sale', `${target.invoiceNumber}`, 'N/A');
+    
+    const auditId = 'aud_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    this.addRevertBackup(auditId, 'sales', 'delete', target);
+    this.addAudit('Deleted Sale', `${target.invoiceNumber}`, 'N/A', undefined, auditId);
 
     this.syncRowToSupabase('sales', target, 'delete');
 
@@ -1589,11 +2156,14 @@ class ApexDatabaseManager {
     const all = getLocalItem<DebtRecord[]>('debts', DEFAULT_DEBTS);
     const idx = all.findIndex(d => d.id === debtId);
     if (idx === -1) return;
-    const oldVal = all[idx];
+    const oldVal = { ...all[idx] };
     const updated = { ...oldVal, ...updates };
     all[idx] = updated;
     setLocalItem('debts', all);
-    this.addAudit('Updated Debt Record', `${oldVal.customerName}: ${oldVal.outstandingAmount}`, `${updated.customerName}: ${updated.outstandingAmount}`);
+    
+    const auditId = 'aud_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    this.addRevertBackup(auditId, 'debts', 'update', oldVal);
+    this.addAudit('Updated Debt Record', `${oldVal.customerName}: ${oldVal.outstandingAmount}`, `${updated.customerName}: ${updated.outstandingAmount}`, undefined, auditId);
 
     this.syncRowToSupabase('debts', updated, 'upsert');
 
@@ -1606,7 +2176,10 @@ class ApexDatabaseManager {
     if (!target) return;
     const updated = all.filter(d => d.id !== debtId);
     setLocalItem('debts', updated);
-    this.addAudit('Deleted Debt Record', `${target.customerName}: ${target.outstandingAmount}`, 'N/A');
+    
+    const auditId = 'aud_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+    this.addRevertBackup(auditId, 'debts', 'delete', target);
+    this.addAudit('Deleted Debt Record', `${target.customerName}: ${target.outstandingAmount}`, 'N/A', undefined, auditId);
 
     this.syncRowToSupabase('debts', target, 'delete');
 
@@ -1682,6 +2255,123 @@ class ApexDatabaseManager {
     this.syncRowToSupabase('events', updated, 'upsert');
 
     window.dispatchEvent(new Event('storage'));
+  }
+
+  getRevertBackups(): any[] {
+    return getLocalItem<any[]>('revert_backups', []);
+  }
+
+  addRevertBackup(auditId: string, table: string, actionType: 'insert' | 'update' | 'delete', data: any) {
+    const all = this.getRevertBackups();
+    all.push({ id: auditId, table, actionType, data });
+    setLocalItem('revert_backups', all);
+  }
+
+  revertAction(auditId: string): boolean {
+    const backups = this.getRevertBackups();
+    const idx = backups.findIndex(b => b.id === auditId);
+    if (idx === -1) return false;
+
+    const backup = backups[idx];
+    const { table, actionType, data } = backup;
+
+    try {
+      if (table === 'products') {
+        const list = getLocalItem<Product[]>('products', DEFAULT_PRODUCTS);
+        if (actionType === 'delete') {
+          list.push(data);
+          setLocalItem('products', list);
+          this.syncRowToSupabase('products', data, 'upsert');
+          this.addAudit('Reverted Action: Restored Deleted Product', 'N/A', data.name);
+        } else if (actionType === 'update') {
+          const itemIdx = list.findIndex(item => item.id === data.id);
+          if (itemIdx !== -1) {
+            const current = list[itemIdx];
+            list[itemIdx] = data;
+            setLocalItem('products', list);
+            this.syncRowToSupabase('products', data, 'upsert');
+            this.addAudit('Reverted Action: Restored Product Price/Details', `${current.name} (Selling: ${current.sellingPrice})`, `${data.name} (Selling: ${data.sellingPrice})`);
+          }
+        }
+      } else if (table === 'expenses') {
+        const list = getLocalItem<Expense[]>('expenses', DEFAULT_EXPENSES);
+        if (actionType === 'delete') {
+          list.push(data);
+          setLocalItem('expenses', list);
+          this.syncRowToSupabase('expenses', data, 'upsert');
+          this.addAudit('Reverted Action: Restored Deleted Expense', 'N/A', `${data.category}: ${data.amount}`);
+        } else if (actionType === 'update') {
+          const itemIdx = list.findIndex(item => item.id === data.id);
+          if (itemIdx !== -1) {
+            const current = list[itemIdx];
+            list[itemIdx] = data;
+            setLocalItem('expenses', list);
+            this.syncRowToSupabase('expenses', data, 'upsert');
+            this.addAudit('Reverted Action: Restored Expense Details', `${current.category}: ${current.amount}`, `${data.category}: ${data.amount}`);
+          }
+        }
+      } else if (table === 'sales') {
+        const list = getLocalItem<Sale[]>('sales', DEFAULT_SALES);
+        if (actionType === 'delete') {
+          list.push(data);
+          setLocalItem('sales', list);
+          this.syncRowToSupabase('sales', data, 'upsert');
+          this.addAudit('Reverted Action: Restored Deleted Sale', 'N/A', data.invoiceNumber);
+        } else if (actionType === 'update') {
+          const itemIdx = list.findIndex(item => item.id === data.id);
+          if (itemIdx !== -1) {
+            const current = list[itemIdx];
+            list[itemIdx] = data;
+            setLocalItem('sales', list);
+            this.syncRowToSupabase('sales', data, 'upsert');
+            this.addAudit('Reverted Action: Restored Sale Details', current.invoiceNumber, data.invoiceNumber);
+          }
+        }
+      } else if (table === 'debts') {
+        const list = getLocalItem<DebtRecord[]>('debts', DEFAULT_DEBTS);
+        if (actionType === 'delete') {
+          list.push(data);
+          setLocalItem('debts', list);
+          this.syncRowToSupabase('debts', data, 'upsert');
+          this.addAudit('Reverted Action: Restored Deleted Debt Record', 'N/A', `${data.customerName}: ${data.outstandingAmount}`);
+        } else if (actionType === 'update') {
+          const itemIdx = list.findIndex(item => item.id === data.id);
+          if (itemIdx !== -1) {
+            const current = list[itemIdx];
+            list[itemIdx] = data;
+            setLocalItem('debts', list);
+            this.syncRowToSupabase('debts', data, 'upsert');
+            this.addAudit('Reverted Action: Restored Debt Details', `${current.customerName}: ${current.remainingBalance}`, `${data.customerName}: ${data.remainingBalance}`);
+          }
+        }
+      } else if (table === 'branches') {
+        const list = getLocalItem<Branch[]>('branches', DEFAULT_BRANCHES);
+        if (actionType === 'delete') {
+          list.push(data);
+          setLocalItem('branches', list);
+          this.syncRowToSupabase('branches', data, 'upsert');
+          this.addAudit('Reverted Action: Restored Decommissioned Branch', 'N/A', data.name);
+        } else if (actionType === 'update') {
+          const itemIdx = list.findIndex(item => item.id === data.id);
+          if (itemIdx !== -1) {
+            const current = list[itemIdx];
+            list[itemIdx] = data;
+            setLocalItem('branches', list);
+            this.syncRowToSupabase('branches', data, 'upsert');
+            this.addAudit('Reverted Action: Restored Branch Details', current.name, data.name);
+          }
+        }
+      }
+
+      // Remove this backup
+      backups.splice(idx, 1);
+      setLocalItem('revert_backups', backups);
+      window.dispatchEvent(new Event('storage'));
+      return true;
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
   }
 }
 

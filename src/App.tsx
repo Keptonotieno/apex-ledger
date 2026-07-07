@@ -24,6 +24,9 @@ import { ClientDirectory } from './components/ClientDirectory';
 import { SalesOrdersFeed } from './components/SalesOrdersFeed';
 import { Login } from './components/Login';
 import { WorkspacesModule } from './components/WorkspacesModule';
+import { BusinessManager } from './components/BusinessManager';
+import { PurchasesModule } from './components/PurchasesModule';
+import { AccountingModule } from './components/AccountingModule';
 import { motion, AnimatePresence } from 'motion/react';
 
 function DashboardLayout() {
@@ -45,10 +48,14 @@ function DashboardLayout() {
         return <SalesModule />;
       case 'inventory':
         return <InventoryModule />;
+      case 'purchases':
+        return <PurchasesModule />;
       case 'debts':
         return <DebtModule />;
       case 'expenses':
         return <ExpensesModule />;
+      case 'accounting':
+        return <AccountingModule />;
       case 'performance':
         return <PerformanceDashboard />;
       case 'analytics':
@@ -81,8 +88,10 @@ function DashboardLayout() {
       case 'workspaces': return 'Workspaces & Corporate Branches';
       case 'sales': return 'POS Point-of-Sale Terminal';
       case 'inventory': return 'Enterprise Inventory Catalog';
+      case 'purchases': return 'Purchases, Suppliers & Procurement';
       case 'debts': return 'Debt Ledger & Solvency Tracking';
       case 'expenses': return 'Business Cash Flow Expenses';
+      case 'accounting': return 'Accounting Ledger & Double-Entry Sheets';
       case 'performance': return 'Performance & Attendance Dashboard';
       case 'analytics': return 'Corporate Business Analytics';
       case 'clients': return 'Client Directory & CRM';

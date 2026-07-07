@@ -6,7 +6,7 @@ import {
   DollarSign, BarChart3, TrendingUp, Users, ClipboardList, 
   Calendar, CheckSquare, ShieldAlert, Settings, FileText, 
   ChevronLeft, ChevronRight, UserCheck, ShieldAlert as LockIcon,
-  LogOut, Database, Camera, Building2
+  LogOut, Database, Camera, Building2, Truck, Receipt
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -36,8 +36,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
     { id: 'workspaces', name: 'Workspaces & Branches', icon: Building2, minRole: UserRole.MANAGER },
     { id: 'sales', name: 'Sales POS', icon: ShoppingCart, minRole: UserRole.EMPLOYEE },
     { id: 'inventory', name: 'Inventory', icon: Package, minRole: UserRole.EMPLOYEE },
+    { id: 'purchases', name: 'Purchases & Procurement', icon: Truck, minRole: UserRole.EMPLOYEE },
     { id: 'debts', name: 'Debt Tracking', icon: CreditCard, minRole: UserRole.EMPLOYEE },
     { id: 'expenses', name: 'Expenses', icon: DollarSign, minRole: UserRole.EMPLOYEE },
+    { id: 'accounting', name: 'Accounting Ledger', icon: Receipt, minRole: UserRole.EMPLOYEE },
     { id: 'performance', name: 'Performance Dashboard', icon: BarChart3, minRole: UserRole.EMPLOYEE },
     { id: 'analytics', name: 'Admin Analytics', icon: TrendingUp, minRole: UserRole.MANAGER },
     { id: 'clients', name: 'Client Directory', icon: Users, minRole: UserRole.EMPLOYEE },
