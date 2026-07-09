@@ -470,7 +470,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               </div>
 
               {/* Supplier Information Section */}
-              {product.supplier && (
+              {product.supplier && !isEmployee && (
                 <div className="p-3.5 bg-gray-950/60 rounded-xl border border-brand-border/50 space-y-1.5">
                   <span className="font-mono text-[10px] text-indigo-400 uppercase tracking-wider block">Supplier Profile</span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-gray-300">
@@ -487,19 +487,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               {/* Analytical performance details */}
               <div className="p-3.5 bg-cyan-950/15 border border-cyan-500/10 rounded-xl space-y-2">
                 <span className="font-mono text-[10px] text-cyan-400 uppercase tracking-wider block">Live Velocity Metrics</span>
-                <div className="grid grid-cols-3 gap-2 text-center">
+                <div className={`grid ${isEmployee ? 'grid-cols-1' : 'grid-cols-3'} gap-2 text-center`}>
                   <div>
                     <span className="text-[8px] text-gray-500 uppercase block font-mono">Units Sold</span>
                     <span className="font-mono font-bold text-gray-100 text-xs">{performance.unitsSold}</span>
                   </div>
-                  <div>
-                    <span className="text-[8px] text-gray-500 uppercase block font-mono">Total Revenue</span>
-                    <span className="font-mono font-bold text-cyan-400 text-xs">KSh {performance.revenue.toLocaleString()}</span>
-                  </div>
-                  <div>
-                    <span className="text-[8px] text-gray-500 uppercase block font-mono">Gross Profit</span>
-                    <span className="font-mono font-bold text-emerald-400 text-xs">KSh {performance.profit.toLocaleString()}</span>
-                  </div>
+                  {!isEmployee && (
+                    <>
+                      <div>
+                        <span className="text-[8px] text-gray-500 uppercase block font-mono">Total Revenue</span>
+                        <span className="font-mono font-bold text-cyan-400 text-xs">KSh {performance.revenue.toLocaleString()}</span>
+                      </div>
+                      <div>
+                        <span className="text-[8px] text-gray-500 uppercase block font-mono">Gross Profit</span>
+                        <span className="font-mono font-bold text-emerald-400 text-xs">KSh {performance.profit.toLocaleString()}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="text-[10px] text-gray-400 pt-1.5 border-t border-brand-border/20 space-y-1">

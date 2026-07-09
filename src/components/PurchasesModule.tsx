@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Procurement, Product, Supplier, UserRole } from '../types';
+import { Procurement, Product, Supplier, UserRole, TradeCategory } from '../types';
 import { 
   Plus, Search, Filter, AlertCircle, Edit, Trash2, Check, ArrowRight, 
   Star, Clock, FileText, CheckCircle, ShieldAlert, Archive, RotateCcw, 
@@ -12,69 +12,8 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area 
 } from 'recharts';
 
-// Default Suppliers list to pre-populate and give a realistic user experience
-const DEFAULT_SUPPLIERS: Supplier[] = [
-  {
-    id: 'sup_1',
-    businessId: '', // dynamic
-    name: 'Nairobi Agro-Wholesalers Ltd',
-    contactPerson: 'David Mwangi',
-    phone: '+254 722 000 111',
-    email: 'info@nairobiagro.co.ke',
-    address: 'Industrial Area, Gate 4, Nairobi',
-    category: 'Agricultural Materials',
-    productsSupplied: ['Organic Fertilizers', 'Hybrid Seeds', 'Pesticides'],
-    totalOrders: 0,
-    totalSpend: 0,
-    supplierRating: 5,
-    status: 'Active'
-  },
-  {
-    id: 'sup_2',
-    businessId: '',
-    name: 'Mombasa Builders Supply Ltd',
-    contactPerson: 'Amina Omondi',
-    phone: '+254 733 999 888',
-    email: 'orders@mombasabuilders.com',
-    address: 'Mombasa Port Road, Block C, Mombasa',
-    category: 'Construction Materials',
-    productsSupplied: ['Cements', 'Iron Sheets', 'River Sand', 'Gravel'],
-    totalOrders: 0,
-    totalSpend: 0,
-    supplierRating: 4,
-    status: 'Active'
-  },
-  {
-    id: 'sup_3',
-    businessId: '',
-    name: 'Kipkorir Seeds & Chemicals',
-    contactPerson: 'Erick Kipkorir',
-    phone: '+254 711 222 333',
-    email: 'sales@kipkorirseeds.com',
-    address: 'Nakuru Town Highway, Nakuru',
-    category: 'Agricultural Materials',
-    productsSupplied: ['Seedlings', 'Insecticides', 'Irrigation Pipes'],
-    totalOrders: 0,
-    totalSpend: 0,
-    supplierRating: 4,
-    status: 'Active'
-  },
-  {
-    id: 'sup_4',
-    businessId: '',
-    name: 'Apex Packaging & Spares',
-    contactPerson: 'John Kiptoo',
-    phone: '+254 705 444 555',
-    email: 'spares@apexpack.co.ke',
-    address: 'Enterprise Road, Nairobi',
-    category: 'Hardware & Spares',
-    productsSupplied: ['Plastics', 'Packaging Sacks', 'Machinery Spares'],
-    totalOrders: 0,
-    totalSpend: 0,
-    supplierRating: 3,
-    status: 'Inactive'
-  }
-];
+// Default Suppliers list - cleared of hardcoded items as per dynamic requirements
+const DEFAULT_SUPPLIERS: Supplier[] = [];
 
 export function PurchasesModule() {
   const { 
@@ -109,6 +48,12 @@ export function PurchasesModule() {
   // Supplier Add/Edit Modals state
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+
+  // Trade Categories state
+  const [tradeCategories, setTradeCategories] = useState<TradeCategory[]>([]);
+  const [isTradeCategoryModalOpen, setIsTradeCategoryModalOpen] = useState(false);
+  const [tradeCategoryForm, setTradeCategoryForm] = useState({ name: '', description: '' });
+  const [selectedTradeCategory, setSelectedTradeCategory] = useState<TradeCategory | null>(null);
   
   // Forms state for Supplier
   const [supplierForm, setSupplierForm] = useState({
@@ -117,7 +62,7 @@ export function PurchasesModule() {
     phone: '',
     email: '',
     address: '',
-    category: 'Agricultural Materials',
+    category: '',
     productsSupplied: '',
     supplierRating: 5,
     status: 'Active' as 'Active' | 'Inactive' | 'Archived'
@@ -146,15 +91,15 @@ export function PurchasesModule() {
     const localKey = `apex_ledger_suppliers_${activeBusiness.id}`;
     const stored = localStorage.getItem(localKey);
     if (stored) {
-      setSuppliers(JSON.parse(stored));
+      const parsed = JSON.parse(stored) as Supplier[];
+      // Remove any hardcoded suppliers that might have been saved under older defaults
+      const cleaned = parsed.filter(s => s.id !== 'sup_1' && s.id !== 'sup_2' && s.id !== 'sup_3' && s.id !== 'sup_4');
+      setSuppliers(cleaned);
+      if (parsed.length !== cleaned.length) {
+        localStorage.setItem(localKey, JSON.stringify(cleaned));
+      }
     } else {
-      // Initialize default suppliers under this business
-      const initialized = DEFAULT_SUPPLIERS.map(s => ({
-        ...s,
-        businessId: activeBusiness.id
-      }));
-      localStorage.setItem(localKey, JSON.stringify(initialized));
-      setSuppliers(initialized);
+      setSuppliers([]);
     }
   }, [activeBusiness?.id]);
 
@@ -163,6 +108,25 @@ export function PurchasesModule() {
     const localKey = `apex_ledger_suppliers_${activeBusiness.id}`;
     localStorage.setItem(localKey, JSON.stringify(updatedSuppliers));
     setSuppliers(updatedSuppliers);
+  };
+
+  // Load and isolate trade categories based on active business
+  useEffect(() => {
+    if (!activeBusiness?.id) return;
+    const localKey = `apex_ledger_trade_categories_${activeBusiness.id}`;
+    const stored = localStorage.getItem(localKey);
+    if (stored) {
+      setTradeCategories(JSON.parse(stored));
+    } else {
+      setTradeCategories([]);
+    }
+  }, [activeBusiness?.id]);
+
+  const saveTradeCategories = (updatedCats: TradeCategory[]) => {
+    if (!activeBusiness?.id) return;
+    const localKey = `apex_ledger_trade_categories_${activeBusiness.id}`;
+    localStorage.setItem(localKey, JSON.stringify(updatedCats));
+    setTradeCategories(updatedCats);
   };
 
   // ----------------------------------------------------
@@ -224,15 +188,45 @@ export function PurchasesModule() {
   const enrichedSuppliers = suppliers.map(sup => {
     const supPOs = tenantPOs.filter(p => p.supplierName.toLowerCase() === sup.name.toLowerCase());
     const validPOs = supPOs.filter(p => p.status !== 'Cancelled' && p.status !== 'Draft');
+    const completedPOs = supPOs.filter(p => p.status === 'Fully Received' || p.status === 'Closed');
+    
+    const totalOrders = supPOs.length;
+    const completedOrders = completedPOs.length;
     const totalSpend = validPOs.reduce((sum, p) => sum + (p.materialCosts || 0), 0);
+    
+    // Total purchases (quantities of items purchased across all valid POs)
+    const totalPurchases = validPOs.reduce((total, p) => {
+      const itemsQty = p.items?.reduce((s, item) => s + (item.quantity || 0), 0) || 0;
+      return total + itemsQty;
+    }, 0);
+
+    const nonDraftPOs = supPOs.filter(p => p.status !== 'Draft');
+    const deliveryPerformance = nonDraftPOs.length > 0
+      ? Math.round((completedOrders / nonDraftPOs.length) * 100)
+      : 100;
+
+    const fulfillmentRate = validPOs.length > 0
+      ? Math.round((completedOrders / validPOs.length) * 100)
+      : 100;
+
+    // Supplier Rating out of 5, weighted between user rating (40%) and delivery performance (60%)
+    const calculatedRating = totalOrders > 0
+      ? parseFloat(((sup.supplierRating * 0.4) + ((deliveryPerformance / 100) * 5 * 0.6)).toFixed(1))
+      : sup.supplierRating;
+
     const lastPO = validPOs.length > 0 
       ? [...validPOs].sort((a, b) => b.date.localeCompare(a.date))[0].date 
       : undefined;
 
     return {
       ...sup,
-      totalOrders: supPOs.length,
-      totalSpend: totalSpend,
+      totalOrders,
+      completedOrders,
+      totalSpend,
+      totalPurchases,
+      deliveryPerformance,
+      fulfillmentRate,
+      supplierRating: calculatedRating,
       lastPurchaseDate: lastPO
     };
   });
@@ -251,7 +245,7 @@ export function PurchasesModule() {
       phone: '',
       email: '',
       address: '',
-      category: 'Agricultural Materials',
+      category: tradeCategories.length > 0 ? tradeCategories[0].name : '',
       productsSupplied: '',
       supplierRating: 5,
       status: 'Active'
@@ -275,9 +269,69 @@ export function PurchasesModule() {
     setIsSupplierModalOpen(true);
   };
 
+  // ----------------------------------------------------
+  // Trade Category Actions
+  // ----------------------------------------------------
+  const handleSaveTradeCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isManagerOrOwner) return;
+    if (!tradeCategoryForm.name.trim()) return;
+
+    if (selectedTradeCategory) {
+      // Edit
+      const updated = tradeCategories.map(tc => tc.id === selectedTradeCategory.id ? {
+        ...tc,
+        name: tradeCategoryForm.name.trim(),
+        description: tradeCategoryForm.description.trim()
+      } : tc);
+      saveTradeCategories(updated);
+      addAudit('Edited Trade Category', selectedTradeCategory.name, tradeCategoryForm.name.trim());
+    } else {
+      // Add
+      const newCat: TradeCategory = {
+        id: 'tc_' + Date.now(),
+        businessId: activeBusiness.id,
+        name: tradeCategoryForm.name.trim(),
+        description: tradeCategoryForm.description.trim(),
+        createdAt: new Date().toISOString()
+      };
+      saveTradeCategories([...tradeCategories, newCat]);
+      addAudit('Registered Trade Category', 'N/A', tradeCategoryForm.name.trim());
+    }
+
+    setTradeCategoryForm({ name: '', description: '' });
+    setSelectedTradeCategory(null);
+  };
+
+  const handleOpenEditTradeCategory = (tc: TradeCategory) => {
+    setSelectedTradeCategory(tc);
+    setTradeCategoryForm({
+      name: tc.name,
+      description: tc.description || ''
+    });
+  };
+
+  const handleDeleteTradeCategory = (tcId: string, name: string) => {
+    if (!isManagerOrOwner) return;
+    if (confirm(`Are you sure you want to permanently delete trade category "${name}"? Any suppliers assigned to this category will need to be re-assigned.`)) {
+      const filtered = tradeCategories.filter(tc => tc.id !== tcId);
+      saveTradeCategories(filtered);
+      addAudit('Deleted Trade Category', name, 'DELETED');
+      if (selectedTradeCategory?.id === tcId) {
+        setSelectedTradeCategory(null);
+        setTradeCategoryForm({ name: '', description: '' });
+      }
+    }
+  };
+
   const handleSaveSupplier = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isManagerOrOwner) return;
+
+    if (!supplierForm.category) {
+      alert("No trade categories available. Please create one first.");
+      return;
+    }
 
     const listProducts = supplierForm.productsSupplied
       .split(',')
@@ -1060,38 +1114,56 @@ export function PurchasesModule() {
             <div className="glass-panel p-5 rounded-2xl border-brand-border lg:col-span-2 space-y-4">
               <div>
                 <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider font-mono">Supplier Performance Ratings</h4>
-                <p className="text-[10px] text-gray-500">Active vendors rated by response times, quality, and execution history</p>
+                <p className="text-[10px] text-gray-500">Active vendors rated dynamically by delivery performance, fulfillment rates, and outlay history</p>
               </div>
 
               <div className="space-y-3">
-                {enrichedSuppliers.filter(s => s.status === 'Active').slice(0, 4).map((sup, idx) => (
-                  <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl bg-gray-950/30 border border-brand-border gap-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-cyan-950/40 border border-cyan-500/20 flex items-center justify-center text-xs font-bold text-cyan-400">
-                        {sup.name.substring(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold text-gray-200">{sup.name}</div>
-                        <div className="text-[10px] text-gray-500">Contact: {sup.contactPerson}</div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-6 text-xs justify-between sm:justify-end">
-                      <div className="text-right">
-                        <span className="text-[9px] text-gray-500 block">Total Spend</span>
-                        <span className="font-mono font-bold text-gray-300">KSh {sup.totalSpend.toLocaleString()}</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-[9px] text-gray-500 block font-mono">Orders</span>
-                        <span className="font-mono font-bold text-gray-300">{sup.totalOrders}</span>
-                      </div>
-                      <div className="flex items-center gap-1 bg-gray-900 border border-gray-800 px-2 py-1 rounded-md">
-                        <span className="text-xs font-bold text-amber-400 font-mono">{sup.supplierRating}</span>
-                        <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                      </div>
-                    </div>
+                {enrichedSuppliers.filter(s => s.status === 'Active').length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-10 px-4 text-center space-y-2.5 border border-dashed border-brand-border/40 rounded-xl bg-gray-950/20">
+                    <Truck className="w-8 h-8 text-cyan-500/40 animate-pulse" />
+                    <div className="text-xs font-bold text-gray-300 font-mono uppercase tracking-wider">No suppliers registered yet</div>
+                    <p className="text-[10px] text-gray-500 max-w-sm leading-relaxed">
+                      Register trade vendors and execute purchase orders to dynamically generate spending outlay, delivery metrics, fulfillment scores, and performance ratings.
+                    </p>
                   </div>
-                ))}
+                ) : (
+                  enrichedSuppliers.filter(s => s.status === 'Active').slice(0, 4).map((sup, idx) => (
+                    <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-gray-950/30 border border-brand-border gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-cyan-950/40 border border-cyan-500/20 flex items-center justify-center text-xs font-bold text-cyan-400 font-mono">
+                          {sup.name.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-gray-200">{sup.name}</div>
+                          <div className="text-[10px] text-gray-500 font-mono">Rep: {sup.contactPerson} • {sup.category}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs justify-between sm:justify-end">
+                        <div className="text-right">
+                          <span className="text-[9px] text-gray-500 block">Total Spend</span>
+                          <span className="font-mono font-bold text-gray-300">KSh {sup.totalSpend.toLocaleString()}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[9px] text-gray-500 block font-mono">Fulfillment</span>
+                          <span className="font-mono font-bold text-emerald-400">{sup.fulfillmentRate}%</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[9px] text-gray-500 block font-mono">Delivery</span>
+                          <span className="font-mono font-bold text-cyan-400">{sup.deliveryPerformance}%</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[9px] text-gray-500 block font-mono">Completed / POs</span>
+                          <span className="font-mono font-bold text-gray-300">{sup.completedOrders} / {sup.totalOrders}</span>
+                        </div>
+                        <div className="flex items-center gap-1 bg-gray-900 border border-gray-800 px-2 py-1 rounded-md">
+                          <span className="text-xs font-bold text-amber-400 font-mono">{sup.supplierRating}</span>
+                          <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
@@ -1478,138 +1550,188 @@ export function PurchasesModule() {
       {activeTab === 'suppliers' && (
         <div className="space-y-6">
           
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-400 font-mono">
-              Active Suppliers Directory: {enrichedSuppliers.length} suppliers registered
-            </span>
-            <span className="text-xs text-gray-400 italic">Isolate, track, and score trade partner relations</span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gray-950/40 p-4 border border-brand-border rounded-xl">
+            <div className="space-y-1">
+              <span className="text-xs font-bold text-gray-200 font-mono block">
+                Supplier Directory Profile
+              </span>
+              <span className="text-[10px] text-gray-400 font-mono block">
+                Active Suppliers Directory: {enrichedSuppliers.length} suppliers registered
+              </span>
+            </div>
             
-            {enrichedSuppliers.map((sup) => (
-              <div 
-                key={sup.id} 
-                className={`glass-panel p-5 rounded-2xl border-brand-border flex flex-col justify-between space-y-4 transition ${
-                  sup.status === 'Archived' ? 'opacity-65' : ''
-                }`}
+            {isManagerOrOwner && (
+              <button
+                onClick={() => setIsTradeCategoryModalOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-gray-900 border border-brand-border hover:border-cyan-500/30 text-gray-200 rounded-xl text-xs font-semibold transition cursor-pointer"
               >
-                
-                {/* Header info */}
-                <div className="space-y-1">
-                  <div className="flex items-start justify-between">
-                    <span className="text-[10px] text-cyan-400 font-semibold font-mono uppercase tracking-wider">{sup.category}</span>
-                    <span className={`text-[9px] px-2 py-0.5 font-bold border rounded-lg ${
-                      sup.status === 'Active' ? 'bg-emerald-950/40 text-emerald-400 border-emerald-500/20' :
-                      sup.status === 'Inactive' ? 'bg-amber-950/40 text-amber-400 border-amber-500/20' :
-                      'bg-gray-800 text-gray-500 border-gray-700'
-                    }`}>
-                      {sup.status}
-                    </span>
-                  </div>
-                  <h4 className="text-sm font-bold text-gray-100">{sup.name}</h4>
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <span className="text-gray-400 font-mono">Representative:</span>
-                    <span className="text-gray-300 font-semibold">{sup.contactPerson}</span>
-                  </div>
-                </div>
-
-                {/* Star rating */}
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-gray-400 mr-1.5">Rating:</span>
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star 
-                      key={i} 
-                      className={`w-4 h-4 ${
-                        i < sup.supplierRating 
-                          ? 'text-amber-400 fill-amber-400' 
-                          : 'text-gray-700'
-                      }`} 
-                    />
-                  ))}
-                </div>
-
-                {/* Products supplied tag pills */}
-                <div className="space-y-1">
-                  <span className="text-[10px] text-gray-500 font-mono uppercase block">Supplied Cargo Catalogue</span>
-                  <div className="flex flex-wrap gap-1">
-                    {sup.productsSupplied && sup.productsSupplied.map((prod, idx) => (
-                      <span key={idx} className="text-[10px] px-2 py-0.5 bg-gray-950/50 border border-brand-border/60 text-gray-400 rounded-md">
-                        {prod}
-                      </span>
-                    ))}
-                    {(!sup.productsSupplied || sup.productsSupplied.length === 0) && (
-                      <span className="text-[10px] text-gray-500">None specified</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Procurement History Metrics */}
-                <div className="bg-gray-950/40 p-3 rounded-xl border border-brand-border grid grid-cols-2 gap-2 text-[11px]">
-                  <div>
-                    <span className="text-gray-500 block font-mono">Total POs:</span>
-                    <span className="font-bold text-gray-200 font-mono">{sup.totalOrders} orders</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500 block font-mono">Total Outlay:</span>
-                    <span className="font-bold text-cyan-400 font-mono">KSh {sup.totalSpend.toLocaleString()}</span>
-                  </div>
-                  <div className="col-span-2 border-t border-brand-border/40 pt-1.5">
-                    <span className="text-gray-500 font-mono">Last Purchase:</span> <span className="text-gray-300 font-semibold font-mono">{sup.lastPurchaseDate || 'N/A'}</span>
-                  </div>
-                </div>
-
-                {/* Contact Coordinates */}
-                <div className="space-y-1.5 text-[11px] text-gray-400 border-t border-brand-border/40 pt-2.5">
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-3.5 h-3.5 text-gray-500shrink-0" />
-                    <span className="font-mono">{sup.phone}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Mail className="w-3.5 h-3.5 text-gray-500 shrink-0" />
-                    <span className="truncate">{sup.email}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-3.5 h-3.5 text-gray-500 shrink-0" />
-                    <span className="truncate">{sup.address}</span>
-                  </div>
-                </div>
-
-                {/* Manager Coordinates */}
-                {isManagerOrOwner && (
-                  <div className="border-t border-brand-border/40 pt-3 flex items-center justify-between gap-2">
-                    
-                    <button
-                      onClick={() => handleOpenEditSupplier(sup)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-950 border border-brand-border hover:border-cyan-500/30 text-gray-300 rounded-lg text-xs font-semibold transition"
-                    >
-                      <Edit className="w-3 h-3 text-cyan-400" />
-                      Edit
-                    </button>
-
-                    <button
-                      onClick={() => handleArchiveSupplier(sup)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-950 border border-brand-border hover:border-yellow-500/30 text-gray-300 rounded-lg text-xs font-semibold transition"
-                    >
-                      <Archive className="w-3 h-3 text-yellow-500" />
-                      {sup.status === 'Archived' ? 'Reactivate' : 'Archive'}
-                    </button>
-
-                    <button
-                      onClick={() => handleDeleteSupplier(sup.id, sup.name)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/20 border border-rose-900/30 hover:border-rose-500 text-rose-400 rounded-lg text-xs font-semibold transition"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      Delete
-                    </button>
-
-                  </div>
-                )}
-
-              </div>
-            ))}
-
+                <Tag className="w-4 h-4 text-cyan-400" />
+                Manage Trade Categories
+              </button>
+            )}
           </div>
+
+          {enrichedSuppliers.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 px-4 text-center space-y-3 border border-dashed border-brand-border rounded-2xl bg-gray-950/10">
+              <div className="p-3 bg-cyan-950/40 border border-cyan-500/20 rounded-2xl text-cyan-400">
+                <Truck className="w-6 h-6" />
+              </div>
+              <div className="text-xs font-bold text-gray-300 uppercase tracking-wider font-mono">No suppliers registered yet</div>
+              <p className="text-xs text-gray-500 max-w-sm">
+                Add trade vendors, manufacturers, and agribusiness distributors. Track procurement contracts, delivery times, and financial outlay.
+              </p>
+              {isManagerOrOwner && (
+                <button
+                  onClick={handleOpenAddSupplier}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold transition shadow-lg glow-cyan cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  Register First Supplier
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {enrichedSuppliers.map((sup) => (
+                <div 
+                  key={sup.id} 
+                  className={`glass-panel p-5 rounded-2xl border-brand-border flex flex-col justify-between space-y-4 transition ${
+                    sup.status === 'Archived' ? 'opacity-65' : ''
+                  }`}
+                >
+                  
+                  {/* Header info */}
+                  <div className="space-y-1">
+                    <div className="flex items-start justify-between">
+                      <span className="text-[10px] text-cyan-400 font-semibold font-mono uppercase tracking-wider">{sup.category}</span>
+                      <span className={`text-[9px] px-2 py-0.5 font-bold border rounded-lg ${
+                        sup.status === 'Active' ? 'bg-emerald-950/40 text-emerald-400 border-emerald-500/20' :
+                        sup.status === 'Inactive' ? 'bg-amber-950/40 text-amber-400 border-amber-500/20' :
+                        'bg-gray-800 text-gray-500 border-gray-700'
+                      }`}>
+                        {sup.status}
+                      </span>
+                    </div>
+                    <h4 className="text-sm font-bold text-gray-100">{sup.name}</h4>
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="text-gray-400 font-mono">Representative:</span>
+                      <span className="text-gray-300 font-semibold">{sup.contactPerson}</span>
+                    </div>
+                  </div>
+
+                  {/* Star rating */}
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-gray-400 mr-1.5">Rating:</span>
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Star 
+                        key={i} 
+                        className={`w-4 h-4 ${
+                          i < Math.round(sup.supplierRating) 
+                            ? 'text-amber-400 fill-amber-400' 
+                            : 'text-gray-700'
+                        }`} 
+                      />
+                    ))}
+                    <span className="text-xs text-gray-400 font-mono ml-1 font-bold">({sup.supplierRating})</span>
+                  </div>
+
+                  {/* Products supplied tag pills */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-gray-500 font-mono uppercase block">Supplied Cargo Catalogue</span>
+                    <div className="flex flex-wrap gap-1">
+                      {sup.productsSupplied && sup.productsSupplied.map((prod, idx) => (
+                        <span key={idx} className="text-[10px] px-2 py-0.5 bg-gray-950/50 border border-brand-border/60 text-gray-400 rounded-md">
+                          {prod}
+                        </span>
+                      ))}
+                      {(!sup.productsSupplied || sup.productsSupplied.length === 0) && (
+                        <span className="text-[10px] text-gray-500">None specified</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Procurement History Metrics */}
+                  <div className="bg-gray-950/40 p-3 rounded-xl border border-brand-border grid grid-cols-2 gap-x-2 gap-y-3 text-[11px]">
+                    <div>
+                      <span className="text-gray-500 block font-mono">Total POs:</span>
+                      <span className="font-bold text-gray-200 font-mono">{sup.totalOrders} orders</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block font-mono">Total Outlay:</span>
+                      <span className="font-bold text-cyan-400 font-mono">KSh {sup.totalSpend.toLocaleString()}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block font-mono">Fulfillment Rate:</span>
+                      <span className="font-bold text-emerald-400 font-mono">{sup.fulfillmentRate}%</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block font-mono">Delivery Performance:</span>
+                      <span className="font-bold text-cyan-400 font-mono">{sup.deliveryPerformance}%</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block font-mono">Completed POs:</span>
+                      <span className="font-bold text-gray-300 font-mono">{sup.completedOrders} orders</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500 block font-mono">Total Purchases:</span>
+                      <span className="font-bold text-gray-300 font-mono">{sup.totalPurchases} units</span>
+                    </div>
+                    <div className="col-span-2 border-t border-brand-border/40 pt-1.5">
+                      <span className="text-gray-500 font-mono">Last Purchase:</span> <span className="text-gray-300 font-semibold font-mono">{sup.lastPurchaseDate || 'N/A'}</span>
+                    </div>
+                  </div>
+
+                  {/* Contact Coordinates */}
+                  <div className="space-y-1.5 text-[11px] text-gray-400 border-t border-brand-border/40 pt-2.5">
+                    <div className="flex items-center gap-2">
+                      <Phone className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                      <span className="font-mono">{sup.phone}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                      <span className="truncate">{sup.email}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                      <span className="truncate">{sup.address}</span>
+                    </div>
+                  </div>
+
+                  {/* Manager Coordinates */}
+                  {isManagerOrOwner && (
+                    <div className="border-t border-brand-border/40 pt-3 flex items-center justify-between gap-2">
+                      
+                      <button
+                        onClick={() => handleOpenEditSupplier(sup)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-950 border border-brand-border hover:border-cyan-500/30 text-gray-300 rounded-lg text-xs font-semibold transition cursor-pointer"
+                      >
+                        <Edit className="w-3 h-3 text-cyan-400" />
+                        Edit
+                      </button>
+
+                      <button
+                        onClick={() => handleArchiveSupplier(sup)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-950 border border-brand-border hover:border-yellow-500/30 text-gray-300 rounded-lg text-xs font-semibold transition cursor-pointer"
+                      >
+                        <Archive className="w-3 h-3 text-yellow-500" />
+                        {sup.status === 'Archived' ? 'Reactivate' : 'Archive'}
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteSupplier(sup.id, sup.name)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-950/20 border border-rose-900/30 hover:border-rose-500 text-rose-400 rounded-lg text-xs font-semibold transition cursor-pointer"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        Delete
+                      </button>
+
+                    </div>
+                  )}
+
+                </div>
+              ))}
+            </div>
+          )}
 
         </div>
       )}
@@ -1919,20 +2041,22 @@ export function PurchasesModule() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[11px] text-gray-400 font-mono uppercase block">Trade Category</label>
-                  <select
-                    value={supplierForm.category}
-                    onChange={(e) => setSupplierForm(prev => ({ ...prev, category: e.target.value }))}
-                    className="w-full bg-gray-950 border border-brand-border focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 rounded-xl px-3 py-2 text-xs text-gray-200 outline-none"
-                  >
-                    <option value="Agricultural Materials">Agricultural Materials</option>
-                    <option value="Construction Materials">Construction Materials</option>
-                    <option value="Packaging Materials">Packaging Materials</option>
-                    <option value="Chemicals & Fertilizers">Chemicals & Fertilizers</option>
-                    <option value="Hardware & Spares">Hardware & Spares</option>
-                    <option value="Office Supplies">Office Supplies</option>
-                    <option value="Other">Other</option>
-                  </select>
+                  <label className="text-[11px] text-gray-400 font-mono uppercase block">Trade Category *</label>
+                  {tradeCategories.length === 0 ? (
+                    <div className="text-[10px] text-rose-400 bg-rose-950/20 border border-rose-900/40 rounded-xl px-3 py-2 leading-relaxed">
+                      No trade categories available. Please create one first.
+                    </div>
+                  ) : (
+                    <select
+                      value={supplierForm.category}
+                      onChange={(e) => setSupplierForm(prev => ({ ...prev, category: e.target.value }))}
+                      className="w-full bg-gray-950 border border-brand-border focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 rounded-xl px-3 py-2 text-xs text-gray-200 outline-none"
+                    >
+                      {tradeCategories.map(tc => (
+                        <option key={tc.id} value={tc.name}>{tc.name}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -2032,6 +2156,159 @@ export function PurchasesModule() {
               </div>
 
             </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* MODAL: TRADE CATEGORY CRUD MANAGER */}
+      {/* ------------------------------------------------------------------ */}
+      {isTradeCategoryModalOpen && (
+        <div className="fixed inset-0 bg-brand-dark/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="glass-panel w-full max-w-2xl rounded-2xl border-brand-border shadow-2xl p-6 space-y-6 max-h-[90vh] overflow-y-auto">
+            
+            <div className="flex items-center justify-between border-b border-brand-border pb-3">
+              <div className="flex items-center gap-2">
+                <Tag className="w-5 h-5 text-cyan-400" />
+                <h3 className="text-sm font-bold text-gray-100 font-mono uppercase tracking-wider">
+                  Manage Trade Categories
+                </h3>
+              </div>
+              <button 
+                onClick={() => {
+                  setIsTradeCategoryModalOpen(false);
+                  setSelectedTradeCategory(null);
+                  setTradeCategoryForm({ name: '', description: '' });
+                }}
+                className="p-1 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-gray-200 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              {/* Left Side: Categories List */}
+              <div className="space-y-4">
+                <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider font-mono">Existing Categories ({tradeCategories.length})</h4>
+                
+                <div className="space-y-2.5 max-h-[45vh] overflow-y-auto pr-1">
+                  {tradeCategories.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 px-4 text-center border border-dashed border-brand-border/40 rounded-xl bg-gray-950/20">
+                      <Tag className="w-6 h-6 text-gray-600 mb-2 animate-pulse" />
+                      <div className="text-[10px] font-bold text-gray-400 font-mono uppercase tracking-wider">No categories created</div>
+                      <p className="text-[10px] text-gray-500 mt-1">
+                        Use the registration workspace to define custom trade verticals.
+                      </p>
+                    </div>
+                  ) : (
+                    tradeCategories.map((tc) => (
+                      <div 
+                        key={tc.id} 
+                        className={`p-3 rounded-xl border flex items-start justify-between gap-3 transition ${
+                          selectedTradeCategory?.id === tc.id 
+                            ? 'bg-cyan-950/30 border-cyan-500/50' 
+                            : 'bg-gray-950/20 border-brand-border'
+                        }`}
+                      >
+                        <div className="space-y-1 min-w-0">
+                          <div className="text-xs font-bold text-gray-200 truncate">{tc.name}</div>
+                          {tc.description && (
+                            <div className="text-[10px] text-gray-500 leading-relaxed line-clamp-2">
+                              {tc.description}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => handleOpenEditTradeCategory(tc)}
+                            className="p-1.5 bg-gray-900 border border-brand-border hover:border-cyan-500/30 text-cyan-400 rounded-lg transition"
+                            title="Edit Category"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTradeCategory(tc.id, tc.name)}
+                            className="p-1.5 bg-rose-950/20 border border-rose-900/30 hover:border-rose-500 text-rose-400 rounded-lg transition"
+                            title="Delete Category"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Right Side: Form workspace */}
+              <form onSubmit={handleSaveTradeCategory} className="space-y-4 bg-gray-950/30 p-4 border border-brand-border rounded-xl">
+                <h4 className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider font-mono">
+                  {selectedTradeCategory ? 'Modify Category' : 'Register New Category'}
+                </h4>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] text-gray-400 font-mono uppercase block">Category Name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Grain Suppliers"
+                    value={tradeCategoryForm.name}
+                    onChange={(e) => setTradeCategoryForm(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full bg-gray-950 border border-brand-border focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 rounded-xl px-3 py-2 text-xs text-gray-200 outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] text-gray-400 font-mono uppercase block">Description</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Provide details about materials or services under this category"
+                    value={tradeCategoryForm.description}
+                    onChange={(e) => setTradeCategoryForm(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full bg-gray-950 border border-brand-border focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 rounded-xl px-3 py-2 text-xs text-gray-200 outline-none resize-none"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  {selectedTradeCategory && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedTradeCategory(null);
+                        setTradeCategoryForm({ name: '', description: '' });
+                      }}
+                      className="w-full py-2 border border-brand-border hover:bg-gray-800 text-gray-400 rounded-xl text-xs font-semibold transition"
+                    >
+                      Cancel Edit
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="w-full py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold transition shadow-lg glow-cyan"
+                  >
+                    {selectedTradeCategory ? 'Save Updates' : 'Register Category'}
+                  </button>
+                </div>
+              </form>
+
+            </div>
+
+            <div className="flex items-center justify-end pt-3 border-t border-brand-border">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsTradeCategoryModalOpen(false);
+                  setSelectedTradeCategory(null);
+                  setTradeCategoryForm({ name: '', description: '' });
+                }}
+                className="px-5 py-2 text-xs font-semibold text-gray-300 bg-gray-900 border border-brand-border hover:bg-gray-800 rounded-xl transition"
+              >
+                Close Manager
+              </button>
+            </div>
 
           </div>
         </div>

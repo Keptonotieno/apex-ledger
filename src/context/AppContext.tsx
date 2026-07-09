@@ -6,6 +6,7 @@ import {
   Budget, Invoice, BankTransaction, Reconciliation, Category
 } from '../types';
 import { dbManager } from '../lib/database';
+import { DataService } from '../lib/DataService';
 
 interface AppContextType {
   activeView: string;
@@ -87,22 +88,25 @@ interface AppContextType {
   deleteEvent: (eventId: string) => void;
   clockInOut: (userId: string) => void;
   addAudit: (action: string, oldValue: string, newValue: string) => void;
-  registerBusiness: (name: string, branch: string, currency?: string, businessType?: string, registrationNumber?: string) => void;
-  updateBusiness: (id: string, updates: Partial<Business>) => void;
-  deleteBusiness: (id: string) => void;
+  registerBusiness: (name: string, branch: string, currency?: string, businessType?: string, registrationNumber?: string) => Promise<Business>;
+  updateBusiness: (id: string, updates: Partial<Business>) => Promise<Business>;
+  deleteBusiness: (id: string) => Promise<boolean>;
   registerTenant: (ownerName: string, businessName: string, email: string, password: string) => Promise<boolean>;
-  addEmployee: (profile: Omit<UserProfile, 'id' | 'businessId' | 'onlineStatus'>) => void;
+  addEmployee: (profile: Omit<UserProfile, 'id' | 'businessId' | 'onlineStatus'>) => UserProfile;
   updateEmployee: (userId: string, updates: Partial<UserProfile>) => void;
   removeEmployee: (userId: string) => void;
-  addBranch: (branch: { name: string; location?: string; status: 'Active' | 'Inactive'; managerId?: string; managerName?: string }) => void;
-  updateBranch: (branchId: string, updates: Partial<Branch>) => void;
-  deleteBranch: (branchId: string) => void;
+  addBranch: (branch: { name: string; location?: string; status: 'Active' | 'Inactive'; managerId?: string; managerName?: string }) => Promise<Branch>;
+  updateBranch: (branchId: string, updates: Partial<Branch>) => Promise<Branch>;
+  deleteBranch: (branchId: string, cascade?: boolean) => Promise<boolean>;
   revertAction: (auditId: string) => boolean;
   markNotificationsRead: () => void;
   connectionStatus: 'Connected' | 'Local Syncing';
   isLoggedIn: boolean;
   login: (userId: string, email?: string, password?: string) => Promise<boolean>;
+  loginWithEmployeeNumber: (employeeNumber: string) => Promise<boolean>;
   logout: () => Promise<void>;
+  theme: 'dark' | 'light';
+  toggleTheme: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -111,17 +115,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeView, setActiveView] = useState<string>('overview');
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
   const [connectionStatus, setConnectionStatus] = useState<'Connected' | 'Local Syncing'>('Local Syncing');
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return (localStorage.getItem('theme') as 'dark' | 'light') || 'dark';
+  });
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === 'light') {
+      root.classList.add('light');
+    } else {
+      root.classList.remove('light');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
 
   // Trigger state refresh on any action
   const triggerRefresh = () => setRefreshTrigger(prev => prev + 1);
 
-  // Sync across tabs instantly using storage events
+  // Sync across tabs instantly using storage events and custom db updates
   useEffect(() => {
     const handleStorageChange = () => {
       triggerRefresh();
     };
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener('apex-db-update', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('apex-db-update', handleStorageChange);
+    };
   }, []);
 
   // Simple connection simulation - detects Supabase or stays in highly polished local offline-first sync
@@ -305,17 +330,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dbManager.addAudit(action, oldValue, newValue);
       triggerRefresh();
     },
-    registerBusiness: (name, branch, currency, businessType, registrationNumber) => {
-      dbManager.registerBusiness(name, branch, currency, businessType, registrationNumber);
+    registerBusiness: async (name, branch, currency, businessType, registrationNumber) => {
+      const res = await DataService.createBusiness({ name, branch, currency, businessType, registrationNumber });
       triggerRefresh();
+      return res;
     },
-    updateBusiness: (id, updates) => {
-      dbManager.updateBusiness(id, updates);
+    updateBusiness: async (id, updates) => {
+      const res = await DataService.updateBusiness(id, updates);
       triggerRefresh();
+      return res;
     },
-    deleteBusiness: (id) => {
-      dbManager.deleteBusiness(id);
+    deleteBusiness: async (id) => {
+      const res = await DataService.deleteBusiness(id);
       triggerRefresh();
+      return res;
     },
     registerTenant: async (ownerName, businessName, email, password) => {
       const success = await dbManager.registerTenant(ownerName, businessName, email, password);
@@ -323,8 +351,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return success;
     },
     addEmployee: (profile) => {
-      dbManager.addEmployee(profile);
+      const res = dbManager.addEmployee(profile);
       triggerRefresh();
+      return res;
     },
     updateEmployee: (userId, updates) => {
       dbManager.updateEmployee(userId, updates);
@@ -334,17 +363,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dbManager.removeEmployee(userId);
       triggerRefresh();
     },
-    addBranch: (branch) => {
-      dbManager.addBranch(branch);
+    addBranch: async (branch) => {
+      const res = await DataService.createBranch({
+        name: branch.name,
+        location: branch.location,
+        status: branch.status as 'Active' | 'Inactive'
+      });
       triggerRefresh();
+      return res;
     },
-    updateBranch: (branchId, updates) => {
-      dbManager.updateBranch(branchId, updates);
+    updateBranch: async (branchId, updates) => {
+      const res = await DataService.updateBranch(branchId, updates);
       triggerRefresh();
+      return res;
     },
-    deleteBranch: (branchId) => {
-      dbManager.deleteBranch(branchId);
+    deleteBranch: async (branchId, cascade = false) => {
+      const res = await DataService.deleteBranch(branchId, cascade);
       triggerRefresh();
+      return res;
     },
     revertAction: (auditId) => {
       const res = dbManager.revertAction(auditId);
@@ -358,6 +394,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     isLoggedIn: dbManager.isLoggedIn(),
     login: async (userId, email, password) => {
       const success = await dbManager.login(userId, email, password);
+      triggerRefresh();
+      return success;
+    },
+    loginWithEmployeeNumber: async (employeeNumber) => {
+      const success = await dbManager.loginWithEmployeeNumber(employeeNumber);
       triggerRefresh();
       return success;
     },
@@ -403,7 +444,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncBankTransactions: () => {
       dbManager.syncBankTransactions();
       triggerRefresh();
-    }
+    },
+    theme,
+    toggleTheme
   };
 
   return (

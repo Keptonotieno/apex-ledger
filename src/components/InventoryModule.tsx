@@ -54,6 +54,17 @@ export const InventoryModule: React.FC = () => {
 
   // Modals visibility
   const [showProductModal, setShowProductModal] = useState(false);
+
+  useEffect(() => {
+    const handleTriggerAddProduct = () => {
+      setEditingProduct(null);
+      setShowProductModal(true);
+    };
+    window.addEventListener('trigger-add-product-form', handleTriggerAddProduct);
+    return () => {
+      window.removeEventListener('trigger-add-product-form', handleTriggerAddProduct);
+    };
+  }, []);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
 
@@ -136,47 +147,29 @@ export const InventoryModule: React.FC = () => {
   const isEmployee = activeUser.role === UserRole.EMPLOYEE && !hasDelegatedAccess;
   const isAuthorizedManager = activeUser.role === UserRole.ADMIN || activeUser.role === UserRole.MANAGER || hasDelegatedAccess;
 
-  // Load stock adjustments on load
+  // Load stock adjustments on load and filter by products belonging to the active business
   useEffect(() => {
     const saved = localStorage.getItem('stock_adjustments');
+    let loaded: StockAdjustment[] = [];
     if (saved) {
       try {
-        setAdjustments(JSON.parse(saved));
+        loaded = JSON.parse(saved);
       } catch (err) {
         console.error(err);
       }
-    } else {
-      // Seed some demo adjustments
-      const seeded: StockAdjustment[] = [
-        {
-          id: 'adj_1',
-          productId: products[0]?.id || '1',
-          productName: products[0]?.name || 'Premium Headphones Model X',
-          type: 'Receive',
-          quantity: 25,
-          reason: 'Direct procurement batch delivery intake',
-          requestedBy: 'Robert King',
-          requestedRole: UserRole.MANAGER,
-          status: 'Approved',
-          date: '2026-07-02 14:32'
-        },
-        {
-          id: 'adj_2',
-          productId: products[1]?.id || '2',
-          productName: products[1]?.name || 'Ergonomic Desk Chair',
-          type: 'Transfer',
-          quantity: 2,
-          reason: 'Audit correction - Spoilage damage log',
-          requestedBy: 'Ann Smith',
-          requestedRole: UserRole.EMPLOYEE,
-          status: 'Pending',
-          date: '2026-07-04 10:15'
-        }
-      ];
-      setAdjustments(seeded);
-      localStorage.setItem('stock_adjustments', JSON.stringify(seeded));
     }
+    // Filter to only include products belonging to the current business to ensure perfect tenant isolation
+    const productIds = new Set(products.map(p => p.id));
+    const filtered = loaded.filter(adj => productIds.has(adj.productId));
+    setAdjustments(filtered);
   }, [products]);
+
+  // Restrict employee from remaining on intelligence or procurement tab
+  useEffect(() => {
+    if (isEmployee && (activeTab === 'Intelligence' || activeTab === 'Procurements' || activeTab === 'Bulk')) {
+      setActiveTab('Catalog');
+    }
+  }, [isEmployee, activeTab]);
 
   // Filter & sort products for catalog
   const filteredProducts = useMemo(() => {
@@ -553,17 +546,19 @@ export const InventoryModule: React.FC = () => {
           <span>Product Catalog</span>
         </button>
 
-        <button
-          onClick={() => setActiveTab('Intelligence')}
-          className={`px-4 py-2 font-mono font-bold rounded-t-lg flex items-center gap-1.5 transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'Intelligence' 
-              ? 'bg-cyan-500/10 text-cyan-400 border-b-2 border-cyan-400' 
-              : 'text-gray-400 hover:text-gray-200'
-          }`}
-        >
-          <TrendingUp className="w-4 h-4 text-cyan-400" />
-          <span>Inventory Intelligence</span>
-        </button>
+        {!isEmployee && (
+          <button
+            onClick={() => setActiveTab('Intelligence')}
+            className={`px-4 py-2 font-mono font-bold rounded-t-lg flex items-center gap-1.5 transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'Intelligence' 
+                ? 'bg-cyan-500/10 text-cyan-400 border-b-2 border-cyan-400' 
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4 text-cyan-400" />
+            <span>Inventory Intelligence</span>
+          </button>
+        )}
 
         <button
           onClick={() => setActiveTab('Movements')}
@@ -582,17 +577,19 @@ export const InventoryModule: React.FC = () => {
           )}
         </button>
 
-        <button
-          onClick={() => setActiveTab('Procurements')}
-          className={`px-4 py-2 font-mono font-bold rounded-t-lg flex items-center gap-1.5 transition whitespace-nowrap cursor-pointer ${
-            activeTab === 'Procurements' 
-              ? 'bg-cyan-500/10 text-cyan-400 border-b-2 border-cyan-400' 
-              : 'text-gray-400 hover:text-gray-200'
-          }`}
-        >
-          <Truck className="w-4 h-4" />
-          <span>Procurement Invoices</span>
-        </button>
+        {!isEmployee && (
+          <button
+            onClick={() => setActiveTab('Procurements')}
+            className={`px-4 py-2 font-mono font-bold rounded-t-lg flex items-center gap-1.5 transition whitespace-nowrap cursor-pointer ${
+              activeTab === 'Procurements' 
+                ? 'bg-cyan-500/10 text-cyan-400 border-b-2 border-cyan-400' 
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <Truck className="w-4 h-4" />
+            <span>Procurement Invoices</span>
+          </button>
+        )}
 
         <button
           onClick={() => setActiveTab('Categories' as any)}
@@ -1333,9 +1330,10 @@ export const InventoryModule: React.FC = () => {
         }}
         editingProduct={editingProduct}
         onSave={handleProductSave}
-        categories={categories}
+        categories={dbCategories}
         onAddCategory={handleAddCategory}
         isCategoriesEnabled={isCategoriesEnabled}
+        isEmployee={isEmployee}
       />
 
       {/* BULK PRICING ADJUSTMENT MODAL */}

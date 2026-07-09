@@ -8,14 +8,10 @@ export interface Budget {
   allocated: number;
 }
 
-const DEFAULT_BUDGETS: Budget[] = [
-  { department: 'Marketing', allocated: 120000 },
-  { department: 'Payroll & HR', allocated: 500000 },
-  { department: 'Operations', allocated: 250000 },
-  { department: 'IT & Software', allocated: 80000 },
-  { department: 'Administration', allocated: 150000 },
-  { department: 'Logistics & Transport', allocated: 100000 }
-];
+export interface Budget {
+  department: string;
+  allocated: number;
+}
 
 interface BudgetMonitoringProps {
   businessId: string;
@@ -24,23 +20,48 @@ interface BudgetMonitoringProps {
 }
 
 export const BudgetMonitoring: React.FC<BudgetMonitoringProps> = ({ businessId, expenses, onAlertTriggered }) => {
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [editingDept, setEditingDept] = useState<string | null>(null);
   const [editAllocation, setEditAllocation] = useState(0);
 
   useEffect(() => {
-    const localKey = `apex_ledger_budgets_${businessId}`;
-    const data = localStorage.getItem(localKey);
-    if (data) {
+    // 1. Load departments
+    const depKey = `apex_ledger_departments_${businessId}`;
+    const storedDeps = localStorage.getItem(depKey);
+    let activeDeps: { id: string; name: string }[] = [];
+    if (storedDeps) {
       try {
-        setBudgets(JSON.parse(data));
+        activeDeps = JSON.parse(storedDeps);
       } catch (e) {
-        setBudgets(DEFAULT_BUDGETS);
+        activeDeps = [];
       }
-    } else {
-      localStorage.setItem(localKey, JSON.stringify(DEFAULT_BUDGETS));
-      setBudgets(DEFAULT_BUDGETS);
     }
+    setDepartments(activeDeps);
+
+    // 2. Load budgets or initialize them based on active departments
+    const budgetKey = `apex_ledger_budgets_${businessId}`;
+    const storedBudgets = localStorage.getItem(budgetKey);
+    let loadedBudgets: Budget[] = [];
+    if (storedBudgets) {
+      try {
+        loadedBudgets = JSON.parse(storedBudgets);
+      } catch (e) {
+        loadedBudgets = [];
+      }
+    }
+
+    // Filter budgets to only contain active departments
+    // And add any missing active departments with 0 allocation
+    const synchronizedBudgets = activeDeps.map(d => {
+      const existing = loadedBudgets.find(b => b.department.toLowerCase() === d.name.toLowerCase());
+      return {
+        department: d.name,
+        allocated: existing ? existing.allocated : 0
+      };
+    });
+
+    setBudgets(synchronizedBudgets);
   }, [businessId]);
 
   const saveBudgets = (updated: Budget[]) => {
@@ -96,6 +117,29 @@ export const BudgetMonitoring: React.FC<BudgetMonitoringProps> = ({ businessId, 
     saveBudgets(updated);
     setEditingDept(null);
   };
+
+  if (departments.length === 0) {
+    return (
+      <div className="space-y-4 font-mono text-xs">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-xs font-bold text-gray-200 font-sans flex items-center gap-2">
+              <Scale className="w-4 h-4 text-cyan-400 animate-pulse" />
+              <span>DEPARTMENTAL BUDGET MONITORING</span>
+            </h4>
+            <p className="text-[10px] text-gray-500 font-sans">Compare pre-allocated department limits against actual live expenditure.</p>
+          </div>
+        </div>
+        <div className="flex flex-col items-center justify-center py-10 px-4 text-center border border-dashed border-brand-border/40 rounded-xl bg-gray-950/20">
+          <ShieldAlert className="w-6 h-6 text-rose-500 mb-2 animate-pulse" />
+          <div className="text-[10px] font-bold text-rose-400 font-mono uppercase tracking-wider">No departments available. Please create one first.</div>
+          <p className="text-[10px] text-gray-500 mt-1 font-sans">
+            Configure department entities with dynamic budget quotas under Department Admin.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 font-mono text-xs">

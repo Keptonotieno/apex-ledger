@@ -9,11 +9,15 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 
 export const Login: React.FC = () => {
-  const { login, registerTenant, profiles } = useApp();
+  const { login, loginWithEmployeeNumber, registerTenant, profiles } = useApp();
   
   // Start on the Register Tenant screen by default as requested
   const [isRegistering, setIsRegistering] = useState(true);
   
+  // Login modes: employee-only or corporate email/password
+  const [loginMode, setLoginMode] = useState<'employee' | 'corporate'>('employee');
+  const [employeeNumber, setEmployeeNumber] = useState('');
+
   // Registration States
   const [fullName, setFullName] = useState('');
   const [businessName, setBusinessName] = useState('');
@@ -29,8 +33,6 @@ export const Login: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [focusedField, setFocusedField] = useState<string | null>(null);
-
-
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,6 +58,30 @@ export const Login: React.FC = () => {
     }
   };
 
+  const handleEmployeeLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!employeeNumber) {
+      setErrorMessage('Please enter your unique Employee Number.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      const success = await loginWithEmployeeNumber(employeeNumber.trim());
+      if (success) {
+        setSuccessMessage('Access Granted. Opening Employee Hub...');
+      } else {
+        setErrorMessage('Invalid Employee Number. Please verify or contact your manager.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Authentication failed. Please verify employee number.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleFormLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginEmail || !loginPassword) {
@@ -67,18 +93,8 @@ export const Login: React.FC = () => {
     setErrorMessage(null);
 
     try {
-      // Find a matching pre-seeded local profile first
-      const matchedProfile = profiles.find(
-        p => p.email.toLowerCase() === loginEmail.toLowerCase().trim()
-      );
-
-      let success = false;
-      if (matchedProfile) {
-        success = await login(matchedProfile.id, loginEmail.trim(), loginPassword);
-      } else {
-        // Fallback login attempt
-        success = await login('', loginEmail.trim(), loginPassword);
-      }
+      // Authenticate directly against the persistent SQLite database
+      const success = await login('', loginEmail.trim(), loginPassword);
 
       if (success) {
         setSuccessMessage('Access Granted. Opening Secure Vault...');
@@ -318,70 +334,149 @@ export const Login: React.FC = () => {
                   </span>
                 </div>
 
-                <form onSubmit={handleFormLogin} className="space-y-4">
-                  <div>
-                    <label className="block text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider mb-1.5">
-                      Business Email Address
-                    </label>
-                    <div className="relative flex items-center bg-gray-950/50 border border-gray-800 rounded-xl px-3 py-3 text-xs text-gray-200 focus-within:border-cyan-500/50 transition">
-                      <Mail className="w-4 h-4 text-gray-500 mr-2.5 shrink-0" />
-                      <input 
-                        type="email"
-                        required
-                        value={loginEmail}
-                        onChange={(e) => setLoginEmail(e.target.value)}
-                        placeholder="e.g. sarah@apex.com"
-                        className="bg-transparent text-gray-100 outline-none w-full font-sans"
-                      />
-                    </div>
-                    <p className="text-[9px] text-gray-500 mt-1 font-mono">
-                      Manager: <span className="text-cyan-400">sarah@apex.com</span> or Employee: <span className="text-cyan-400">john@apex.com</span>
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider mb-1.5">
-                      Password Credentials
-                    </label>
-                    <div className="relative flex items-center bg-gray-950/50 border border-gray-800 rounded-xl px-3 py-3 text-xs text-gray-200 focus-within:border-cyan-500/50 transition">
-                      <Lock className="w-4 h-4 text-gray-500 mr-2.5 shrink-0" />
-                      <input 
-                        type={showPassword ? 'text' : 'password'}
-                        required
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="bg-transparent text-gray-100 outline-none w-full font-sans"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="text-gray-500 hover:text-cyan-400 transition"
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {errorMessage && (
-                    <motion.div 
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs text-center font-mono"
-                    >
-                      {errorMessage}
-                    </motion.div>
-                  )}
-
+                {/* Mode Selector Tabs */}
+                <div className="grid grid-cols-2 p-1 bg-gray-950/85 rounded-xl border border-gray-800/50 font-mono text-[10px]">
                   <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs py-3 rounded-xl shadow-lg transition duration-200 disabled:opacity-50 cursor-pointer uppercase tracking-wider"
+                    type="button"
+                    onClick={() => {
+                      setLoginMode('employee');
+                      setErrorMessage(null);
+                    }}
+                    className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg transition duration-200 uppercase tracking-wider font-semibold cursor-pointer ${
+                      loginMode === 'employee' 
+                        ? 'bg-cyan-950/60 text-cyan-400 border border-cyan-500/10 shadow-[0_0_12px_rgba(34,211,238,0.1)]' 
+                        : 'text-gray-400 hover:text-gray-200'
+                    }`}
                   >
-                    <span>{isSubmitting ? 'Authenticating...' : 'Authenticate Into Workspace'}</span>
-                    <ChevronRight className="w-4 h-4" />
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span>Employee ID</span>
                   </button>
-                </form>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginMode('corporate');
+                      setErrorMessage(null);
+                    }}
+                    className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg transition duration-200 uppercase tracking-wider font-semibold cursor-pointer ${
+                      loginMode === 'corporate' 
+                        ? 'bg-cyan-950/60 text-cyan-400 border border-cyan-500/10 shadow-[0_0_12px_rgba(34,211,238,0.1)]' 
+                        : 'text-gray-400 hover:text-gray-200'
+                    }`}
+                  >
+                    <Shield className="w-3.5 h-3.5" />
+                    <span>Corporate</span>
+                  </button>
+                </div>
+
+                {loginMode === 'employee' ? (
+                  <form onSubmit={handleEmployeeLogin} className="space-y-4" id="employee-login-form">
+                    <div>
+                      <label className="block text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                        Assigned Employee Number
+                      </label>
+                      <div className="relative flex items-center bg-gray-950/50 border border-gray-800 rounded-xl px-3 py-3.5 text-sm text-gray-200 focus-within:border-cyan-500/50 transition">
+                        <Smartphone className="w-4 h-4 text-cyan-400 mr-2.5 shrink-0" />
+                        <input 
+                          type="text"
+                          required
+                          value={employeeNumber}
+                          onChange={(e) => setEmployeeNumber(e.target.value.toUpperCase())}
+                          placeholder="e.g. EMP-001"
+                          className="bg-transparent text-gray-100 outline-none w-full font-sans tracking-wider text-center font-bold text-base placeholder:tracking-normal placeholder:font-normal placeholder:text-xs"
+                          id="employee-number-input"
+                        />
+                      </div>
+                      <p className="text-[9px] text-gray-500 mt-1.5 font-mono">
+                        Clock in instantly by entering the Employee ID/Number (e.g., EMP-001) assigned to you by your business owner or manager.
+                      </p>
+                    </div>
+
+                    {errorMessage && (
+                      <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs text-center font-mono"
+                      >
+                        {errorMessage}
+                      </motion.div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full flex items-center justify-center gap-2 bg-[#76dbdb] hover:bg-[#5bc8c8] text-gray-950 font-sans font-bold text-xs uppercase tracking-wider py-4 rounded-xl shadow-[0_4px_20px_rgba(118,219,219,0.25)] transition duration-200 disabled:opacity-50 cursor-pointer"
+                      id="employee-login-btn"
+                    >
+                      <span>{isSubmitting ? 'Verifying Employee ID...' : 'Clock In & Access Hub'}</span>
+                      <ChevronRight className="w-4 h-4 text-gray-950 shrink-0" />
+                    </button>
+                  </form>
+                ) : (
+                  <form onSubmit={handleFormLogin} className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                        Business Email Address
+                      </label>
+                      <div className="relative flex items-center bg-gray-950/50 border border-gray-800 rounded-xl px-3 py-3 text-xs text-gray-200 focus-within:border-cyan-500/50 transition">
+                        <Mail className="w-4 h-4 text-gray-500 mr-2.5 shrink-0" />
+                        <input 
+                          type="email"
+                          required
+                          value={loginEmail}
+                          onChange={(e) => setLoginEmail(e.target.value)}
+                          placeholder="e.g. owner@company.com"
+                          className="bg-transparent text-gray-100 outline-none w-full font-sans"
+                        />
+                      </div>
+                      <p className="text-[9px] text-gray-500 mt-1 font-mono">
+                        Log in using your registered business administrator or employee email.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                        Password Credentials
+                      </label>
+                      <div className="relative flex items-center bg-gray-950/50 border border-gray-800 rounded-xl px-3 py-3 text-xs text-gray-200 focus-within:border-cyan-500/50 transition">
+                        <Lock className="w-4 h-4 text-gray-500 mr-2.5 shrink-0" />
+                        <input 
+                          type={showPassword ? 'text' : 'password'}
+                          required
+                          value={loginPassword}
+                          onChange={(e) => setLoginPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="bg-transparent text-gray-100 outline-none w-full font-sans"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="text-gray-500 hover:text-cyan-400 transition"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {errorMessage && (
+                      <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs text-center font-mono"
+                      >
+                        {errorMessage}
+                      </motion.div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full flex items-center justify-center gap-2 bg-[#76dbdb] hover:bg-[#5bc8c8] text-gray-950 font-sans font-bold text-xs uppercase tracking-wider py-4 rounded-xl shadow-[0_4px_20px_rgba(118,219,219,0.25)] transition duration-200 disabled:opacity-50 cursor-pointer"
+                    >
+                      <span>{isSubmitting ? 'Authenticating...' : 'Authenticate Into Workspace'}</span>
+                      <ChevronRight className="w-4 h-4 text-gray-950" />
+                    </button>
+                  </form>
+                )}
 
                 {/* Don't have an account link */}
                 <div className="text-center">

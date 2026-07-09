@@ -6,7 +6,8 @@ import {
   Building2, Plus, Globe, Check, Star, Shield, 
   MapPin, RefreshCw, Layers, TrendingUp, Users, Package, 
   ChevronRight, Trash2, Edit, AlertTriangle, Archive, Undo,
-  Lock, Settings, X, Coins, ShieldAlert, AlertCircle, FileText
+  Lock, Settings, X, Coins, ShieldAlert, AlertCircle, FileText,
+  MoreVertical, Eye
 } from 'lucide-react';
 
 export const WorkspacesModule: React.FC = () => {
@@ -85,6 +86,16 @@ export const WorkspacesModule: React.FC = () => {
   // Branch Delete Dependency modal states
   const [blockingDependencies, setBlockingDependencies] = useState<string[]>([]);
   const [blockingBranchName, setBlockingBranchName] = useState('');
+  const [blockingBranchId, setBlockingBranchId] = useState('');
+  const [cascadeChecked, setCascadeChecked] = useState(false);
+
+  // Details display modals states
+  const [selectedDetailsBiz, setSelectedDetailsBiz] = useState<Business | null>(null);
+  const [selectedDetailsBranch, setSelectedDetailsBranch] = useState<Branch | null>(null);
+
+  // Actions dropdown states
+  const [openBusinessMenuId, setOpenBusinessMenuId] = useState<string | null>(null);
+  const [openBranchMenuId, setOpenBranchMenuId] = useState<string | null>(null);
 
   // Helper to format currency
   const formatValue = (val: number, customCurrency?: string) => {
@@ -302,7 +313,7 @@ export const WorkspacesModule: React.FC = () => {
   };
 
   // Delete Branch Handler with detailed dependency reporting
-  const handleDeleteBranch = (branchId: string, name: string) => {
+  const handleDeleteBranch = async (branchId: string, name: string) => {
     if (!canManageBranches) {
       alert("Permission Denied: You do not have permission to delete branches.");
       return;
@@ -311,9 +322,15 @@ export const WorkspacesModule: React.FC = () => {
     if (deps.length > 0) {
       setBlockingDependencies(deps);
       setBlockingBranchName(name);
+      setBlockingBranchId(branchId);
     } else {
-      if (confirm(`DECOMMISSION BRANCH?\n\nAre you sure you want to shut down and permanently remove regional branch "${name}"?\n\nThis operation cannot be reversed.`)) {
-        deleteBranch(branchId);
+      if (confirm(`Are you sure you want to permanently delete this branch "${name}"? This action cannot be undone.`)) {
+        try {
+          await deleteBranch(branchId, false);
+          alert(`Branch "${name}" has been successfully deleted.`);
+        } catch (err: any) {
+          alert(err.message || "Failed to delete branch.");
+        }
       }
     }
   };
@@ -594,13 +611,86 @@ export const WorkspacesModule: React.FC = () => {
                           </div>
                         </div>
 
-                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold shrink-0 ${
-                          isBizOwner 
-                            ? 'bg-blue-950/40 text-blue-400 border border-blue-500/10' 
-                            : 'bg-gray-900 text-gray-500 border border-brand-border'
-                        }`}>
-                          {isBizOwner ? 'OWNER' : 'STAFF'}
-                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold shrink-0 ${
+                            isBizOwner 
+                              ? 'bg-blue-950/40 text-blue-400 border border-blue-500/10' 
+                              : 'bg-gray-900 text-gray-500 border border-brand-border'
+                          }`}>
+                            {isBizOwner ? 'OWNER' : 'STAFF'}
+                          </span>
+
+                          {/* ACTIONS DROPDOWN MENU */}
+                          <div className="relative">
+                            <button
+                              id={`biz-action-${biz.id}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenBusinessMenuId(openBusinessMenuId === biz.id ? null : biz.id);
+                              }}
+                              className="p-1 hover:bg-gray-800 rounded text-gray-400 hover:text-white transition cursor-pointer"
+                              title="Actions Menu"
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+
+                            {openBusinessMenuId === biz.id && (
+                              <>
+                                <div 
+                                  className="fixed inset-0 z-10" 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenBusinessMenuId(null);
+                                  }}
+                                />
+                                <div className="absolute right-0 mt-1 w-36 bg-gray-950 border border-brand-border/80 rounded-xl shadow-xl py-1.5 z-20 animate-in fade-in slide-in-from-top-1 duration-100 text-[11px] font-sans">
+                                  <button
+                                    id={`biz-view-${biz.id}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedDetailsBiz(biz);
+                                      setOpenBusinessMenuId(null);
+                                    }}
+                                    className="w-full text-left px-3 py-1.5 hover:bg-gray-900 text-gray-300 hover:text-white flex items-center gap-2 cursor-pointer"
+                                  >
+                                    <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                                    <span>View Details</span>
+                                  </button>
+
+                                  {isOwner && (
+                                    <>
+                                      <button
+                                        id={`biz-edit-${biz.id}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleStartEditBusiness(biz);
+                                          setOpenBusinessMenuId(null);
+                                        }}
+                                        className="w-full text-left px-3 py-1.5 hover:bg-gray-900 text-gray-300 hover:text-white flex items-center gap-2 cursor-pointer"
+                                      >
+                                        <Edit className="w-3.5 h-3.5 text-yellow-500" />
+                                        <span>Edit Settings</span>
+                                      </button>
+                                      
+                                      <button
+                                        id={`biz-delete-${biz.id}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeleteBusiness(biz);
+                                          setOpenBusinessMenuId(null);
+                                        }}
+                                        className="w-full text-left px-3 py-1.5 hover:bg-red-950/30 text-red-400 hover:text-red-300 flex items-center gap-2 cursor-pointer border-t border-brand-border/40 mt-1"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                                        <span>Delete</span>
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
 
                       {/* Small stats summary */}
@@ -623,16 +713,6 @@ export const WorkspacesModule: React.FC = () => {
                       </span>
 
                       <div className="flex items-center gap-1.5">
-                        {isOwner && (
-                          <button
-                            onClick={() => handleStartEditBusiness(biz)}
-                            className="p-1.5 bg-gray-900 hover:bg-gray-800 border border-brand-border text-gray-400 hover:text-cyan-400 rounded-lg transition cursor-pointer"
-                            title="Edit Settings"
-                          >
-                            <Settings className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        
                         {isActive ? (
                           <span className="px-2.5 py-1 bg-cyan-950/40 text-cyan-400 border border-cyan-500/20 rounded-lg text-[9px] font-mono font-bold flex items-center gap-1 shadow-sm shadow-cyan-500/10">
                             <Check className="w-3 h-3" />
@@ -910,37 +990,89 @@ export const WorkspacesModule: React.FC = () => {
 
                       <div className="flex items-center gap-2 shrink-0">
                         {isBranchActive ? (
-                          <span className="px-2.5 py-1 bg-emerald-950/40 text-emerald-400 border border-emerald-500/20 rounded-lg text-[9px] font-mono font-bold flex items-center gap-1">
+                          <span className="px-2.5 py-1 bg-emerald-950/40 text-emerald-400 border border-emerald-500/20 rounded-lg text-[9px] font-mono font-bold flex items-center gap-1 shrink-0">
                             <Check className="w-3 h-3 text-emerald-400" />
                             <span>Active</span>
                           </span>
                         ) : (
                           <button
                             onClick={() => setActiveBranchId(b.id)}
-                            className="px-2.5 py-1 bg-gray-900 hover:bg-gray-800 border border-brand-border text-gray-300 rounded-lg text-[9px] font-mono font-bold transition cursor-pointer"
+                            className="px-2.5 py-1 bg-gray-900 hover:bg-gray-800 border border-brand-border text-gray-300 rounded-lg text-[9px] font-mono font-bold transition cursor-pointer shrink-0"
                           >
                             Activate
                           </button>
                         )}
 
-                        {canManageBranches && (
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => handleStartEditBranch(b)}
-                              className="p-1.5 bg-gray-900 hover:bg-gray-800 border border-brand-border text-gray-400 hover:text-cyan-400 rounded-lg transition cursor-pointer"
-                              title="Edit Branch Settings & Manager"
-                            >
-                              <Edit className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteBranch(b.id, b.name)}
-                              className="p-1.5 bg-gray-900 hover:bg-rose-950/20 border border-brand-border text-gray-400 hover:text-rose-400 rounded-lg transition cursor-pointer"
-                              title="Decommission Branch"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        )}
+                        {/* BRANCH ACTIONS DROPDOWN */}
+                        <div className="relative">
+                          <button
+                            id={`branch-action-${b.id}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenBranchMenuId(openBranchMenuId === b.id ? null : b.id);
+                            }}
+                            className="p-1.5 bg-gray-900 hover:bg-gray-800 border border-brand-border rounded-lg text-gray-400 hover:text-white transition cursor-pointer shrink-0"
+                            title="Actions Menu"
+                          >
+                            <MoreVertical className="w-3.5 h-3.5" />
+                          </button>
+
+                          {openBranchMenuId === b.id && (
+                            <>
+                              <div 
+                                className="fixed inset-0 z-10" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenBranchMenuId(null);
+                                }}
+                              />
+                              <div className="absolute right-0 mt-1 w-36 bg-gray-950 border border-brand-border/80 rounded-xl shadow-xl py-1.5 z-20 animate-in fade-in slide-in-from-top-1 duration-100 text-[11px] font-sans">
+                                <button
+                                  id={`branch-view-${b.id}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedDetailsBranch(b);
+                                    setOpenBranchMenuId(null);
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 hover:bg-gray-900 text-gray-300 hover:text-white flex items-center gap-2 cursor-pointer"
+                                >
+                                  <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                                  <span>View Details</span>
+                                </button>
+
+                                {canManageBranches && (
+                                  <>
+                                    <button
+                                      id={`branch-edit-${b.id}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleStartEditBranch(b);
+                                        setOpenBranchMenuId(null);
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-gray-900 text-gray-300 hover:text-white flex items-center gap-2 cursor-pointer"
+                                    >
+                                      <Edit className="w-3.5 h-3.5 text-yellow-500" />
+                                      <span>Edit</span>
+                                    </button>
+                                    
+                                    <button
+                                      id={`branch-delete-${b.id}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteBranch(b.id, b.name);
+                                        setOpenBranchMenuId(null);
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-red-950/30 text-red-400 hover:text-red-300 flex items-center gap-2 cursor-pointer border-t border-brand-border/40 mt-1"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                                      <span>Delete</span>
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -1251,10 +1383,13 @@ export const WorkspacesModule: React.FC = () => {
 
       {/* BLOCKING DEPENDENCIES WARNING MODAL */}
       {blockingDependencies.length > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/85 backdrop-blur-md p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/85 backdrop-blur-md p-4 animate-fade-in">
           <div className="glass-panel w-full max-w-lg p-6 rounded-2xl border border-rose-500/30 shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
             <button 
-              onClick={() => setBlockingDependencies([])}
+              onClick={() => {
+                setBlockingDependencies([]);
+                setCascadeChecked(false);
+              }}
               className="absolute top-4 right-4 text-gray-500 hover:text-gray-300 transition cursor-pointer"
             >
               ✕
@@ -1266,19 +1401,19 @@ export const WorkspacesModule: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-md font-bold text-gray-100 font-sans flex items-center gap-2">
-                  <span>Decommissioning Blocked</span>
+                  <span>Decommissioning Restricted</span>
                 </h3>
                 <p className="text-xs text-rose-400 font-mono mt-0.5">
-                  Dependency validation failed for regional portal: {blockingBranchName}
+                  Active bindings exist for branch: {blockingBranchName}
                 </p>
               </div>
             </div>
 
             <p className="text-xs text-gray-400 leading-relaxed mb-4">
-              To prevent catastrophic data orphans and preserve ledger integrity across your multi-business workspace, you cannot delete this branch while active operations are bound to it. Please resolve the following dependencies first:
+              To preserve database integrity, this branch cannot be deleted under safe rules because dependent records exist. You can either reassign these records first, or enable **Cascading Deletion** below to permanently remove the branch and all associated records.
             </p>
 
-            <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+            <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
               {blockingDependencies.map((dep, index) => (
                 <div key={index} className="p-3 bg-rose-950/15 border border-rose-500/20 rounded-xl flex gap-2 text-xs text-rose-200">
                   <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
@@ -1287,13 +1422,61 @@ export const WorkspacesModule: React.FC = () => {
               ))}
             </div>
 
-            <div className="mt-6 pt-4 border-t border-brand-border flex items-center justify-end">
+            <div className="mt-4 p-3 bg-rose-950/20 border border-rose-500/30 rounded-xl">
+              <label className="flex items-start gap-2.5 cursor-pointer text-xs text-rose-300">
+                <input 
+                  type="checkbox" 
+                  checked={cascadeChecked} 
+                  onChange={(e) => setCascadeChecked(e.target.checked)}
+                  className="mt-0.5 rounded border-rose-500 text-rose-600 focus:ring-rose-500 bg-gray-950"
+                />
+                <span className="font-sans leading-tight">
+                  <strong>Enable Cascading Deletion:</strong> Permanently remove all associated records (employees, inventory products, sales, expenses, debts) automatically. **This action cannot be undone.**
+                </span>
+              </label>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-brand-border flex items-center justify-between gap-3">
               <button
-                onClick={() => setBlockingDependencies([])}
-                className="px-5 py-2.5 bg-rose-900 hover:bg-rose-800 text-white text-xs font-bold rounded-xl transition cursor-pointer"
+                onClick={() => {
+                  setBlockingDependencies([]);
+                  setCascadeChecked(false);
+                }}
+                className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-gray-400 text-xs font-semibold rounded-xl transition cursor-pointer font-mono"
               >
-                Acknowledge & Dismiss
+                CANCEL
               </button>
+              
+              {cascadeChecked ? (
+                <button
+                  onClick={async () => {
+                    if (confirm(`DANGER: PERMANENT DESTRUCTIVE CASCADING DELETION\n\nAre you absolutely sure you want to permanently delete branch "${blockingBranchName}" along with all of its associated employees, products, sales, expenses, and transaction logs?\n\nThis cannot be undone.`)) {
+                      try {
+                        await deleteBranch(blockingBranchId, true);
+                        setBlockingDependencies([]);
+                        setCascadeChecked(false);
+                        alert(`Branch "${blockingBranchName}" and all associated records have been successfully deleted.`);
+                      } catch (err: any) {
+                        alert(err.message || "Failed to delete branch.");
+                      }
+                    }
+                  }}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.3)] font-mono"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>CASCADE DELETE BRANCH</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    setBlockingDependencies([]);
+                    setCascadeChecked(false);
+                  }}
+                  className="px-4 py-2 bg-rose-950/40 hover:bg-rose-900 text-rose-300 text-xs font-semibold rounded-xl border border-rose-500/20 transition cursor-pointer font-mono"
+                >
+                  DISMISS
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1371,6 +1554,158 @@ export const WorkspacesModule: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW BUSINESS DETAILS MODAL */}
+      {selectedDetailsBiz && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/85 backdrop-blur-md p-4">
+          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-brand-border shadow-2xl relative animate-in fade-in zoom-in-95 duration-150 text-sans">
+            <button 
+              id="biz-details-close"
+              onClick={() => setSelectedDetailsBiz(null)}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-300 transition cursor-pointer"
+            >
+              ✕
+            </button>
+            
+            <div className="flex items-start gap-3.5 mb-5">
+              <div className="w-11 h-11 rounded-xl bg-cyan-950/40 border border-cyan-500/40 flex items-center justify-center shrink-0">
+                <Building2 className="w-5 h-5 text-cyan-400" />
+              </div>
+              <div>
+                <h3 className="text-md font-bold text-gray-100 font-sans">
+                  {selectedDetailsBiz.name}
+                </h3>
+                <p className="text-xs text-cyan-400 font-mono mt-0.5">
+                  Tenant Workspace Profile
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs bg-gray-950/40 p-4 rounded-xl border border-brand-border/60">
+              <div className="flex justify-between py-1.5 border-b border-brand-border/40">
+                <span className="text-gray-500 font-mono">BUSINESS NAME</span>
+                <span className="text-gray-200 font-semibold">{selectedDetailsBiz.name}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-brand-border/40">
+                <span className="text-gray-500 font-mono">INDUSTRY TYPE</span>
+                <span className="text-gray-200 font-semibold">{selectedDetailsBiz.businessType || 'Retail'}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-brand-border/40">
+                <span className="text-gray-500 font-mono">BILLING CURRENCY</span>
+                <span className="text-gray-200 font-semibold">{selectedDetailsBiz.currency || 'KSh'}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-brand-border/40">
+                <span className="text-gray-500 font-mono">REGISTRATION NO.</span>
+                <span className="text-gray-200 font-semibold">{selectedDetailsBiz.registrationNumber || 'APX-592183'}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-brand-border/40">
+                <span className="text-gray-500 font-mono">WORKSPACE STATUS</span>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                  (selectedDetailsBiz.status || 'Active') === 'Active'
+                    ? 'bg-emerald-950/30 text-emerald-400 border border-emerald-500/10'
+                    : 'bg-rose-950/30 text-rose-400 border border-rose-500/10'
+                }`}>
+                  {selectedDetailsBiz.status || 'Active'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-brand-border/40">
+                <span className="text-gray-500 font-mono">OWNER EMAIL</span>
+                <span className="text-cyan-400 font-mono truncate max-w-[200px]">
+                  {profiles.find(p => p.businessId === selectedDetailsBiz.id && p.role === UserRole.ADMIN)?.email || 'N/A'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5">
+                <span className="text-gray-500 font-mono">TOTAL ASSOCIATES</span>
+                <span className="text-gray-200 font-semibold">
+                  {profiles.filter(p => p.businessId === selectedDetailsBiz.id).length} profiles
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-brand-border flex items-center justify-end">
+              <button
+                onClick={() => setSelectedDetailsBiz(null)}
+                className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white text-xs font-bold rounded-xl border border-brand-border transition cursor-pointer"
+              >
+                Close Profile
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW BRANCH DETAILS MODAL */}
+      {selectedDetailsBranch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/85 backdrop-blur-md p-4">
+          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-brand-border shadow-2xl relative animate-in fade-in zoom-in-95 duration-150 text-sans">
+            <button 
+              id="branch-details-close"
+              onClick={() => setSelectedDetailsBranch(null)}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-300 transition cursor-pointer"
+            >
+              ✕
+            </button>
+            
+            <div className="flex items-start gap-3.5 mb-5">
+              <div className="w-11 h-11 rounded-xl bg-emerald-950/40 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                <MapPin className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <h3 className="text-md font-bold text-gray-100 font-sans">
+                  {selectedDetailsBranch.name}
+                </h3>
+                <p className="text-xs text-emerald-400 font-mono mt-0.5">
+                  Regional Commercial Branch
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs bg-gray-950/40 p-4 rounded-xl border border-brand-border/60">
+              <div className="flex justify-between py-1.5 border-b border-brand-border/40">
+                <span className="text-gray-500 font-mono">BRANCH ID</span>
+                <span className="text-gray-400 font-mono">{selectedDetailsBranch.id}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-brand-border/40">
+                <span className="text-gray-500 font-mono">BRANCH NAME</span>
+                <span className="text-gray-200 font-semibold">{selectedDetailsBranch.name}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-brand-border/40">
+                <span className="text-gray-500 font-mono">LOCATION / AREA</span>
+                <span className="text-gray-200 font-semibold">{selectedDetailsBranch.location || 'Not Specified'}</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-brand-border/40">
+                <span className="text-gray-500 font-mono">OPERATIONAL STATUS</span>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
+                  selectedDetailsBranch.status === 'Active'
+                    ? 'bg-emerald-950/30 text-emerald-400 border border-emerald-500/10'
+                    : 'bg-rose-950/30 text-rose-400 border border-rose-500/10'
+                }`}>
+                  {selectedDetailsBranch.status}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-brand-border/40">
+                <span className="text-gray-500 font-mono">ASSIGNED MANAGER</span>
+                <span className="text-cyan-400 font-semibold">{selectedDetailsBranch.managerName || 'Unassigned'}</span>
+              </div>
+              <div className="flex justify-between py-1.5">
+                <span className="text-gray-500 font-mono">BRANCH EMPLOYEES</span>
+                <span className="text-gray-200 font-semibold">
+                  {profiles.filter(p => p.businessId === selectedDetailsBranch.businessId && p.branch === selectedDetailsBranch.name).length} active staff
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-brand-border flex items-center justify-end">
+              <button
+                onClick={() => setSelectedDetailsBranch(null)}
+                className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white text-xs font-bold rounded-xl border border-brand-border transition cursor-pointer"
+              >
+                Close Details
+              </button>
+            </div>
           </div>
         </div>
       )}

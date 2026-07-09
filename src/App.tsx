@@ -27,10 +27,11 @@ import { WorkspacesModule } from './components/WorkspacesModule';
 import { BusinessManager } from './components/BusinessManager';
 import { PurchasesModule } from './components/PurchasesModule';
 import { AccountingModule } from './components/AccountingModule';
+import { UserRole } from './types';
 import { motion, AnimatePresence } from 'motion/react';
 
 function DashboardLayout() {
-  const { activeView, isLoggedIn } = useApp();
+  const { activeView, isLoggedIn, activeUser } = useApp();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   if (!isLoggedIn) {
@@ -39,6 +40,20 @@ function DashboardLayout() {
 
   // Active view renderer helper
   const renderView = () => {
+    // Strict Role-Based Access Control (RBAC) route guarding
+    if (activeUser?.role === UserRole.EMPLOYEE) {
+      const allowedViews = [
+        'overview', 'sales', 'inventory', 'debts', 'clients', 'feed', 'calendar', 'tasks'
+      ];
+      if (activeUser.allowExpenses) {
+        allowedViews.push('expenses');
+      }
+      
+      if (!allowedViews.includes(activeView)) {
+        return <DashboardOverview />;
+      }
+    }
+
     switch (activeView) {
       case 'overview':
         return <DashboardOverview />;

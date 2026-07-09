@@ -6,7 +6,7 @@ import {
   TrendingUp, Sparkles, Scale, Percent, Activity, CheckCircle, RefreshCw,
   ClipboardList, UserCheck, Printer, FileSpreadsheet, Filter, Settings, Layers, Clock
 } from 'lucide-react';
-import { UserRole, Expense } from '../types';
+import { UserRole, Expense, Department } from '../types';
 
 // Modular Subcomponents Imports
 import { ExpenseAnalytics } from './expenses/ExpenseAnalytics';
@@ -16,6 +16,7 @@ import { RecurringExpenses } from './expenses/RecurringExpenses';
 import { BudgetMonitoring } from './expenses/BudgetMonitoring';
 import { CategoryManager, loadCategories } from './expenses/CategoryManager';
 import { ReceiptUploader } from './expenses/ReceiptUploader';
+import { DepartmentManager } from './expenses/DepartmentManager';
 
 export const ExpensesModule: React.FC = () => {
   const { 
@@ -38,6 +39,16 @@ export const ExpensesModule: React.FC = () => {
 
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
+
+  useEffect(() => {
+    const handleTriggerAddExpense = () => {
+      setShowAddModal(true);
+    };
+    window.addEventListener('trigger-add-expense-form', handleTriggerAddExpense);
+    return () => {
+      window.removeEventListener('trigger-add-expense-form', handleTriggerAddExpense);
+    };
+  }, []);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -61,7 +72,7 @@ export const ExpensesModule: React.FC = () => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [time, setTime] = useState(new Date().toTimeString().split(' ')[0].slice(0, 5));
   const [description, setDescription] = useState('');
-  const [department, setDepartment] = useState('Operations');
+  const [department, setDepartment] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Mobile Money');
   const [receiptNumber, setReceiptNumber] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -82,7 +93,7 @@ export const ExpensesModule: React.FC = () => {
   const [editAmount, setEditAmount] = useState<number>(0);
   const [editDate, setEditDate] = useState('');
   const [editDescription, setEditDescription] = useState('');
-  const [editDepartment, setEditDepartment] = useState('Operations');
+  const [editDepartment, setEditDepartment] = useState('');
   const [editPaymentMethod, setEditPaymentMethod] = useState('Mobile Money');
   const [editReceiptNumber, setEditReceiptNumber] = useState('');
   const [editInvoiceNumber, setEditInvoiceNumber] = useState('');
@@ -93,6 +104,112 @@ export const ExpensesModule: React.FC = () => {
   const [editEmployeeResponsible, setEditEmployeeResponsible] = useState('');
   const [editReceiptUrl, setEditReceiptUrl] = useState<string | undefined>(undefined);
   const [editNotes, setEditNotes] = useState('');
+
+  // Durable Departments state
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [isDepartmentModalOpen, setIsDepartmentModalOpen] = useState(false);
+  const [departmentForm, setDepartmentForm] = useState({ name: '', description: '' });
+  const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
+
+  const isManagerOrOwner = activeUser.role === UserRole.ADMIN || activeUser.role === UserRole.MANAGER;
+
+  useEffect(() => {
+    if (!activeBusiness?.id) return;
+    const localKey = `apex_ledger_departments_${activeBusiness.id}`;
+    const stored = localStorage.getItem(localKey);
+    if (stored) {
+      setDepartments(JSON.parse(stored));
+    } else {
+      setDepartments([]);
+    }
+  }, [activeBusiness?.id]);
+
+  const saveDepartments = (updatedDeps: Department[]) => {
+    if (!activeBusiness?.id) return;
+    const localKey = `apex_ledger_departments_${activeBusiness.id}`;
+    localStorage.setItem(localKey, JSON.stringify(updatedDeps));
+    setDepartments(updatedDeps);
+  };
+
+  // Synchronize department selection when departments list loads/changes
+  useEffect(() => {
+    if (departments.length > 0) {
+      if (!department || !departments.some(d => d.name === department)) {
+        setDepartment(departments[0].name);
+      }
+    } else {
+      setDepartment('');
+    }
+  }, [departments, department]);
+
+  useEffect(() => {
+    if (departments.length > 0) {
+      if (!editDepartment || !departments.some(d => d.name === editDepartment)) {
+        setEditDepartment(departments[0].name);
+      }
+    } else {
+      setEditDepartment('');
+    }
+  }, [departments, editDepartment]);
+
+  const handleSaveDepartment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isManagerOrOwner) {
+      alert("Permission Denied: Only Business Owner and Manager can perform Department CRUD operations.");
+      return;
+    }
+    if (!departmentForm.name.trim()) return;
+
+    if (selectedDepartment) {
+      // Update
+      const updated = departments.map(d => 
+        d.id === selectedDepartment.id 
+          ? { ...d, name: departmentForm.name.trim(), description: departmentForm.description.trim() }
+          : d
+      );
+      saveDepartments(updated);
+      addAudit('Updated Department Entity', 'N/A', `Renamed department to: ${departmentForm.name}`);
+      setSelectedDepartment(null);
+    } else {
+      // Create
+      const newDep: Department = {
+        id: 'dep_' + Date.now() + '_' + Math.random().toString(36).substring(2, 5),
+        businessId: activeBusiness?.id || '',
+        name: departmentForm.name.trim(),
+        description: departmentForm.description.trim()
+      };
+      saveDepartments([...departments, newDep]);
+      addAudit('Registered Department Entity', 'N/A', `Created department: ${departmentForm.name}`);
+    }
+
+    setDepartmentForm({ name: '', description: '' });
+  };
+
+  const handleOpenEditDepartment = (dep: Department) => {
+    if (!isManagerOrOwner) {
+      alert("Permission Denied: Only Business Owner and Manager can modify Department entities.");
+      return;
+    }
+    setSelectedDepartment(dep);
+    setDepartmentForm({ name: dep.name, description: dep.description || '' });
+  };
+
+  const handleDeleteDepartment = (id: string, name: string) => {
+    if (!isManagerOrOwner) {
+      alert("Permission Denied: Only Business Owner and Manager can delete Department entities.");
+      return;
+    }
+    if (confirm(`Are you sure you want to delete the department "${name}"?`)) {
+      const updated = departments.filter(d => d.id !== id);
+      saveDepartments(updated);
+      addAudit('Deleted Department Entity', 'N/A', `Removed department: ${name}`);
+      if (selectedDepartment?.id === id) {
+        setSelectedDepartment(null);
+        setDepartmentForm({ name: '', description: '' });
+      }
+    }
+  };
+
 
   // Role based filtering logic
   const filteredExpensesByRole = expenses.filter(e => {
@@ -138,6 +255,11 @@ export const ExpensesModule: React.FC = () => {
     e.preventDefault();
     if (amount <= 0 || !description.trim()) {
       alert('Required Fields: Please enter a valid non-zero amount and a reference memo.');
+      return;
+    }
+
+    if (!department) {
+      alert('Required Fields: No departments available. Please create one first.');
       return;
     }
 
@@ -211,7 +333,7 @@ export const ExpensesModule: React.FC = () => {
     setAmount(exp.amount);
     setDate(new Date().toISOString().split('T')[0]);
     setDescription(exp.description);
-    setDepartment(exp.department || 'Operations');
+    setDepartment(exp.department || '');
     setPaymentMethod(exp.paymentMethod || 'Mobile Money');
     setReceiptNumber(exp.receiptNumber || '');
     setInvoiceNumber(exp.invoiceNumber || '');
@@ -233,7 +355,7 @@ export const ExpensesModule: React.FC = () => {
     setEditAmount(exp.amount);
     setEditDate(exp.date);
     setEditDescription(exp.description);
-    setEditDepartment(exp.department || 'Operations');
+    setEditDepartment(exp.department || '');
     setEditPaymentMethod(exp.paymentMethod || 'Mobile Money');
     setEditReceiptNumber(exp.receiptNumber || '');
     setEditInvoiceNumber(exp.invoiceNumber || '');
@@ -250,6 +372,11 @@ export const ExpensesModule: React.FC = () => {
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingExpense || editAmount <= 0 || !editDescription.trim()) return;
+
+    if (!editDepartment) {
+      alert('Required Fields: No departments available. Please create one first.');
+      return;
+    }
 
     // Permissions check for edit
     if (editingExpense.status === 'Approved' && activeUser.role === UserRole.EMPLOYEE) {
@@ -347,6 +474,17 @@ export const ExpensesModule: React.FC = () => {
             >
               <Settings className="w-4 h-4 text-cyan-400" />
               <span>Category Admin</span>
+            </button>
+          )}
+
+          {isManagement && (
+            <button
+              onClick={() => setIsDepartmentModalOpen(true)}
+              id="department-admin-trigger"
+              className="px-3.5 py-2.5 bg-gray-950 hover:bg-gray-900 border border-brand-border text-gray-300 rounded-xl font-sans font-bold flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <Settings className="w-4 h-4 text-cyan-400 animate-pulse" />
+              <span>Department Admin</span>
             </button>
           )}
 
@@ -562,19 +700,24 @@ export const ExpensesModule: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="text-gray-500 block mb-1">Department</label>
-                    <select
-                      value={department}
-                      onChange={(e) => setDepartment(e.target.value)}
-                      className="w-full bg-gray-950/60 border border-brand-border rounded-lg p-2 text-gray-300 outline-none focus:border-cyan-500/30"
-                    >
-                      <option value="Marketing">Marketing</option>
-                      <option value="Payroll & HR">Payroll & HR</option>
-                      <option value="Operations">Operations</option>
-                      <option value="IT & Software">IT & Software</option>
-                      <option value="Administration">Administration</option>
-                      <option value="Logistics & Transport">Logistics & Transport</option>
-                    </select>
+                    <label className="text-gray-500 block mb-1">Department *</label>
+                    {departments.length === 0 ? (
+                      <div className="text-[10px] text-rose-400 bg-rose-950/20 border border-rose-900/40 rounded-lg p-2 font-mono">
+                        No departments available. Please create one first.
+                      </div>
+                    ) : (
+                      <select
+                        value={department}
+                        onChange={(e) => setDepartment(e.target.value)}
+                        className="w-full bg-gray-950/60 border border-brand-border rounded-lg p-2 text-gray-300 outline-none focus:border-cyan-500/30 font-bold text-xs"
+                      >
+                        {departments.map((d) => (
+                          <option key={d.id} value={d.name}>
+                            {d.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
 
                   <div>
@@ -809,19 +952,24 @@ export const ExpensesModule: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="text-gray-500 block mb-1">Department</label>
-                    <select
-                      value={editDepartment}
-                      onChange={(e) => setEditDepartment(e.target.value)}
-                      className="w-full bg-gray-950/60 border border-brand-border rounded-lg p-2 text-gray-300 outline-none"
-                    >
-                      <option value="Marketing">Marketing</option>
-                      <option value="Payroll & HR">Payroll & HR</option>
-                      <option value="Operations">Operations</option>
-                      <option value="IT & Software">IT & Software</option>
-                      <option value="Administration">Administration</option>
-                      <option value="Logistics & Transport">Logistics & Transport</option>
-                    </select>
+                    <label className="text-gray-500 block mb-1">Department *</label>
+                    {departments.length === 0 ? (
+                      <div className="text-[10px] text-rose-400 bg-rose-950/20 border border-rose-900/40 rounded-lg p-2 font-mono">
+                        No departments available. Please create one first.
+                      </div>
+                    ) : (
+                      <select
+                        value={editDepartment}
+                        onChange={(e) => setEditDepartment(e.target.value)}
+                        className="w-full bg-gray-950/60 border border-brand-border rounded-lg p-2 text-gray-300 outline-none focus:border-cyan-500/30 font-bold text-xs"
+                      >
+                        {departments.map((d) => (
+                          <option key={d.id} value={d.name}>
+                            {d.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
 
                   <div>
@@ -975,6 +1123,35 @@ export const ExpensesModule: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Department Manager Admin Drawer Modal */}
+      {isDepartmentModalOpen && activeBusiness?.id && (
+        <div className="fixed inset-0 bg-gray-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="glass-panel p-6 rounded-2xl w-full max-w-2xl border border-brand-border shadow-2xl relative animate-in zoom-in-95 duration-200">
+            <button 
+              onClick={() => setIsDepartmentModalOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-200 cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <DepartmentManager 
+              businessId={activeBusiness.id}
+              isManagerOrOwner={isManagerOrOwner}
+            />
+            
+            <div className="pt-4 border-t border-brand-border/40 flex justify-end">
+              <button
+                onClick={() => setIsDepartmentModalOpen(false)}
+                className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-gray-300 font-sans rounded-xl text-center transition"
+              >
+                Close Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Delete Expense Modal */}
       {showDeleteModal && expenseToDelete && (

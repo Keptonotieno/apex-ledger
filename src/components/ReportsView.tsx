@@ -6,7 +6,7 @@ import {
   FileDown, Calendar, TrendingUp, DollarSign, Wallet, FileText, Printer,
   Scale, ShieldCheck, Layers, ClipboardList, Clock, Search, ChevronDown,
   Check, CheckCircle, ArrowDown, ArrowUp, RefreshCw, BarChart3, Users, 
-  HelpCircle, AlertTriangle, FileSpreadsheet, Building, Tag, Percent
+  HelpCircle, AlertTriangle, FileSpreadsheet, Building, Tag, Percent, Award
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
@@ -14,6 +14,14 @@ import {
 } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+
+// Modular Subcomponents Imports
+import { ReportFilters } from './reports/ReportFilters';
+import { BranchComparisonSection } from './reports/BranchComparisonSection';
+import { ProductPerformanceSection } from './reports/ProductPerformanceSection';
+import { CustomerPerformanceSection } from './reports/CustomerPerformanceSection';
+import { EmployeePerformanceSection } from './reports/EmployeePerformanceSection';
+import { InventoryPerformanceSection } from './reports/InventoryPerformanceSection';
 
 // Helper to parse dates robustly, accommodating both mock text dates and standard ISO strings
 const parseToDate = (dateStr: string): Date => {
@@ -48,319 +56,219 @@ export const ReportsView: React.FC = () => {
     activeUser, 
     timelogs, 
     procurements, 
-    audits,
-    activeBusiness,
-    activeBranchId,
-    branches
+    audits, 
+    activeBusiness, 
+    activeBranchId, 
+    branches,
+    customers,
+    profiles,
+    tasks
   } = useApp();
 
   const [reportPeriod, setReportPeriod] = useState<'Daily' | 'Weekly' | 'Monthly' | 'Quarterly' | 'Yearly' | 'Custom'>('Monthly');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
-  const [selectedReportType, setSelectedReportType] = useState<'PL' | 'TAX' | 'CASHFLOW' | 'INVENTORY' | 'PROCUREMENT' | 'AUDIT'>('PL');
+  
+  // Ten advanced report types to meet user needs
+  const [selectedReportType, setSelectedReportType] = useState<'PL' | 'BRANCH' | 'EXPENSES' | 'PRODUCTS' | 'CUSTOMERS' | 'EMPLOYEES' | 'INVENTORY' | 'TAX' | 'CASHFLOW' | 'AUDIT'>('PL');
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
+  // Advanced Filters states
+  const [filterBranchId, setFilterBranchId] = useState<string>('all');
+  const [filterEmployeeId, setFilterEmployeeId] = useState<string>('all');
+  const [filterCustomerId, setFilterCustomerId] = useState<string>('all');
+  const [filterSupplierName, setFilterSupplierName] = useState<string>('all');
+  const [filterCategoryName, setFilterCategoryName] = useState<string>('all');
+  const [filterProductId, setFilterProductId] = useState<string>('all');
+
   const isEmployee = activeUser?.role === UserRole.EMPLOYEE;
 
   // ----------------------------------------------------
-  // EMPLOYEE PERSONAL DASHBOARD VIEW
-  // ----------------------------------------------------
-  if (isEmployee) {
-    const mySales = sales.filter(s => s.cashierName.toLowerCase() === activeUser.name.toLowerCase() || s.cashierId === activeUser.id);
-    const mySalesVolume = mySales.reduce((acc, s) => acc + s.netAmount, 0);
-    const mySalesCount = mySales.length;
-
-    const myHoursWorked = timelogs
-      .filter(log => log.userId === activeUser.id)
-      .reduce((sum, log) => sum + (log.workHours || 0), 0);
-
-    const personalSalesByDate = mySales.reduce((acc: any, s) => {
-      if (!acc[s.date]) {
-        acc[s.date] = { date: s.date, Revenue: 0, Commission: 0 };
-      }
-      acc[s.date].Revenue += s.netAmount;
-      acc[s.date].Commission += s.netAmount * 0.02; // 2% base commission
-      return acc;
-    }, {});
-
-    const personalChartData = Object.values(personalSalesByDate).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    const graphDataPersonal = personalChartData.length > 0 ? personalChartData : [
-      { date: 'June 01', Revenue: 15000, Commission: 300 },
-      { date: 'June 10', Revenue: 22000, Commission: 440 },
-      { date: 'June 20', Revenue: 31000, Commission: 620 },
-      { date: 'June 30', Revenue: 45000, Commission: 900 }
-    ];
-
-    const handleExportPDF = () => {
-      const doc = new jsPDF();
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(20);
-      doc.setTextColor(6, 182, 212); // cyan
-      doc.text('Personal Cashier Statement', 15, 20);
-      
-      doc.setFontSize(10);
-      doc.setTextColor(100, 116, 139);
-      doc.text(`Employee: ${activeUser.name} (${activeUser.email})`, 15, 28);
-      doc.text(`Workspace: ${activeBusiness?.name || 'Main HQ'}`, 15, 34);
-      doc.text(`Generated On: ${new Date().toLocaleString()}`, 15, 40);
-
-      // KPI box
-      doc.setFillColor(241, 245, 249);
-      doc.rect(15, 46, 180, 24, 'F');
-      doc.setFontSize(11);
-      doc.setTextColor(15, 23, 42);
-      doc.setFont('helvetica', 'bold');
-      doc.text(`Turnover Volume: ${formatKSh(mySalesVolume)}`, 20, 53);
-      doc.text(`Total Invoices: ${mySalesCount}`, 20, 60);
-      doc.text(`Estimated Commissions (2%): ${formatKSh(mySalesVolume * 0.02)}`, 20, 66);
-
-      const tableData = mySales.map(s => [
-        s.invoiceNumber,
-        s.date,
-        s.paymentMethod,
-        formatKSh(s.netAmount),
-        formatKSh(s.netAmount * 0.02)
-      ]);
-
-      // @ts-ignore
-      autoTable(doc, {
-        startY: 76,
-        head: [['Invoice Number', 'Date', 'Payment Method', 'Net Amount', 'Commission (2%)']],
-        body: tableData,
-        theme: 'grid',
-        headStyles: { fillColor: [6, 182, 212] },
-        styles: { fontSize: 9, font: 'helvetica' }
-      });
-
-      doc.save(`Cashier_Statement_${activeUser.name.replace(/\s+/g, '_')}.pdf`);
-    };
-
-    return (
-      <div className="space-y-6">
-        {/* Header Ribbon */}
-        <div className="glass-panel p-6 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 border border-brand-border">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-cyan-500/10 rounded-xl border border-cyan-500/20">
-              <FileText className="w-6 h-6 text-cyan-400" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-gray-100 font-sans">Personal Cashier Statement</h2>
-              <p className="text-xs text-gray-400 font-mono">Track your turnover volume, commissions, and shift times</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleExportPDF}
-              className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-xl transition flex items-center gap-2 cursor-pointer shadow-lg shadow-cyan-950/45"
-            >
-              <Printer className="w-4 h-4" />
-              <span>Print Statement</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="glass-panel p-5 rounded-2xl border border-brand-border relative overflow-hidden group">
-            <div className="absolute right-3 top-3 p-1.5 bg-cyan-500/10 rounded-lg">
-              <TrendingUp className="w-4 h-4 text-cyan-400" />
-            </div>
-            <div className="text-[10px] text-gray-500 font-mono tracking-wider">MY TURNOVER SALES</div>
-            <h3 className="text-2xl font-bold font-mono text-cyan-400 mt-2">{formatKSh(mySalesVolume)}</h3>
-            <p className="text-[10px] text-gray-400 mt-1">Direct cashier sales recorded</p>
-          </div>
-
-          <div className="glass-panel p-5 rounded-2xl border border-brand-border relative overflow-hidden">
-            <div className="absolute right-3 top-3 p-1.5 bg-gray-500/10 rounded-lg">
-              <FileText className="w-4 h-4 text-gray-400" />
-            </div>
-            <div className="text-[10px] text-gray-500 font-mono tracking-wider">INVOICES COMPLETED</div>
-            <h3 className="text-2xl font-bold font-mono text-gray-300 mt-2">{mySalesCount} Invoices</h3>
-            <p className="text-[10px] text-gray-400 mt-1">Total checkout cycles completed</p>
-          </div>
-
-          <div className="glass-panel p-5 rounded-2xl border border-brand-border relative overflow-hidden">
-            <div className="absolute right-3 top-3 p-1.5 bg-emerald-500/10 rounded-lg">
-              <Percent className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div className="text-[10px] text-gray-500 font-mono tracking-wider">ESTIMATED COMMISSIONS</div>
-            <h3 className="text-2xl font-bold font-mono text-emerald-400 mt-2">{formatKSh(mySalesVolume * 0.02)}</h3>
-            <p className="text-[10px] text-gray-400 mt-1">Calculated at 2% performance rate</p>
-          </div>
-
-          <div className="glass-panel p-5 rounded-2xl border border-brand-border relative overflow-hidden">
-            <div className="absolute right-3 top-3 p-1.5 bg-amber-500/10 rounded-lg">
-              <Clock className="w-4 h-4 text-amber-400" />
-            </div>
-            <div className="text-[10px] text-gray-500 font-mono tracking-wider">LOGGED SHIFT TIME</div>
-            <h3 className="text-2xl font-bold font-mono text-amber-400 mt-2">{myHoursWorked.toFixed(1)} Hrs</h3>
-            <p className="text-[10px] text-gray-400 mt-1">Registered clock-in records</p>
-          </div>
-        </div>
-
-        {/* Chart */}
-        <div className="glass-panel p-6 rounded-2xl border border-brand-border">
-          <div className="mb-4">
-            <h4 className="text-sm font-semibold text-gray-200">Personal Performance Timeline</h4>
-            <p className="text-[11px] text-gray-500 font-mono">Comparative view of daily checkout volume and accrued commission bonus</p>
-          </div>
-
-          <div className="h-[280px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={graphDataPersonal} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="personalRev" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="personalComm" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
-                <XAxis dataKey="date" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }} />
-                <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace' }} />
-                <Area type="monotone" name="Sales Revenue" dataKey="Revenue" stroke="#06b6d4" strokeWidth={2} fill="url(#personalRev)" />
-                <Area type="monotone" name="Bonus Commission" dataKey="Commission" stroke="#10b981" strokeWidth={2} fill="url(#personalComm)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Personal Transaction History */}
-        <div className="glass-panel rounded-2xl border border-brand-border overflow-hidden">
-          <div className="p-5 border-b border-brand-border flex items-center justify-between">
-            <span className="text-xs font-bold font-mono text-cyan-400 uppercase tracking-wider">My Transaction History Log</span>
-            <span className="px-2.5 py-1 bg-cyan-500/10 text-[10px] font-mono rounded text-cyan-400">Total: {mySales.length} Invoices</span>
-          </div>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse font-mono text-xs">
-              <thead>
-                <tr className="bg-gray-950/80 text-gray-400 border-b border-brand-border text-[10px] uppercase tracking-wider">
-                  <th className="p-4">Invoice Number</th>
-                  <th className="p-4">Date</th>
-                  <th className="p-4">Payment Method</th>
-                  <th className="p-4 text-right">Net Amount</th>
-                  <th className="p-4 text-right">Commission (2%)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-brand-border/60">
-                {mySales.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="text-gray-500 text-center py-8">No personal sales transactions recorded.</td>
-                  </tr>
-                ) : (
-                  mySales.map((s) => (
-                    <tr key={s.id} className="hover:bg-gray-900/30 transition text-gray-300">
-                      <td className="p-4 font-bold text-gray-200">{s.invoiceNumber}</td>
-                      <td className="p-4">{s.date}</td>
-                      <td className="p-4">
-                        <span className="px-2 py-0.5 rounded bg-gray-950 border border-brand-border text-gray-400">
-                          {s.paymentMethod}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right font-bold text-cyan-400">{formatKSh(s.netAmount)}</td>
-                      <td className="p-4 text-right text-emerald-400">+{formatKSh(s.netAmount * 0.02)}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ----------------------------------------------------
-  // DATE FILTER BOUNDS COMPUTATION (ADMIN/MANAGER)
+  // DATE BOUNDS RESOLVER
   // ----------------------------------------------------
   const periodBounds = useMemo(() => {
-    const today = new Date();
-    let start = new Date();
-    let end = new Date();
+    const start = new Date();
+    const end = new Date();
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
 
-    if (reportPeriod === 'Daily') {
-      start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
-    } else if (reportPeriod === 'Weekly') {
-      start = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-      end = today;
-    } else if (reportPeriod === 'Monthly') {
-      start = new Date(today.getFullYear(), today.getMonth(), 1); // start of month
-      end = today;
-    } else if (reportPeriod === 'Quarterly') {
-      start = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000);
-      end = today;
-    } else if (reportPeriod === 'Yearly') {
-      start = new Date(today.getFullYear(), 0, 1); // start of year
-      end = today;
-    } else if (reportPeriod === 'Custom') {
-      start = customStartDate ? new Date(customStartDate) : new Date(today.getFullYear(), today.getMonth(), 1);
-      end = customEndDate ? new Date(customEndDate) : today;
+    if (reportPeriod === 'Custom') {
+      const customStart = customStartDate ? new Date(customStartDate) : new Date();
+      customStart.setHours(0, 0, 0, 0);
+      const customEnd = customEndDate ? new Date(customEndDate) : new Date();
+      customEnd.setHours(23, 59, 59, 999);
+      return { start: customStart, end: customEnd };
     }
 
+    switch (reportPeriod) {
+      case 'Daily':
+        break;
+      case 'Weekly':
+        start.setDate(start.getDate() - 7);
+        break;
+      case 'Monthly':
+        start.setMonth(start.getMonth() - 1);
+        break;
+      case 'Quarterly':
+        start.setMonth(start.getMonth() - 3);
+        break;
+      case 'Yearly':
+        start.setFullYear(start.getFullYear() - 1);
+        break;
+    }
     return { start, end };
   }, [reportPeriod, customStartDate, customEndDate]);
 
-  // Master filter items within reporting period
+  // Reset helper passed down to filter component
+  const handleResetFilters = () => {
+    setFilterBranchId('all');
+    setFilterEmployeeId('all');
+    setFilterCustomerId('all');
+    setFilterSupplierName('all');
+    setFilterCategoryName('all');
+    setFilterProductId('all');
+    setSearchTerm('');
+  };
+
+  // ----------------------------------------------------
+  // MULTI-DIMENSIONAL DATA FILTERING ENGINE
+  // ----------------------------------------------------
   const filteredSales = useMemo(() => {
     return sales.filter(s => {
+      // Date bounds
       const d = parseToDate(s.date);
-      return d >= periodBounds.start && d <= periodBounds.end;
+      if (d < periodBounds.start || d > periodBounds.end) return false;
+
+      // Branch Isolation
+      if (filterBranchId !== 'all') {
+        const saleBranchId = (s as any).branchId || (s as any).branch_id;
+        if (saleBranchId && saleBranchId !== filterBranchId) return false;
+      }
+
+      // Employee Isolation
+      if (filterEmployeeId !== 'all') {
+        const cashierId = (s as any).cashierId || (s as any).cashier_id;
+        if (cashierId && cashierId !== filterEmployeeId) return false;
+        if (s.cashierName !== filterEmployeeId && s.cashierEmail !== filterEmployeeId) return false;
+      }
+
+      // Customer Isolation
+      if (filterCustomerId !== 'all') {
+        if (s.customerId && s.customerId !== filterCustomerId) return false;
+        if (s.customerName !== filterCustomerId) return false;
+      }
+
+      // Product/Category Filter inside SaleItems
+      if (filterCategoryName !== 'all' || filterProductId !== 'all') {
+        const matchesProductCriteria = s.items.some(item => {
+          if (filterProductId !== 'all' && item.productId !== filterProductId) return false;
+          if (filterCategoryName !== 'all') {
+            const productInfo = products.find(p => p.id === item.productId);
+            if (!productInfo || productInfo.category !== filterCategoryName) return false;
+          }
+          return true;
+        });
+        if (!matchesProductCriteria) return false;
+      }
+
+      return true;
     });
-  }, [sales, periodBounds]);
+  }, [sales, periodBounds, filterBranchId, filterEmployeeId, filterCustomerId, filterCategoryName, filterProductId, products]);
 
   const filteredExpenses = useMemo(() => {
     return expenses.filter(e => {
       const d = parseToDate(e.date);
-      return d >= periodBounds.start && d <= periodBounds.end;
+      if (d < periodBounds.start || d > periodBounds.end) return false;
+
+      // Branch
+      if (filterBranchId !== 'all') {
+        const expBranch = (e as any).branchId || (e as any).branch_id || e.branch;
+        if (expBranch && expBranch !== filterBranchId && expBranch !== branches.find(b => b.id === filterBranchId)?.name) return false;
+      }
+
+      // Employee
+      if (filterEmployeeId !== 'all') {
+        if (e.recordedBy !== filterEmployeeId && e.employeeResponsible !== filterEmployeeId) return false;
+      }
+
+      // Category
+      if (filterCategoryName !== 'all') {
+        if (e.category !== filterCategoryName) return false;
+      }
+
+      return true;
     });
-  }, [expenses, periodBounds]);
+  }, [expenses, periodBounds, filterBranchId, filterEmployeeId, filterCategoryName, branches]);
 
   const filteredProcurements = useMemo(() => {
     return procurements.filter(p => {
       const d = parseToDate(p.date);
-      return d >= periodBounds.start && d <= periodBounds.end;
+      if (d < periodBounds.start || d > periodBounds.end) return false;
+
+      // Supplier
+      if (filterSupplierName !== 'all' && p.supplierName !== filterSupplierName) return false;
+
+      // Product
+      if (filterProductId !== 'all' && p.productId !== filterProductId) return false;
+
+      return true;
     });
-  }, [procurements, periodBounds]);
+  }, [procurements, periodBounds, filterSupplierName, filterProductId]);
 
   const filteredAudits = useMemo(() => {
     return audits.filter(a => {
       const d = parseToDate(a.date);
-      return d >= periodBounds.start && d <= periodBounds.end;
+      if (d < periodBounds.start || d > periodBounds.end) return false;
+
+      // Employee
+      if (filterEmployeeId !== 'all') {
+        if (a.userName !== filterEmployeeId && a.userId !== filterEmployeeId) return false;
+      }
+
+      return true;
     });
-  }, [audits, periodBounds]);
+  }, [audits, periodBounds, filterEmployeeId]);
 
-  const filteredDebts = useMemo(() => {
-    return debts; // debts represent active solvency, so we analyze them in total context
-  }, [debts]);
+  // Extract static list options dynamically from real records
+  const uniqueSuppliers = useMemo(() => {
+    const list = new Set(procurements.map(p => p.supplierName));
+    return Array.from(list).filter(Boolean);
+  }, [procurements]);
+
+  const uniqueCategories = useMemo(() => {
+    const list = new Set(products.map(p => p.category));
+    return Array.from(list).filter(Boolean);
+  }, [products]);
+
 
   // ----------------------------------------------------
-  // REPORT CALCULATIONS BY CARD
+  // INDIVIDUAL REPORT CALCULATIONS
   // ----------------------------------------------------
-  
-  // 1. PROFIT & LOSS CALCULATIONS
+
+  // 1. Profit & Loss Metrics
   const plData = useMemo(() => {
-    const grossRevenue = filteredSales.reduce((acc, s) => acc + s.netAmount, 0);
-    const totalDiscounts = filteredSales.reduce((acc, s) => acc + (s.discount || 0), 0);
-    const totalCOGS = filteredSales.reduce((acc, s) => {
-      const saleCost = s.items.reduce((sum, item) => {
-        const itemCost = item.costPriceAtSale || (item.priceAtSale * 0.70); // default to 70% cost fallback
-        return sum + (itemCost * item.quantity);
-      }, 0);
-      return acc + saleCost;
-    }, 0);
+    const grossRevenue = filteredSales.reduce((acc, curr) => acc + curr.netAmount, 0);
+    const totalDiscounts = filteredSales.reduce((acc, curr) => acc + (curr.discount || 0), 0);
+    
+    // Cost of Goods Sold (COGS)
+    let totalCOGS = 0;
+    filteredSales.forEach(sale => {
+      sale.items.forEach(item => {
+        const qty = item.quantity;
+        let costPrice = item.costPriceAtSale;
+        if (!costPrice || costPrice === 0) {
+          const matchingProduct = products.find(p => p.id === item.productId);
+          costPrice = matchingProduct ? matchingProduct.costPrice : item.priceAtSale * 0.7;
+        }
+        totalCOGS += costPrice * qty;
+      });
+    });
+
     const grossProfit = grossRevenue - totalCOGS;
-    const totalOperatingExpenses = filteredExpenses.reduce((acc, e) => acc + e.amount, 0);
+    const totalOperatingExpenses = filteredExpenses.reduce((acc, curr) => acc + curr.amount, 0);
     const netProfit = grossProfit - totalOperatingExpenses;
     const netProfitMargin = grossRevenue > 0 ? (netProfit / grossRevenue) * 100 : 0;
 
@@ -373,322 +281,134 @@ export const ReportsView: React.FC = () => {
       netProfit,
       netProfitMargin
     };
-  }, [filteredSales, filteredExpenses]);
+  }, [filteredSales, filteredExpenses, products]);
 
-  // 2. TAX CALCULATIONS
+  // 2. Tax Liability calculations
   const taxData = useMemo(() => {
-    // Computed based on 16% standard VAT
-    const taxableSalesVolume = filteredSales.reduce((acc, s) => acc + s.netAmount, 0);
-    const vatCollected = filteredSales.reduce((acc, s) => {
-      // If sale contains recorded tax, use it, else assume standard VAT rate (16% inclusive or exclusive)
-      return acc + (s.tax || s.netAmount * 0.16);
-    }, 0);
-    
-    // Estimate other local compliance taxes/levies, such as withholding (2%) and excise duties (1.5%)
+    const taxableSalesVolume = filteredSales.reduce((acc, curr) => acc + curr.netAmount, 0);
+    // Standard VAT is 16% in Kenya (KSh)
+    const vatCollected = filteredSales.reduce((acc, curr) => acc + (curr.tax || curr.netAmount * 0.16), 0);
+    // Standard 2% Withholding tax estimate for business invoicing
     const withholdingTaxEstimate = taxableSalesVolume * 0.02;
-    const exciseLevyEstimate = taxableSalesVolume * 0.015;
-    const totalTaxLiability = vatCollected + withholdingTaxEstimate + exciseLevyEstimate;
+    const totalTaxLiability = vatCollected + withholdingTaxEstimate;
 
     return {
       taxableSalesVolume,
       vatCollected,
       withholdingTaxEstimate,
-      exciseLevyEstimate,
       totalTaxLiability
     };
   }, [filteredSales]);
 
-  // 3. CASH FLOW CALCULATIONS
+  // 3. Cash Flow Metrics
   const cashFlowData = useMemo(() => {
-    // Inflows (Cash and Mobile Money checkout channels)
-    const cashSalesInflow = filteredSales.filter(s => s.paymentMethod === 'Cash').reduce((acc, s) => acc + s.netAmount, 0);
-    const mobileMoneyInflow = filteredSales.filter(s => s.paymentMethod === 'Mobile Money').reduce((acc, s) => acc + s.netAmount, 0);
-    
-    // Debt recoveries collected during the active bounds
-    const debtRecoveries = filteredDebts.reduce((acc, d) => {
-      const rangeRecoveries = (d.paymentHistory || []).filter(p => {
-        const dDate = parseToDate(p.date);
-        return dDate >= periodBounds.start && dDate <= periodBounds.end;
-      }).reduce((sum, h) => sum + h.amount, 0);
-      return acc + rangeRecoveries;
-    }, 0);
+    const cashSalesInflow = filteredSales
+      .filter(s => s.paymentMethod === 'Cash' || s.paymentMethod === 'Card')
+      .reduce((acc, curr) => acc + curr.netAmount, 0);
+
+    const mobileMoneyInflow = filteredSales
+      .filter(s => s.paymentMethod === 'Mobile Money')
+      .reduce((acc, curr) => acc + curr.netAmount, 0);
+
+    // Debt recoveries
+    const debtRecoveries = debts
+      .filter(d => d.status === 'Paid' || d.status === 'Partially Paid')
+      .reduce((acc, curr) => {
+        const historySum = curr.paymentHistory?.reduce((sum, h) => sum + h.amount, 0) || 0;
+        return acc + historySum;
+      }, 0);
 
     const totalInflow = cashSalesInflow + mobileMoneyInflow + debtRecoveries;
-
-    // Outflows (Operating expenses + paid procurements)
-    const operatingOutflow = filteredExpenses.reduce((acc, e) => acc + e.amount, 0);
+    
+    // Outflows: operational expenses + paid procurements
+    const opexOutflow = filteredExpenses.reduce((acc, curr) => acc + curr.amount, 0);
     const procurementOutflow = filteredProcurements
       .filter(p => p.paymentStatus === 'Paid')
-      .reduce((acc, p) => acc + (p.materialCosts || 0), 0);
-    
-    const totalOutflow = operatingOutflow + procurementOutflow;
+      .reduce((acc, curr) => acc + curr.materialCosts, 0);
+
+    const totalOutflow = opexOutflow + procurementOutflow;
     const netCashPosition = totalInflow - totalOutflow;
 
     return {
+      totalInflow,
       cashSalesInflow,
       mobileMoneyInflow,
       debtRecoveries,
-      totalInflow,
-      operatingOutflow,
-      procurementOutflow,
       totalOutflow,
+      procurementOutflow,
       netCashPosition
     };
-  }, [filteredSales, filteredExpenses, filteredProcurements, filteredDebts, periodBounds]);
+  }, [filteredSales, debts, filteredExpenses, filteredProcurements]);
 
-  // 4. INVENTORY VALUATION CALCULATIONS
-  const inventoryData = useMemo(() => {
-    const totalProducts = products.length;
-    const totalStockQty = products.reduce((acc, p) => acc + p.quantity, 0);
-    const wholesaleAssetValue = products.reduce((acc, p) => acc + (p.costPrice * p.quantity), 0);
-    const potentialRetailValue = products.reduce((acc, p) => acc + (p.sellingPrice * p.quantity), 0);
-    const estimatedUnrealizedMargin = wholesaleAssetValue > 0 ? ((potentialRetailValue - wholesaleAssetValue) / wholesaleAssetValue) * 100 : 0;
-    
-    const lowStockItems = products.filter(p => p.quantity <= p.minStockAlert && p.quantity > 0);
-    const lowStockCapitalExposure = lowStockItems.reduce((acc, p) => acc + (p.costPrice * p.quantity), 0);
-    const outOfStockCount = products.filter(p => p.quantity === 0).length;
-
-    return {
-      totalProducts,
-      totalStockQty,
-      wholesaleAssetValue,
-      potentialRetailValue,
-      estimatedUnrealizedMargin,
-      lowStockCount: lowStockItems.length,
-      lowStockCapitalExposure,
-      outOfStockCount
-    };
-  }, [products]);
-
-  // 5. SUPPLIER & PROCUREMENT CALCULATIONS
-  const procurementData = useMemo(() => {
-    const totalPOs = filteredProcurements.length;
-    const totalProcurementSpend = filteredProcurements.reduce((acc, p) => acc + p.materialCosts, 0);
-    
-    // Accounts payable: outstanding PO amounts where paymentStatus is not fully paid
-    const outstandingPayable = filteredProcurements
-      .filter(p => p.paymentStatus !== 'Paid')
-      .reduce((acc, p) => {
-        // If it's unpaid show total, if partially paid show balance
-        const multiplier = p.paymentStatus === 'Partially Paid' ? 0.40 : 1.0; // Estimate 40% balance
-        return acc + (p.materialCosts * multiplier);
-      }, 0);
-
-    const pendingDeliveryCount = filteredProcurements.filter(p => p.deliveryStatus === 'Pending' || p.deliveryStatus === 'Shipped').length;
-    const uniqueSuppliers = Array.from(new Set(filteredProcurements.map(p => p.supplierName).filter(Boolean))).length;
-
-    return {
-      totalPOs,
-      totalProcurementSpend,
-      outstandingPayable,
-      pendingDeliveryCount,
-      uniqueSuppliers
-    };
-  }, [filteredProcurements]);
-
-  // 6. COMPLIANCE & AUDIT LOGS STATS
-  const auditData = useMemo(() => {
+  // 4. Audit & system statistics
+  const auditLogsSummary = useMemo(() => {
     const totalLogs = filteredAudits.length;
     const adminActionCount = filteredAudits.filter(a => a.role === UserRole.ADMIN).length;
-    const criticalAdjustments = filteredAudits.filter(a => 
-      a.action.toLowerCase().includes('delete') || 
-      a.action.toLowerCase().includes('revert') ||
-      a.action.toLowerCase().includes('adjust')
-    ).length;
-    
-    const activeStaffUsersCount = Array.from(new Set(filteredAudits.map(a => a.userName))).length;
+    const criticalAdjustments = filteredAudits.filter(a => a.action.toLowerCase().includes('delete') || a.action.toLowerCase().includes('reject') || a.action.toLowerCase().includes('adjusted')).length;
+    const uniqueStaff = new Set(filteredAudits.map(a => a.userName));
 
     return {
       totalLogs,
       adminActionCount,
       criticalAdjustments,
-      activeStaffUsersCount
+      activeStaffUsersCount: uniqueStaff.size
     };
   }, [filteredAudits]);
 
   // ----------------------------------------------------
-  // DYNAMIC CHART DATA GENERATION
+  // INTERACTIVE RECHARTS GRAPH RESOLVER (Driven by filtered arrays)
   // ----------------------------------------------------
   const chartData = useMemo(() => {
-    if (selectedReportType === 'PL') {
-      // Area Chart of Sales revenue vs Expenses by Date
-      const dateSales = filteredSales.reduce((acc: any, s) => {
-        if (!acc[s.date]) acc[s.date] = 0;
-        acc[s.date] += s.netAmount;
-        return acc;
-      }, {});
+    // Generate daily/weekly points to fill trends
+    const dataPoints: Record<string, { name: string; Revenue: number; Expenses: number; Profit: number; VAT: number; Withholding: number; Inflow: number; Outflow: number; Actions: number }> = {};
 
-      const dateExpenses = filteredExpenses.reduce((acc: any, e) => {
-        if (!acc[e.date]) acc[e.date] = 0;
-        acc[e.date] += e.amount;
-        return acc;
-      }, {});
+    // Base mock initializations
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    days.forEach(day => {
+      dataPoints[day] = { name: day, Revenue: 0, Expenses: 0, Profit: 0, VAT: 0, Withholding: 0, Inflow: 0, Outflow: 0, Actions: 0 };
+    });
 
-      const allDates = Array.from(new Set([...Object.keys(dateSales), ...Object.keys(dateExpenses)]))
-        .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    filteredSales.forEach(sale => {
+      const d = parseToDate(sale.date);
+      const dayName = days[d.getDay()] || 'Sun';
+      dataPoints[dayName].Revenue += sale.netAmount;
+      dataPoints[dayName].VAT += (sale.tax || sale.netAmount * 0.16);
+      dataPoints[dayName].Withholding += sale.netAmount * 0.02;
+      dataPoints[dayName].Inflow += sale.netAmount;
+    });
 
-      if (allDates.length === 0) {
-        return [
-          { name: 'Wk 1', Revenue: 45000, Expenses: 12000, Profit: 33000 },
-          { name: 'Wk 2', Revenue: 75000, Expenses: 31000, Profit: 44000 },
-          { name: 'Wk 3', Revenue: 95000, Expenses: 22000, Profit: 73000 },
-          { name: 'Wk 4', Revenue: 120000, Expenses: 41000, Profit: 79000 }
-        ];
-      }
+    filteredExpenses.forEach(exp => {
+      const d = parseToDate(exp.date);
+      const dayName = days[d.getDay()] || 'Sun';
+      dataPoints[dayName].Expenses += exp.amount;
+      dataPoints[dayName].Outflow += exp.amount;
+    });
 
-      return allDates.map(d => {
-        const r = dateSales[d] || 0;
-        const e = dateExpenses[d] || 0;
-        return {
-          name: d,
-          Revenue: r,
-          Expenses: e,
-          Profit: r - e
-        };
-      });
-    }
+    filteredAudits.forEach(audit => {
+      const d = parseToDate(audit.date);
+      const dayName = days[d.getDay()] || 'Sun';
+      dataPoints[dayName].Actions += 1;
+    });
 
-    if (selectedReportType === 'TAX') {
-      // Bar Chart of VAT vs Withholding tax by Date
-      const dateVat = filteredSales.reduce((acc: any, s) => {
-        if (!acc[s.date]) acc[s.date] = 0;
-        acc[s.date] += (s.tax || s.netAmount * 0.16);
-        return acc;
-      }, {});
-
-      const allDates = Object.keys(dateVat).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-      if (allDates.length === 0) {
-        return [
-          { name: 'Day 1', VAT: 3400, Withholding: 850 },
-          { name: 'Day 5', VAT: 8600, Withholding: 2150 },
-          { name: 'Day 10', VAT: 11200, Withholding: 2800 },
-          { name: 'Day 15', VAT: 16500, Withholding: 4125 }
-        ];
-      }
-
-      return allDates.map(d => {
-        const v = dateVat[d] || 0;
-        return {
-          name: d,
-          VAT: v,
-          Withholding: v * 0.125
-        };
-      });
-    }
-
-    if (selectedReportType === 'CASHFLOW') {
-      // Bar chart of Inflows vs Outflows by Date
-      const dateIn = filteredSales.reduce((acc: any, s) => {
-        if (!acc[s.date]) acc[s.date] = 0;
-        acc[s.date] += s.netAmount;
-        return acc;
-      }, {});
-
-      const dateOut = filteredExpenses.reduce((acc: any, e) => {
-        if (!acc[e.date]) acc[e.date] = 0;
-        acc[e.date] += e.amount;
-        return acc;
-      }, {});
-
-      const allDates = Array.from(new Set([...Object.keys(dateIn), ...Object.keys(dateOut)]))
-        .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-
-      if (allDates.length === 0) {
-        return [
-          { name: 'Week A', Inflow: 50000, Outflow: 25000, Net: 25000 },
-          { name: 'Week B', Inflow: 85000, Outflow: 41000, Net: 44000 },
-          { name: 'Week C', Inflow: 72000, Outflow: 65000, Net: 7000 },
-          { name: 'Week D', Inflow: 110000, Outflow: 38000, Net: 72000 }
-        ];
-      }
-
-      return allDates.map(d => {
-        const inflow = dateIn[d] || 0;
-        const outflow = dateOut[d] || 0;
-        return {
-          name: d,
-          Inflow: inflow,
-          Outflow: outflow,
-          Net: inflow - outflow
-        };
-      });
-    }
-
-    if (selectedReportType === 'INVENTORY') {
-      // Stock value distribution by first 5 categories
-      const catValue = products.reduce((acc: any, p) => {
-        if (!acc[p.category]) acc[p.category] = 0;
-        acc[p.category] += p.costPrice * p.quantity;
-        return acc;
-      }, {});
-
-      const items = Object.entries(catValue).map(([k, v]) => ({ name: k, Value: v }));
-      if (items.length === 0) {
-        return [
-          { name: 'Spares', Value: 180000 },
-          { name: 'Lubricants', Value: 120000 },
-          { name: 'Accessories', Value: 85000 },
-          { name: 'Consumables', Value: 42000 }
-        ];
-      }
-      return items.slice(0, 6);
-    }
-
-    if (selectedReportType === 'PROCUREMENT') {
-      // Spend per Supplier chart
-      const supplierSpend = filteredProcurements.reduce((acc: any, p) => {
-        if (!acc[p.supplierName]) acc[p.supplierName] = 0;
-        acc[p.supplierName] += p.materialCosts;
-        return acc;
-      }, {});
-
-      const items = Object.entries(supplierSpend).map(([k, v]) => ({ name: k, Costs: v }));
-      if (items.length === 0) {
-        return [
-          { name: 'Global Auto Co.', Costs: 150000 },
-          { name: 'Nairobi Spares Ltd', Costs: 95000 },
-          { name: 'Express Oils', Costs: 84000 }
-        ];
-      }
-      return items.slice(0, 5);
-    }
-
-    // AUDIT action frequency line chart
-    const auditDates = filteredAudits.reduce((acc: any, a) => {
-      if (!acc[a.date]) acc[a.date] = 0;
-      acc[a.date] += 1;
-      return acc;
-    }, {});
-
-    const sortedAuditDates = Object.keys(auditDates).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-    if (sortedAuditDates.length === 0) {
-      return [
-        { name: 'Mon', Actions: 12 },
-        { name: 'Tue', Actions: 18 },
-        { name: 'Wed', Actions: 15 },
-        { name: 'Thu', Actions: 28 },
-        { name: 'Fri', Actions: 22 }
-      ];
-    }
-    return sortedAuditDates.map(d => ({
-      name: d,
-      Actions: auditDates[d] || 0
+    // Compute net profit trend line
+    return Object.values(dataPoints).map(pt => ({
+      ...pt,
+      Profit: pt.Revenue - pt.Expenses
     }));
-  }, [selectedReportType, filteredSales, filteredExpenses, filteredProcurements, filteredAudits, products]);
+  }, [filteredSales, filteredExpenses, filteredAudits]);
 
   // ----------------------------------------------------
-  // DYNAMIC TABULAR DATA FOR SCREEN & EXPORTS
+  // DYNAMIC TABULAR LEDGER ROWS FOR CURRENT REPORT
   // ----------------------------------------------------
   const rawTableRows = useMemo(() => {
     switch (selectedReportType) {
       case 'PL':
-        // Show combined Sales and Expenses
         const salesRows = filteredSales.map(s => ({
           id: s.id,
           date: s.date,
           ref: s.invoiceNumber,
           type: 'Sales Credit',
-          desc: `POS Sale to ${s.customerName || 'Walk-in'}`,
+          desc: `POS Checkout to ${s.customerName || 'Walk-in customer'}`,
           inflow: s.netAmount,
           outflow: 0
         }));
@@ -696,12 +416,25 @@ export const ReportsView: React.FC = () => {
           id: e.id,
           date: e.date,
           ref: e.receiptNumber || 'N/A',
-          type: 'Expense Debit',
+          type: 'OPEX Claim Debit',
           desc: `${e.category} - ${e.description}`,
           inflow: 0,
           outflow: e.amount
         }));
         return [...salesRows, ...expenseRows].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      case 'EXPENSES':
+        return filteredExpenses.map(e => ({
+          id: e.id,
+          date: e.date,
+          ref: e.receiptNumber || 'N/A',
+          category: e.category,
+          vendor: e.vendorName || 'N/A',
+          staff: e.employeeResponsible || e.recordedBy || 'N/A',
+          branch: e.branch || 'Main HQ',
+          amount: e.amount,
+          status: e.status || 'Approved'
+        }));
 
       case 'TAX':
         return filteredSales.map(s => ({
@@ -734,41 +467,7 @@ export const ReportsView: React.FC = () => {
           in: 0,
           out: e.amount
         }));
-        const cfProc = filteredProcurements.filter(p => p.paymentStatus === 'Paid').map(p => ({
-          id: p.id,
-          date: p.date,
-          type: 'Supplier Payment',
-          method: 'Bank Wire',
-          ref: p.orderNumber,
-          in: 0,
-          out: p.materialCosts
-        }));
-        return [...cfIn, ...cfOut, ...cfProc].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-      case 'INVENTORY':
-        return products.map(p => ({
-          id: p.id,
-          name: p.name,
-          category: p.category,
-          sku: p.sku || 'N/A',
-          stock: p.quantity,
-          unit: p.unit || 'Units',
-          cost: p.costPrice,
-          price: p.sellingPrice,
-          totalCostValue: p.costPrice * p.quantity,
-          status: p.stockStatus
-        }));
-
-      case 'PROCUREMENT':
-        return filteredProcurements.map(p => ({
-          id: p.id,
-          date: p.date,
-          po: p.orderNumber,
-          supplier: p.supplierName,
-          delivery: p.deliveryStatus,
-          payment: p.paymentStatus,
-          cost: p.materialCosts
-        }));
+        return [...cfIn, ...cfOut].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
       case 'AUDIT':
         return filteredAudits.map(a => ({
@@ -785,13 +484,12 @@ export const ReportsView: React.FC = () => {
       default:
         return [];
     }
-  }, [selectedReportType, filteredSales, filteredExpenses, filteredProcurements, filteredAudits, products]);
+  }, [selectedReportType, filteredSales, filteredExpenses, filteredAudits]);
 
   // Handle Search & sorting
   const sortedAndFilteredRows = useMemo(() => {
     let rows = [...rawTableRows];
 
-    // Apply simple text filter
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
       rows = rows.filter((row: any) => {
@@ -801,7 +499,6 @@ export const ReportsView: React.FC = () => {
       });
     }
 
-    // Apply Sorting
     if (sortField) {
       rows.sort((a: any, b: any) => {
         const aVal = a[sortField];
@@ -831,8 +528,9 @@ export const ReportsView: React.FC = () => {
     }
   };
 
+
   // ----------------------------------------------------
-  // FILE EXPORT HANDLERS
+  // CORPORATE BRIGADE FILE EXPORTS
   // ----------------------------------------------------
   const handleExportPDF = () => {
     const doc = new jsPDF();
@@ -840,35 +538,40 @@ export const ReportsView: React.FC = () => {
     doc.setFontSize(22);
     doc.setTextColor(6, 182, 212); // cyan-500
     
-    // Header
+    // Header with registered Business Name and metadata
     doc.text(`${activeBusiness?.name || 'Apex Ledger Enterprise'}`, 15, 20);
     doc.setFontSize(10);
     doc.setTextColor(100, 116, 139);
-    doc.text(`Corporate Reports & Analytics Console - Generated Statement`, 15, 27);
+    doc.text(`Corporate Intelligence & Analytics Statements Ledger`, 15, 27);
     
     // Metadata block
-    doc.setFillColor(15, 23, 42); // slate-950 background for pdf header meta
+    doc.setFillColor(15, 23, 42); 
     doc.rect(14, 32, 182, 22, 'F');
     doc.setFontSize(9);
     doc.setTextColor(241, 245, 249);
     
     const branchName = activeBranchId === 'all' 
-      ? 'All Business Branches Aggregated' 
+      ? 'All Enterprise Branches' 
       : (branches.find(b => b.id === activeBranchId)?.name || 'Main HQ');
 
-    doc.text(`REPORT TYPE: ${selectedReportType.toUpperCase()} LEDGER`, 18, 38);
-    doc.text(`REPORTING PERIOD: ${reportPeriod} (${periodBounds.start.toLocaleDateString()} - ${periodBounds.end.toLocaleDateString()})`, 18, 44);
-    doc.text(`WORKSPACE BRANCH: ${branchName}`, 18, 50);
+    doc.text(`STATEMENT TYPE: ${selectedReportType.toUpperCase()} REVENUE STATEMENT`, 18, 38);
+    doc.text(`REPORTING DATE: ${reportPeriod} (${periodBounds.start.toLocaleDateString()} - ${periodBounds.end.toLocaleDateString()})`, 18, 44);
+    doc.text(`BRANCH WORKSPACE: ${branchName}`, 18, 50);
 
-    // Dynamic Headers & mapping depending on type
     let pdfHeaders: string[] = [];
     let pdfRows: any[][] = [];
 
     switch (selectedReportType) {
       case 'PL':
-        pdfHeaders = ['Date', 'Ref Number', 'Transaction Type', 'Description', 'Inflow (KSh)', 'Outflow (KSh)'];
+        pdfHeaders = ['Date', 'Ref Number', 'Type', 'Description', 'Inflow (KSh)', 'Outflow (KSh)'];
         pdfRows = sortedAndFilteredRows.map((r: any) => [
           r.date, r.ref, r.type, r.desc, formatKSh(r.inflow), formatKSh(r.outflow)
+        ]);
+        break;
+      case 'EXPENSES':
+        pdfHeaders = ['Date', 'Category', 'Vendor', 'Responsible Staff', 'Branch', 'Amount (KSh)'];
+        pdfRows = sortedAndFilteredRows.map((r: any) => [
+          r.date, r.category, r.vendor, r.staff, r.branch, formatKSh(r.amount)
         ]);
         break;
       case 'TAX':
@@ -883,24 +586,15 @@ export const ReportsView: React.FC = () => {
           r.date, r.type, r.method, r.ref, formatKSh(r.in), formatKSh(r.out)
         ]);
         break;
-      case 'INVENTORY':
-        pdfHeaders = ['Product Name', 'Category', 'SKU', 'Qty Stock', 'Unit Cost', 'Retail Price', 'Total Cost Value'];
-        pdfRows = sortedAndFilteredRows.map((r: any) => [
-          r.name, r.category, r.sku, `${r.stock} ${r.unit}`, formatKSh(r.cost), formatKSh(r.price), formatKSh(r.totalCostValue)
-        ]);
-        break;
-      case 'PROCUREMENT':
-        pdfHeaders = ['Date', 'PO Number', 'Supplier Name', 'Delivery', 'Payment', 'Spend Cost (KSh)'];
-        pdfRows = sortedAndFilteredRows.map((r: any) => [
-          r.date, r.po, r.supplier, r.delivery, r.payment, formatKSh(r.cost)
-        ]);
-        break;
       case 'AUDIT':
         pdfHeaders = ['Timestamp', 'User', 'Role', 'System Action Event', 'Value Shift'];
         pdfRows = sortedAndFilteredRows.map((r: any) => [
           `${r.date} ${r.time}`, r.user, r.role.split(' ')[0], r.action, `${r.oldVal} -> ${r.newVal}`
         ]);
         break;
+      default:
+        pdfHeaders = ['Date', 'Report Type', 'Description'];
+        pdfRows = [['Statement', selectedReportType, 'Check secondary subcomponents.']];
     }
 
     // @ts-ignore
@@ -909,16 +603,14 @@ export const ReportsView: React.FC = () => {
       head: [pdfHeaders],
       body: pdfRows,
       theme: 'grid',
-      headStyles: { fillColor: [6, 182, 212] }, // cyan theme colors
+      headStyles: { fillColor: [6, 182, 212] },
       styles: { fontSize: 8, font: 'helvetica' }
     });
 
-    doc.save(`Corporate_Report_${selectedReportType}_${reportPeriod}.pdf`);
+    doc.save(`Enterprise_Report_${selectedReportType}_${reportPeriod}.pdf`);
   };
 
   const handleExportCSV = () => {
-    if (sortedAndFilteredRows.length === 0) return;
-
     let headers: string[] = [];
     let keys: string[] = [];
 
@@ -926,6 +618,10 @@ export const ReportsView: React.FC = () => {
       case 'PL':
         headers = ['Date', 'Ref', 'Type', 'Description', 'Inflow', 'Outflow'];
         keys = ['date', 'ref', 'type', 'desc', 'inflow', 'outflow'];
+        break;
+      case 'EXPENSES':
+        headers = ['Date', 'Category', 'Vendor', 'Staff', 'Branch', 'Amount', 'Status'];
+        keys = ['date', 'category', 'vendor', 'staff', 'branch', 'amount', 'status'];
         break;
       case 'TAX':
         headers = ['Date', 'Invoice', 'Customer', 'PaymentMethod', 'Net Sales', 'VAT', 'Withholding'];
@@ -935,28 +631,24 @@ export const ReportsView: React.FC = () => {
         headers = ['Date', 'Type', 'Method', 'Reference', 'Cash Inflow', 'Cash Outflow'];
         keys = ['date', 'type', 'method', 'ref', 'in', 'out'];
         break;
-      case 'INVENTORY':
-        headers = ['Product Name', 'Category', 'SKU', 'Stock Level', 'Unit Cost', 'Selling Price', 'Asset Valuation'];
-        keys = ['name', 'category', 'sku', 'stock', 'cost', 'price', 'totalCostValue'];
-        break;
-      case 'PROCUREMENT':
-        headers = ['Date', 'PO Order', 'Supplier', 'Delivery Status', 'Payment Status', 'Material Costs'];
-        keys = ['date', 'po', 'supplier', 'delivery', 'payment', 'cost'];
-        break;
       case 'AUDIT':
         headers = ['Date', 'Time', 'User Email', 'Role', 'Action Executed', 'Old Balance', 'New Balance'];
         keys = ['date', 'time', 'user', 'role', 'action', 'oldVal', 'newVal'];
         break;
+      default:
+        headers = ['Column 1'];
+        keys = ['id'];
     }
 
-    // Construct CSV file string
     const csvContent = [
+      `"Registered Business:","${activeBusiness?.name || 'Apex Enterprise'}"`,
+      `"Statement Type:","${selectedReportType.toUpperCase()}"`,
+      `"Date Range:","${reportPeriod} (${periodBounds.start.toLocaleDateString()} - ${periodBounds.end.toLocaleDateString()})"`,
       headers.join(','),
       ...sortedAndFilteredRows.map((r: any) => 
         keys.map(key => {
           let val = r[key];
           if (typeof val === 'string') {
-            // Escape double quotes and surround in quotes
             val = `"${val.replace(/"/g, '""')}"`;
           }
           return val;
@@ -964,51 +656,49 @@ export const ReportsView: React.FC = () => {
       )
     ].join('\n');
 
-    // Generate down anchor
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `Corporate_Report_${selectedReportType}_${reportPeriod}.csv`);
+    link.setAttribute('download', `Enterprise_Report_${selectedReportType}_${reportPeriod}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
     <div className="space-y-6">
       
-      {/* 1. Header ribbon console panel */}
-      <div className="glass-panel p-6 rounded-2xl flex flex-col xl:flex-row items-center justify-between gap-6 border border-brand-border">
+      {/* 1. Header ribbon console panel (Visible on screen, hidden during print) */}
+      <div className="glass-panel p-6 rounded-2xl flex flex-col xl:flex-row items-center justify-between gap-6 border border-brand-border print:hidden">
         <div className="flex items-center gap-4">
           <div className="p-3.5 bg-cyan-500/10 rounded-2xl border border-cyan-500/20 glow-cyan">
             <Scale className="w-7 h-7 text-cyan-400" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-gray-100 font-sans tracking-tight">Reports & Analytics Console</h2>
-            <p className="text-xs text-gray-400 font-mono mt-0.5">Generate financial reports for taxation, auditing, compliance and business intelligence.</p>
+            <h2 className="text-lg font-bold text-gray-100 font-sans tracking-tight">Reports & Business Intelligence Console</h2>
+            <p className="text-xs text-gray-400 font-mono mt-0.5">Generate real-time compliance statements, regional performances, and workforce indexes.</p>
           </div>
         </div>
 
-        {/* Top-Right details */}
+        {/* Live Details Block */}
         <div className="flex flex-wrap items-center gap-3 bg-gray-950/60 border border-brand-border p-3.5 rounded-xl font-mono text-[10px]">
           <div className="flex items-center gap-1.5 border-r border-brand-border/60 pr-3.5">
             <Building className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="text-gray-400">Co:</span>
+            <span className="text-gray-400">Biz:</span>
             <span className="text-gray-100 font-bold capitalize">{activeBusiness?.name || 'Corporate'}</span>
           </div>
           <div className="flex items-center gap-1.5 border-r border-brand-border/60 pr-3.5 px-1.5">
             <Layers className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-gray-400">Workspace:</span>
+            <span className="text-gray-400">HQ/Branch:</span>
             <span className="text-gray-100 font-bold">
               {activeBranchId === 'all' ? 'All Branches' : (branches.find(b => b.id === activeBranchId)?.name || 'HQ')}
             </span>
-          </div>
-          <div className="flex items-center gap-1.5 border-r border-brand-border/60 pr-3.5 px-1.5">
-            <Calendar className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-gray-400">Period:</span>
-            <span className="text-gray-100 font-bold">{reportPeriod}</span>
           </div>
           <div className="flex items-center gap-1.5 px-1.5">
             <Clock className="w-3.5 h-3.5 text-rose-400" />
@@ -1017,101 +707,52 @@ export const ReportsView: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Report Period selector bar */}
-      <div className="glass-panel p-4 rounded-xl border border-brand-border flex flex-col md:flex-row items-center justify-between gap-4">
-        {/* Navigation tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-gray-950 p-1.5 rounded-xl border border-brand-border/60 w-full md:w-auto">
-          {(['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly', 'Custom'] as const).map((period) => (
-            <button
-              key={period}
-              onClick={() => setReportPeriod(period)}
-              className={`flex-1 md:flex-none px-4 py-2 rounded-lg font-mono text-xs transition cursor-pointer select-none ${
-                reportPeriod === period 
-                  ? 'bg-cyan-500/10 text-cyan-400 font-semibold border border-cyan-500/20' 
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-gray-900/40'
-              }`}
-            >
-              {period}
-            </button>
-          ))}
-        </div>
+      {/* 2. Advanced Multi-dimensional Filter Bar (Hidden during print) */}
+      <div className="print:hidden">
+        <ReportFilters
+          reportPeriod={reportPeriod}
+          setReportPeriod={setReportPeriod}
+          customStartDate={customStartDate}
+          setCustomStartDate={setCustomStartDate}
+          customEndDate={customEndDate}
+          setCustomEndDate={setCustomEndDate}
+          
+          filterBranchId={filterBranchId}
+          setFilterBranchId={setFilterBranchId}
+          filterEmployeeId={filterEmployeeId}
+          setFilterEmployeeId={setFilterEmployeeId}
+          filterCustomerId={filterCustomerId}
+          setFilterCustomerId={setFilterCustomerId}
+          filterSupplierName={filterSupplierName}
+          setFilterSupplierName={setFilterSupplierName}
+          filterCategoryName={filterCategoryName}
+          setFilterCategoryName={setFilterCategoryName}
+          filterProductId={filterProductId}
+          setFilterProductId={setFilterProductId}
 
-        {/* Custom date range picker */}
-        {reportPeriod === 'Custom' && (
-          <div className="flex items-center gap-3 w-full md:w-auto justify-end font-mono">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-gray-500">START:</span>
-              <input
-                type="date"
-                value={customStartDate}
-                onChange={(e) => setCustomStartDate(e.target.value)}
-                className="bg-gray-950 border border-brand-border rounded-lg text-[11px] p-2 text-gray-300 outline-none focus:border-cyan-500/30"
-              />
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-gray-500">END:</span>
-              <input
-                type="date"
-                value={customEndDate}
-                onChange={(e) => setCustomEndDate(e.target.value)}
-                className="bg-gray-950 border border-brand-border rounded-lg text-[11px] p-2 text-gray-300 outline-none focus:border-cyan-500/30"
-              />
-            </div>
-          </div>
-        )}
+          branches={branches}
+          employees={profiles}
+          customers={customers}
+          suppliers={uniqueSuppliers}
+          categories={uniqueCategories}
+          products={products}
+          onReset={handleResetFilters}
+        />
       </div>
 
-      {/* 3. Six Report Type Selection Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      {/* 3. Ten Report Tab Selection Cards Grid (Hidden during print) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 print:hidden">
         {[
-          {
-            type: 'PL',
-            title: 'Profit & Loss',
-            desc: 'Operating net margins & margins sheet',
-            icon: TrendingUp,
-            badge: formatKSh(plData.netProfit),
-            color: plData.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'
-          },
-          {
-            type: 'TAX',
-            title: 'Tax Liability',
-            desc: 'Accrued VAT & compliance withholdings',
-            icon: Scale,
-            badge: formatKSh(taxData.totalTaxLiability),
-            color: 'text-rose-400/85'
-          },
-          {
-            type: 'CASHFLOW',
-            title: 'Cash Flow',
-            desc: 'Cash drawer flows vs bank wires',
-            icon: DollarSign,
-            badge: formatKSh(cashFlowData.netCashPosition),
-            color: 'text-cyan-400'
-          },
-          {
-            type: 'INVENTORY',
-            title: 'Inventory Valuation',
-            desc: 'Asset value and stock liabilities',
-            icon: Layers,
-            badge: formatKSh(inventoryData.wholesaleAssetValue),
-            color: 'text-amber-400'
-          },
-          {
-            type: 'PROCUREMENT',
-            title: 'Procurement Audit',
-            desc: 'Supplier POs spend & payouts due',
-            icon: ClipboardList,
-            badge: formatKSh(procurementData.totalProcurementSpend),
-            color: 'text-violet-400'
-          },
-          {
-            type: 'AUDIT',
-            title: 'System Audit',
-            desc: 'Compliance security access log trace',
-            icon: ShieldCheck,
-            badge: `${auditData.totalLogs} Logs`,
-            color: 'text-sky-400'
-          }
+          { type: 'PL', title: 'Profit & Loss', desc: 'Direct Net Margins Sheet', icon: TrendingUp, badge: formatKSh(plData.netProfit), color: plData.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400' },
+          { type: 'BRANCH', title: 'Branch Compare', desc: 'HQ vs Regional Performance', icon: Building, badge: `${branches.length} Branches`, color: 'text-cyan-400' },
+          { type: 'EXPENSES', title: 'OPEX Analysis', desc: 'Operating Claims Auditing', icon: Wallet, badge: formatKSh(plData.totalOperatingExpenses), color: 'text-rose-400' },
+          { type: 'PRODUCTS', title: 'Product Velocity', desc: 'Top & Slow Inventory Lines', icon: Tag, badge: `${products.length} Products`, color: 'text-sky-400' },
+          { type: 'CUSTOMERS', title: 'Loyalty Metrics', desc: 'Spenders & Balances Ledger', icon: Users, badge: `${customers.length} Buyers`, color: 'text-emerald-400' },
+          { type: 'EMPLOYEES', title: 'Workforce Score', desc: 'Clock-in Workhours & Sales', icon: Award, badge: `${profiles.length} Staff`, color: 'text-amber-400' },
+          { type: 'INVENTORY', title: 'Stock Movement', desc: 'Audit Adjustments Ledger', icon: Layers, badge: 'Stock Ledger', color: 'text-cyan-400' },
+          { type: 'TAX', title: 'Tax & VAT', desc: 'Direct Indirect Accrued Tax', icon: Scale, badge: formatKSh(taxData.totalTaxLiability), color: 'text-rose-400/85' },
+          { type: 'CASHFLOW', title: 'Cash Flow', desc: 'Liquidity Drawer Statement', icon: DollarSign, badge: formatKSh(cashFlowData.netCashPosition), color: 'text-cyan-400' },
+          { type: 'AUDIT', title: 'System Auditing', desc: 'Access Event Security Logs', icon: ShieldCheck, badge: `${auditLogsSummary.totalLogs} Logs`, color: 'text-sky-400' }
         ].map((rep) => {
           const isActive = selectedReportType === rep.type;
           const Icon = rep.icon;
@@ -1123,25 +764,24 @@ export const ReportsView: React.FC = () => {
                 setSearchTerm('');
                 setSortField('');
               }}
-              className={`glass-panel p-5 rounded-2xl border text-left flex flex-col justify-between h-[160px] transition duration-200 cursor-pointer ${
+              className={`glass-panel p-4 rounded-xl border text-left flex flex-col justify-between h-[125px] transition duration-200 cursor-pointer ${
                 isActive 
                   ? 'border-cyan-500 bg-cyan-950/20 shadow-lg shadow-cyan-950/40 translate-y-[-2px]' 
                   : 'border-brand-border hover:border-gray-700 hover:bg-gray-900/20'
               }`}
             >
               <div className="flex justify-between items-start w-full">
-                <div className={`p-2.5 rounded-xl ${isActive ? 'bg-cyan-500/20' : 'bg-gray-900/60'} border border-brand-border`}>
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-cyan-400' : 'text-gray-400'}`} />
+                <div className={`p-1.5 rounded-lg ${isActive ? 'bg-cyan-500/20' : 'bg-gray-900/60'} border border-brand-border`}>
+                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-cyan-400' : 'text-gray-400'}`} />
                 </div>
-                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${isActive ? 'bg-cyan-500/10 text-cyan-400' : 'bg-gray-950 text-gray-500'}`}>
+                <span className={`text-[8px] font-mono font-bold px-1 py-0.5 rounded ${isActive ? 'bg-cyan-500/10 text-cyan-400' : 'bg-gray-950 text-gray-500'}`}>
                   {rep.type}
                 </span>
               </div>
               
-              <div className="mt-4">
-                <h4 className="text-xs font-bold text-gray-200 font-sans tracking-wide">{rep.title}</h4>
-                <p className="text-[10px] text-gray-500 font-mono leading-tight mt-0.5">{rep.desc}</p>
-                <div className={`text-[11px] font-mono font-semibold mt-2 ${rep.color}`}>
+              <div className="mt-2">
+                <h4 className="text-[11px] font-bold text-gray-200 font-sans tracking-tight line-clamp-1">{rep.title}</h4>
+                <div className={`text-[10px] font-mono font-semibold mt-1 ${rep.color}`}>
                   {rep.badge}
                 </div>
               </div>
@@ -1150,53 +790,80 @@ export const ReportsView: React.FC = () => {
         })}
       </div>
 
-      {/* 4. Interactive Report Panel */}
-      <div className="glass-panel rounded-2xl border border-brand-border overflow-hidden">
+      {/* 4. Active Report Presentation Container */}
+      <div className="glass-panel rounded-2xl border border-brand-border overflow-hidden print:border-none print:shadow-none print:bg-white print:text-black">
         
+        {/* Hidden Business Header for Browser Printing */}
+        <div className="hidden print:flex flex-col border-b-2 border-slate-900 pb-4 mb-6 text-left">
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-slate-950 uppercase tracking-tight">{activeBusiness?.name || 'Apex Ledger Corporate'}</h1>
+            <span className="text-xs font-mono border border-slate-900 px-2 py-1 uppercase font-bold">Official Business Audit</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs font-mono mt-3 text-slate-700">
+            <div>Report Module: <span className="font-bold text-slate-950">{selectedReportType.toUpperCase()} Statement</span></div>
+            <div>Date Range: <span className="font-bold text-slate-950">{reportPeriod} ({periodBounds.start.toLocaleDateString()} - {periodBounds.end.toLocaleDateString()})</span></div>
+            <div>Branch HQ: <span className="font-bold text-slate-950">{activeBranchId === 'all' ? 'All active locations' : (branches.find(b => b.id === activeBranchId)?.name || 'Main HQ')}</span></div>
+            <div>Printed At: <span className="font-bold text-slate-950">{new Date().toLocaleString()}</span></div>
+          </div>
+        </div>
+
         {/* Tab header / title */}
-        <div className="p-6 border-b border-brand-border flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-gray-950/40">
+        <div className="p-6 border-b border-brand-border flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-gray-950/40 print:hidden">
           <div>
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 animate-pulse" />
               <h3 className="text-sm font-bold text-gray-200 font-mono tracking-wider uppercase">
                 {selectedReportType === 'PL' && 'PROFIT & LOSS (P&L) STATEMENT'}
-                {selectedReportType === 'TAX' && 'TAX COMPLIANCE & VAT LIABILITY STATEMENT'}
-                {selectedReportType === 'CASHFLOW' && 'CASH FLOW STATEMENT (DRAWER STATEMENT)'}
-                {selectedReportType === 'INVENTORY' && 'INVENTORY AUDIT & CAPITAL ASSETS VALUE'}
-                {selectedReportType === 'PROCUREMENT' && 'SUPPLIER PROCUREMENT & PURCHASE ORDERS'}
-                {selectedReportType === 'AUDIT' && 'SYSTEM AUDIT & COMPLIANCE ACCESS LOGS'}
+                {selectedReportType === 'BRANCH' && 'BRANCH COMPARATIVE ANALYTICS'}
+                {selectedReportType === 'EXPENSES' && 'OPERATIONAL EXPENSES DISTRIBUTION'}
+                {selectedReportType === 'PRODUCTS' && 'PRODUCT VELOCITY & SALES RANKINGS'}
+                {selectedReportType === 'CUSTOMERS' && 'CLIENT DIRECTORY & LOYALTY PROFILE'}
+                {selectedReportType === 'EMPLOYEES' && 'WORKFORCE HOURS & SALES PERFORMANCE'}
+                {selectedReportType === 'INVENTORY' && 'INVENTORY MOVEMENTS & CAPITAL VALUES'}
+                {selectedReportType === 'TAX' && 'TAX COMPLIANCE & ACCRUED VAT STATEMENT'}
+                {selectedReportType === 'CASHFLOW' && 'CASH FLOW POSITION & LIQUIDITY STATEMENT'}
+                {selectedReportType === 'AUDIT' && 'SYSTEM AUDITING COMPLIANCE SECURITY TRACE'}
               </h3>
             </div>
             <p className="text-[11px] text-gray-400 font-mono mt-1.5">
-              Live statement generated from matching ledger rows isolated for the active workspace.
+              Accurate corporate statement isolated for the active tenant workspace.
             </p>
           </div>
 
+          {/* Action buttons (Print and Export) */}
           <div className="flex items-center gap-2">
+            <button
+              onClick={handlePrint}
+              className="px-3.5 py-2 bg-gray-900 hover:bg-gray-800 border border-brand-border text-gray-300 hover:text-cyan-400 rounded-xl transition font-mono text-xs flex items-center gap-2 cursor-pointer"
+              title="Print Report with Official Headers"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print Ledger</span>
+            </button>
             <button
               onClick={handleExportPDF}
               className="px-3.5 py-2 bg-gray-900 hover:bg-gray-800 border border-brand-border text-gray-300 hover:text-cyan-400 rounded-xl transition font-mono text-xs flex items-center gap-2 cursor-pointer"
               title="Export Statement as PDF"
             >
-              <Printer className="w-3.5 h-3.5" />
+              <FileDown className="w-3.5 h-3.5" />
               <span>PDF Export</span>
             </button>
             <button
               onClick={handleExportCSV}
               className="px-3.5 py-2 bg-gray-900 hover:bg-gray-800 border border-brand-border text-gray-300 hover:text-cyan-400 rounded-xl transition font-mono text-xs flex items-center gap-2 cursor-pointer"
-              title="Export Ledger as CSV Sheet"
+              title="Export Ledger as CSV Spreadsheet"
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>CSV Spreadsheet</span>
+              <span>Excel/CSV</span>
             </button>
           </div>
         </div>
 
-        {/* 5. Dynamic Smart KPIs specific to selected report */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border-b border-brand-border divide-y sm:divide-y-0 sm:divide-x divide-brand-border/60 bg-gray-950/25">
-          
-          {selectedReportType === 'PL' && (
-            <>
+        {/* 5. Dynamic Report Renders */}
+        {selectedReportType === 'PL' && (
+          <>
+            {/* P&L KPI Blocks */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border-b border-brand-border divide-y sm:divide-y-0 sm:divide-x divide-brand-border/60 bg-gray-950/25">
               <div className="p-5 font-mono">
                 <span className="text-[9px] text-gray-500 uppercase tracking-wider block">GROSS SALES VOLUME</span>
                 <span className="text-xl font-bold text-cyan-400 mt-1 block">{formatKSh(plData.grossRevenue)}</span>
@@ -1205,435 +872,486 @@ export const ReportsView: React.FC = () => {
               <div className="p-5 font-mono">
                 <span className="text-[9px] text-gray-500 uppercase tracking-wider block">COST OF GOODS SOLD (COGS)</span>
                 <span className="text-xl font-bold text-gray-300 mt-1 block">{formatKSh(plData.totalCOGS)}</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Estimates based on buying price</span>
+                <span className="text-[10px] text-gray-400 block mt-1">Based on exact inventory buying costs</span>
               </div>
               <div className="p-5 font-mono">
                 <span className="text-[9px] text-gray-500 uppercase tracking-wider block">OPERATING EXPENSES (OPEX)</span>
                 <span className="text-xl font-bold text-rose-400 mt-1 block">{formatKSh(plData.totalOperatingExpenses)}</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Registered cash claims</span>
+                <span className="text-[10px] text-gray-400 block mt-1">Operational expense claims</span>
               </div>
               <div className="p-5 font-mono">
-                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">NET EARNINGS</span>
+                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">NET CORPORATE MARGINS</span>
                 <span className={`text-xl font-bold mt-1 block ${plData.netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatKSh(plData.netProfit)}</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Profit Margin: {plData.netProfitMargin.toFixed(1)}%</span>
+                <span className="text-[10px] text-gray-400 block mt-1">Net Margin: {plData.netProfitMargin.toFixed(1)}%</span>
               </div>
-            </>
-          )}
+            </div>
 
-          {selectedReportType === 'TAX' && (
-            <>
+            {/* P&L Comparative Area Chart */}
+            <div className="p-6 border-b border-brand-border print:hidden">
+              <div className="mb-4">
+                <h4 className="text-xs font-semibold text-gray-200 font-sans">Business Revenue Growth Trends</h4>
+                <p className="text-[10px] text-gray-500 font-mono mt-0.5">Chronological revenue streams matched with opex claims over the current dates.</p>
+              </div>
+
+              <div className="h-[280px] w-full bg-gray-950/20 p-2 rounded-xl border border-brand-border/40">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.25}/>
+                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorExp" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.25}/>
+                        <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
+                    <XAxis dataKey="name" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
+                    <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
+                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }} />
+                    <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace' }} />
+                    <Area type="monotone" name="Inflow Revenue" dataKey="Revenue" stroke="#06b6d4" strokeWidth={2} fill="url(#colorRev)" />
+                    <Area type="monotone" name="OPEX Outflow" dataKey="Expenses" stroke="#f43f5e" strokeWidth={2} fill="url(#colorExp)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </>
+        )}
+
+        {selectedReportType === 'BRANCH' && (
+          <BranchComparisonSection 
+            sales={filteredSales} 
+            expenses={filteredExpenses} 
+            branches={branches} 
+            formatKSh={formatKSh} 
+          />
+        )}
+
+        {selectedReportType === 'PRODUCTS' && (
+          <ProductPerformanceSection 
+            sales={filteredSales} 
+            products={products} 
+            formatKSh={formatKSh} 
+          />
+        )}
+
+        {selectedReportType === 'CUSTOMERS' && (
+          <CustomerPerformanceSection 
+            sales={filteredSales} 
+            customers={customers} 
+            debts={debts} 
+            formatKSh={formatKSh} 
+          />
+        )}
+
+        {selectedReportType === 'EMPLOYEES' && (
+          <EmployeePerformanceSection 
+            sales={filteredSales} 
+            employees={profiles} 
+            timelogs={timelogs} 
+            tasks={tasks} 
+            formatKSh={formatKSh} 
+          />
+        )}
+
+        {selectedReportType === 'INVENTORY' && (
+          <InventoryPerformanceSection 
+            products={products} 
+            formatKSh={formatKSh} 
+          />
+        )}
+
+        {selectedReportType === 'EXPENSES' && (
+          <>
+            {/* Expense KPI block row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border-b border-brand-border divide-y sm:divide-y-0 sm:divide-x divide-brand-border/60 bg-gray-950/25">
+              <div className="p-5 font-mono">
+                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">AGGREGATE EXPENSES SUM</span>
+                <span className="text-xl font-bold text-rose-400 mt-1 block">{formatKSh(plData.totalOperatingExpenses)}</span>
+                <span className="text-[10px] text-gray-400 block mt-1">Total operating capital spent</span>
+              </div>
+              <div className="p-5 font-mono">
+                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">MAX SINGLE CLAIM AMOUNT</span>
+                <span className="text-xl font-bold text-gray-300 mt-1 block">
+                  {formatKSh(Math.max(...filteredExpenses.map(e => e.amount), 0))}
+                </span>
+                <span className="text-[10px] text-gray-400 block mt-1">Highest operating expense receipt</span>
+              </div>
+              <div className="p-5 font-mono">
+                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">TOTAL EXPENSE CLAIMS</span>
+                <span className="text-xl font-bold text-cyan-400 mt-1 block">{filteredExpenses.length} Claims</span>
+                <span className="text-[10px] text-gray-400 block mt-1">Receipt files registered in workspace</span>
+              </div>
+              <div className="p-5 font-mono">
+                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">PENDING REVIEW CLAIMS</span>
+                <span className="text-xl font-bold text-amber-500 mt-1 block">
+                  {filteredExpenses.filter(e => e.status && e.status !== 'Approved').length} Items
+                </span>
+                <span className="text-[10px] text-gray-400 block mt-1">Requires manager workspace approval</span>
+              </div>
+            </div>
+
+            {/* Expense Pie Chart */}
+            <div className="p-6 border-b border-brand-border print:hidden grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold text-gray-200 font-sans font-bold">Operating Expense Category Split</h4>
+                <p className="text-[10px] text-gray-500 font-mono">Visual representation of corporate funds allocated to different categories.</p>
+              </div>
+
+              <div className="h-[220px] w-full flex items-center justify-center">
+                {filteredExpenses.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={Object.entries(
+                          filteredExpenses.reduce((acc, curr) => {
+                            acc[curr.category] = (acc[curr.category] || 0) + curr.amount;
+                            return acc;
+                          }, {} as Record<string, number>)
+                        ).map(([name, value]) => ({ name, value }))}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={70}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {filteredExpenses.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={['#f43f5e', '#06b6d4', '#10b981', '#f59e0b', '#8b5cf6'][index % 5]} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="text-gray-500 font-mono text-xs">No expense logs registered.</div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
+        {selectedReportType === 'TAX' && (
+          <>
+            {/* Tax KPI grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border-b border-brand-border divide-y sm:divide-y-0 sm:divide-x divide-brand-border/60 bg-gray-950/25">
               <div className="p-5 font-mono">
                 <span className="text-[9px] text-gray-500 uppercase tracking-wider block">TAXABLE SALES VOLUME</span>
                 <span className="text-xl font-bold text-gray-200 mt-1 block">{formatKSh(taxData.taxableSalesVolume)}</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Total revenue base</span>
+                <span className="text-[10px] text-gray-400 block mt-1">VAT calculated base sales</span>
               </div>
               <div className="p-5 font-mono">
                 <span className="text-[9px] text-gray-500 uppercase tracking-wider block">VAT COLLECTED (16%)</span>
                 <span className="text-xl font-bold text-cyan-400 mt-1 block">{formatKSh(taxData.vatCollected)}</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Indirect sales tax liabilities</span>
+                <span className="text-[10px] text-gray-400 block mt-1">Indirect tax liabilities collected</span>
               </div>
               <div className="p-5 font-mono">
                 <span className="text-[9px] text-gray-500 uppercase tracking-wider block">WITHHOLDING TAX (2%)</span>
                 <span className="text-xl font-bold text-amber-400 mt-1 block">{formatKSh(taxData.withholdingTaxEstimate)}</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Corporate audit withholding</span>
+                <span className="text-[10px] text-gray-400 block mt-1">Accrued audit withholdings</span>
               </div>
               <div className="p-5 font-mono">
                 <span className="text-[9px] text-gray-500 uppercase tracking-wider block">TOTAL COMPLIANCE TAXES</span>
                 <span className="text-xl font-bold text-rose-400 mt-1 block">{formatKSh(taxData.totalTaxLiability)}</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Total accrued tax exposure</span>
+                <span className="text-[10px] text-gray-400 block mt-1">Accrued government duty exposure</span>
               </div>
-            </>
-          )}
+            </div>
 
-          {selectedReportType === 'CASHFLOW' && (
-            <>
+            {/* Tax stacked bar chart */}
+            <div className="p-6 border-b border-brand-border print:hidden">
+              <div className="mb-4">
+                <h4 className="text-xs font-semibold text-gray-200 font-sans">VAT Compliance and Withholding Taxes</h4>
+                <p className="text-[10px] text-gray-500 font-mono">VAT (16%) & Withholding (2%) collected totals from invoice files.</p>
+              </div>
+
+              <div className="h-[250px] w-full bg-gray-950/20 p-2 rounded-xl border border-brand-border/40">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
+                    <XAxis dataKey="name" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
+                    <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
+                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }} />
+                    <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace' }} />
+                    <Bar name="VAT Accrued Collected" dataKey="VAT" fill="#06b6d4" stackId="a" radius={[4, 4, 0, 0]} />
+                    <Bar name="Withholding Tax Estimate" dataKey="Withholding" fill="#f59e0b" stackId="a" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </>
+        )}
+
+        {selectedReportType === 'CASHFLOW' && (
+          <>
+            {/* Cashflow KPI grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border-b border-brand-border divide-y sm:divide-y-0 sm:divide-x divide-brand-border/60 bg-gray-950/25">
               <div className="p-5 font-mono">
                 <span className="text-[9px] text-gray-500 uppercase tracking-wider block">TOTAL CASH INFLOWS</span>
                 <span className="text-xl font-bold text-cyan-400 mt-1 block">{formatKSh(cashFlowData.totalInflow)}</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Recovered Debts: {formatKSh(cashFlowData.debtRecoveries)}</span>
+                <span className="text-[10px] text-gray-400 block mt-1">Sales checkouts + Debt payments</span>
               </div>
               <div className="p-5 font-mono">
                 <span className="text-[9px] text-gray-500 uppercase tracking-wider block">TOTAL OPERATING OUTFLOWS</span>
                 <span className="text-xl font-bold text-rose-400 mt-1 block">{formatKSh(cashFlowData.totalOutflow)}</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Procurement payouts: {formatKSh(cashFlowData.procurementOutflow)}</span>
+                <span className="text-[10px] text-gray-400 block mt-1">Opex + Paid suppliers</span>
               </div>
               <div className="p-5 font-mono">
                 <span className="text-[9px] text-gray-500 uppercase tracking-wider block">CASH VS MOBILE SALES</span>
                 <span className="text-xl font-bold text-gray-200 mt-1 block">{formatKSh(cashFlowData.cashSalesInflow)}</span>
-                <span className="text-[10px] text-gray-400 block mt-1">M-Pesa/Mobile In: {formatKSh(cashFlowData.mobileMoneyInflow)}</span>
+                <span className="text-[10px] text-gray-400 block mt-1">Mobile Money (M-Pesa): {formatKSh(cashFlowData.mobileMoneyInflow)}</span>
               </div>
               <div className="p-5 font-mono">
-                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">NET CASH FLOW POSITION</span>
+                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">NET LIQUIDITY SURPLUS</span>
                 <span className={`text-xl font-bold mt-1 block ${cashFlowData.netCashPosition >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatKSh(cashFlowData.netCashPosition)}</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Net surplus cash position</span>
+                <span className="text-[10px] text-gray-400 block mt-1">Operating surplus cash status</span>
               </div>
-            </>
-          )}
+            </div>
 
-          {selectedReportType === 'INVENTORY' && (
-            <>
-              <div className="p-5 font-mono">
-                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">WHOLESALE ASSETS VALUE</span>
-                <span className="text-xl font-bold text-cyan-400 mt-1 block">{formatKSh(inventoryData.wholesaleAssetValue)}</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Capital tied in inventory cost</span>
+            {/* Cashflow comparative visual */}
+            <div className="p-6 border-b border-brand-border print:hidden">
+              <div className="mb-4">
+                <h4 className="text-xs font-semibold text-gray-200 font-sans font-bold">Liquid Funds Cashflow Velocity</h4>
+                <p className="text-[10px] text-gray-500 font-mono">Cash drawer inflows versus operating outflows over current calendar dates.</p>
               </div>
-              <div className="p-5 font-mono">
-                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">ESTIMATED RETAIL VALUE</span>
-                <span className="text-xl font-bold text-gray-200 mt-1 block">{formatKSh(inventoryData.potentialRetailValue)}</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Estimated unrealized markup: {inventoryData.estimatedUnrealizedMargin.toFixed(1)}%</span>
-              </div>
-              <div className="p-5 font-mono">
-                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">LOW STOCK COST EXPOSURE</span>
-                <span className="text-xl font-bold text-amber-400 mt-1 block">{formatKSh(inventoryData.lowStockCapitalExposure)}</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Low-stock lines: {inventoryData.lowStockCount} lines</span>
-              </div>
-              <div className="p-5 font-mono">
-                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">PRODUCTS IN SYSTEM</span>
-                <span className="text-xl font-bold text-gray-300 mt-1 block">{inventoryData.totalProducts} Products</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Out of stock count: {inventoryData.outOfStockCount} lines</span>
-              </div>
-            </>
-          )}
 
-          {selectedReportType === 'PROCUREMENT' && (
-            <>
-              <div className="p-5 font-mono">
-                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">PROCUREMENT TOTAL SPEND</span>
-                <span className="text-xl font-bold text-violet-400 mt-1 block">{formatKSh(procurementData.totalProcurementSpend)}</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Spend isolated within period</span>
+              <div className="h-[250px] w-full bg-gray-950/20 p-2 rounded-xl border border-brand-border/40">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
+                    <XAxis dataKey="name" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
+                    <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
+                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }} />
+                    <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace' }} />
+                    <Bar name="Total Drawer Inflow" dataKey="Inflow" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    <Bar name="Total Outflows" dataKey="Outflow" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
-              <div className="p-5 font-mono">
-                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">ACCOUNTS PAYABLE DUE</span>
-                <span className="text-xl font-bold text-amber-400 mt-1 block">{formatKSh(procurementData.outstandingPayable)}</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Estimated unpaid PO balances</span>
-              </div>
-              <div className="p-5 font-mono">
-                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">ACTIVE SUPPLIERS</span>
-                <span className="text-xl font-bold text-gray-200 mt-1 block">{procurementData.uniqueSuppliers} Companies</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Supplier vendors engaged</span>
-              </div>
-              <div className="p-5 font-mono">
-                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">PENDING SHIPMENTS PO</span>
-                <span className="text-xl font-bold text-cyan-400 mt-1 block">{procurementData.pendingDeliveryCount} POs</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Open/unfulfilled orders</span>
-              </div>
-            </>
-          )}
+            </div>
+          </>
+        )}
 
-          {selectedReportType === 'AUDIT' && (
-            <>
+        {selectedReportType === 'AUDIT' && (
+          <>
+            {/* Audit KPI Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border-b border-brand-border divide-y sm:divide-y-0 sm:divide-x divide-brand-border/60 bg-gray-950/25">
               <div className="p-5 font-mono">
                 <span className="text-[9px] text-gray-500 uppercase tracking-wider block">TOTAL COMPLIANCE LOGS</span>
-                <span className="text-xl font-bold text-sky-400 mt-1 block">{auditData.totalLogs} Logs</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Events captured in range</span>
+                <span className="text-xl font-bold text-sky-400 mt-1 block">{auditLogsSummary.totalLogs} Logs</span>
+                <span className="text-[10px] text-gray-400 block mt-1">Actions captured in active range</span>
               </div>
               <div className="p-5 font-mono">
-                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">ADMIN LEVEL ACTIONS</span>
-                <span className="text-xl font-bold text-cyan-400 mt-1 block">{auditData.adminActionCount} Actions</span>
-                <span className="text-[10px] text-gray-400 block mt-1">High authority changes logged</span>
+                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">ADMIN LEVEL PRIVILEGES</span>
+                <span className="text-xl font-bold text-cyan-400 mt-1 block">{auditLogsSummary.adminActionCount} Actions</span>
+                <span className="text-[10px] text-gray-400 block mt-1">High-privileged changes logged</span>
               </div>
               <div className="p-5 font-mono">
-                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">CRITICAL ADJUSTMENTS</span>
-                <span className="text-xl font-bold text-rose-400 mt-1 block">{auditData.criticalAdjustments} adjustments</span>
-                <span className="text-[10px] text-gray-400 block mt-1">System deletions or reversions</span>
+                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">CRITICAL REVISIONS</span>
+                <span className="text-xl font-bold text-rose-400 mt-1 block">{auditLogsSummary.criticalAdjustments} Revisions</span>
+                <span className="text-[10px] text-gray-400 block mt-1">Deletions or stock audit overrides</span>
               </div>
               <div className="p-5 font-mono">
-                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">STAFF USERS ENGAGED</span>
-                <span className="text-xl font-bold text-gray-200 mt-1 block">{auditData.activeStaffUsersCount} Users</span>
-                <span className="text-[10px] text-gray-400 block mt-1">Unique session logins</span>
+                <span className="text-[9px] text-gray-500 uppercase tracking-wider block">STAFF USERS LOGGED</span>
+                <span className="text-xl font-bold text-gray-200 mt-1 block">{auditLogsSummary.activeStaffUsersCount} Users</span>
+                <span className="text-[10px] text-gray-400 block mt-1">Unique cashier session logins</span>
               </div>
-            </>
-          )}
-
-        </div>
-
-        {/* 6. Dynamic Comparative Graphs Area */}
-        <div className="p-6 border-b border-brand-border">
-          <div className="mb-4">
-            <h4 className="text-xs font-semibold text-gray-200 font-sans">Comparative Analytics Trend Line</h4>
-            <span className="text-[10px] text-gray-500 font-mono">Visual flows representing records within the isolated reporting period.</span>
-          </div>
-
-          <div className="h-[280px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              {selectedReportType === 'PL' ? (
-                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.25}/>
-                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorExp" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.25}/>
-                      <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorProf" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.25}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
-                  <XAxis dataKey="name" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                  <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }} />
-                  <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace' }} />
-                  <Area type="monotone" name="Sales Revenue" dataKey="Revenue" stroke="#06b6d4" strokeWidth={2} fill="url(#colorRev)" />
-                  <Area type="monotone" name="OPEX Expenses" dataKey="Expenses" stroke="#f43f5e" strokeWidth={2} fill="url(#colorExp)" />
-                  <Area type="monotone" name="Net Margin Profit" dataKey="Profit" stroke="#10b981" strokeWidth={2} fill="url(#colorProf)" />
-                </AreaChart>
-              ) : selectedReportType === 'TAX' ? (
-                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
-                  <XAxis dataKey="name" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                  <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }} />
-                  <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace' }} />
-                  <Bar name="VAT Accrued Collected" dataKey="VAT" fill="#06b6d4" radius={[4, 4, 0, 0]} />
-                  <Bar name="Withholding Tax Estimate" dataKey="Withholding" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              ) : selectedReportType === 'CASHFLOW' ? (
-                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
-                  <XAxis dataKey="name" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                  <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }} />
-                  <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace' }} />
-                  <Bar name="Cash Inflows" dataKey="Inflow" fill="#10b981" radius={[4, 4, 0, 0]} />
-                  <Bar name="Operating Outflows" dataKey="Outflow" fill="#f43f5e" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              ) : selectedReportType === 'INVENTORY' ? (
-                <BarChart data={chartData} layout="vertical" margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
-                  <XAxis type="number" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                  <YAxis dataKey="name" type="category" stroke="#6b7280" fontSize={9} fontClassName="font-sans" width={90} />
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }} />
-                  <Bar name="Inventory Assets Valuation" dataKey="Value" fill="#f59e0b" radius={[0, 4, 4, 0]}>
-                    {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={['#06b6d4', '#10b981', '#f59e0b', '#8b5cf6', '#3b82f6'][index % 5]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              ) : selectedReportType === 'PROCUREMENT' ? (
-                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
-                  <XAxis dataKey="name" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                  <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }} />
-                  <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace' }} />
-                  <Bar name="PO Spending Costs" dataKey="Costs" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              ) : (
-                <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
-                  <XAxis dataKey="name" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                  <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }} />
-                  <Line type="monotone" name="System Events Frequency" dataKey="Actions" stroke="#0ea5e9" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                </LineChart>
-              )}
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* 7. Search & Tabular Ledger Breakdown */}
-        <div className="p-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-5">
-            <div className="relative w-full sm:w-80">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
-                <Search className="w-4 h-4 text-gray-500" />
-              </span>
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search matching ledger rows..."
-                className="w-full pl-10 pr-4 py-2 bg-gray-950 border border-brand-border rounded-xl text-xs text-gray-200 placeholder:text-gray-600 outline-none focus:border-cyan-500/40 transition"
-              />
             </div>
-            <span className="text-[10px] text-gray-500 font-mono">
-              Displaying {sortedAndFilteredRows.length} of {rawTableRows.length} matching rows
-            </span>
-          </div>
 
-          <div className="overflow-x-auto border border-brand-border rounded-2xl">
-            <table className="w-full text-left border-collapse font-mono text-[11px] text-gray-300">
-              <thead>
-                <tr className="bg-gray-950 text-gray-400 border-b border-brand-border text-[9px] uppercase tracking-wider select-none">
-                  {selectedReportType === 'PL' && (
-                    <>
-                      <th className="p-4 cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('date')}>Date</th>
-                      <th className="p-4 cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('ref')}>Reference</th>
-                      <th className="p-4 cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('type')}>Type</th>
-                      <th className="p-4">Description</th>
-                      <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('inflow')}>Inflow</th>
-                      <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('outflow')}>Outflow</th>
-                    </>
-                  )}
-                  {selectedReportType === 'TAX' && (
-                    <>
-                      <th className="p-4 cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('date')}>Date</th>
-                      <th className="p-4 cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('invoice')}>Invoice</th>
-                      <th className="p-4">Customer</th>
-                      <th className="p-4">Method</th>
-                      <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('total')}>Sales Volume</th>
-                      <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('tax')}>VAT (16%)</th>
-                      <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('withholding')}>Est. WHT (2%)</th>
-                    </>
-                  )}
-                  {selectedReportType === 'CASHFLOW' && (
-                    <>
-                      <th className="p-4 cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('date')}>Date</th>
-                      <th className="p-4">Type</th>
-                      <th className="p-4">Method</th>
-                      <th className="p-4">Ref Number</th>
-                      <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('in')}>Cash In</th>
-                      <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('out')}>Cash Out</th>
-                    </>
-                  )}
-                  {selectedReportType === 'INVENTORY' && (
-                    <>
-                      <th className="p-4 cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('name')}>Product Item</th>
-                      <th className="p-4">Category</th>
-                      <th className="p-4">SKU Code</th>
-                      <th className="p-4 text-center cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('stock')}>In Stock</th>
-                      <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('cost')}>Cost Price</th>
-                      <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('price')}>Retail Price</th>
-                      <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('totalCostValue')}>Total Value (At Cost)</th>
-                    </>
-                  )}
-                  {selectedReportType === 'PROCUREMENT' && (
-                    <>
-                      <th className="p-4 cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('date')}>Date</th>
-                      <th className="p-4">PO Number</th>
-                      <th className="p-4">Supplier</th>
-                      <th className="p-4">Delivery</th>
-                      <th className="p-4">Payment</th>
-                      <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('cost')}>Spend Value</th>
-                    </>
-                  )}
-                  {selectedReportType === 'AUDIT' && (
-                    <>
-                      <th className="p-4 cursor-pointer hover:bg-gray-900/60 transition" onClick={() => handleSort('date')}>Timestamp</th>
-                      <th className="p-4">User</th>
-                      <th className="p-4">Role</th>
-                      <th className="p-4">Event Details</th>
-                      <th className="p-4">Old Shift State</th>
-                      <th className="p-4">New Shift State</th>
-                    </>
-                  )}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-brand-border/60">
-                {sortedAndFilteredRows.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} className="text-gray-500 text-center py-10">No matching record ledger files in this view.</td>
+            {/* Audit frequency line chart */}
+            <div className="p-6 border-b border-brand-border print:hidden">
+              <div className="mb-4">
+                <h4 className="text-xs font-semibold text-gray-200 font-sans font-bold">Chronological Activity Trace Frequency</h4>
+                <p className="text-[10px] text-gray-500 font-mono">Audit log events frequency across business calendar dates.</p>
+              </div>
+
+              <div className="h-[250px] w-full bg-gray-950/20 p-2 rounded-xl border border-brand-border/40">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
+                    <XAxis dataKey="name" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
+                    <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
+                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }} />
+                    <Line type="monotone" name="Logged System Events" dataKey="Actions" stroke="#0ea5e9" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* 6. Dynamic Table Search & Lists (For P&L, Tax, Cashflow, Expenses and Audit) */}
+        {['PL', 'TAX', 'CASHFLOW', 'EXPENSES', 'AUDIT'].includes(selectedReportType) && (
+          <div className="p-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-5 print:hidden">
+              <div className="relative w-full sm:w-80">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                  <Search className="w-4 h-4 text-gray-500" />
+                </span>
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search matching statement entries..."
+                  className="w-full pl-10 pr-4 py-2 bg-gray-950 border border-brand-border rounded-xl text-xs text-gray-200 placeholder:text-gray-600 outline-none focus:border-cyan-500/40 transition"
+                />
+              </div>
+              <span className="text-[10px] text-gray-500 font-mono">
+                Displaying {sortedAndFilteredRows.length} of {rawTableRows.length} matching rows
+              </span>
+            </div>
+
+            <div className="overflow-x-auto border border-brand-border rounded-2xl print:border-none print:shadow-none">
+              <table className="w-full text-left border-collapse font-mono text-[11px] text-gray-300 print:text-black">
+                <thead>
+                  <tr className="bg-gray-950 text-gray-400 border-b border-brand-border text-[9px] uppercase tracking-wider print:bg-slate-100 print:text-slate-900 print:border-slate-300">
+                    {selectedReportType === 'PL' && (
+                      <>
+                        <th className="p-4 cursor-pointer hover:bg-gray-900/60 print:hover:bg-transparent" onClick={() => handleSort('date')}>Date</th>
+                        <th className="p-4 cursor-pointer hover:bg-gray-900/60 print:hover:bg-transparent" onClick={() => handleSort('ref')}>Reference</th>
+                        <th className="p-4 cursor-pointer hover:bg-gray-900/60 print:hover:bg-transparent" onClick={() => handleSort('type')}>Type</th>
+                        <th className="p-4">Description</th>
+                        <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 print:hover:bg-transparent" onClick={() => handleSort('inflow')}>Inflow</th>
+                        <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 print:hover:bg-transparent" onClick={() => handleSort('outflow')}>Outflow</th>
+                      </>
+                    )}
+                    {selectedReportType === 'EXPENSES' && (
+                      <>
+                        <th className="p-4 cursor-pointer hover:bg-gray-900/60 print:hover:bg-transparent" onClick={() => handleSort('date')}>Date</th>
+                        <th className="p-4 cursor-pointer hover:bg-gray-900/60 print:hover:bg-transparent" onClick={() => handleSort('category')}>Category</th>
+                        <th className="p-4">Vendor</th>
+                        <th className="p-4">Responsible Staff</th>
+                        <th className="p-4">Workspace Branch</th>
+                        <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 print:hover:bg-transparent" onClick={() => handleSort('amount')}>Amount</th>
+                        <th className="p-4 text-right">Approval Status</th>
+                      </>
+                    )}
+                    {selectedReportType === 'TAX' && (
+                      <>
+                        <th className="p-4 cursor-pointer hover:bg-gray-900/60 print:hover:bg-transparent" onClick={() => handleSort('date')}>Date</th>
+                        <th className="p-4 cursor-pointer hover:bg-gray-900/60 print:hover:bg-transparent" onClick={() => handleSort('invoice')}>Invoice</th>
+                        <th className="p-4">Customer</th>
+                        <th className="p-4">Method</th>
+                        <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 print:hover:bg-transparent" onClick={() => handleSort('total')}>Sales Volume</th>
+                        <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 print:hover:bg-transparent" onClick={() => handleSort('tax')}>VAT (16%)</th>
+                        <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 print:hover:bg-transparent" onClick={() => handleSort('withholding')}>Est. WHT (2%)</th>
+                      </>
+                    )}
+                    {selectedReportType === 'CASHFLOW' && (
+                      <>
+                        <th className="p-4 cursor-pointer hover:bg-gray-900/60 print:hover:bg-transparent" onClick={() => handleSort('date')}>Date</th>
+                        <th className="p-4">Type</th>
+                        <th className="p-4">Method</th>
+                        <th className="p-4">Ref Number</th>
+                        <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 print:hover:bg-transparent" onClick={() => handleSort('in')}>Cash In</th>
+                        <th className="p-4 text-right cursor-pointer hover:bg-gray-900/60 print:hover:bg-transparent" onClick={() => handleSort('out')}>Cash Out</th>
+                      </>
+                    )}
+                    {selectedReportType === 'AUDIT' && (
+                      <>
+                        <th className="p-4 cursor-pointer hover:bg-gray-900/60 print:hover:bg-transparent" onClick={() => handleSort('date')}>Timestamp</th>
+                        <th className="p-4">User</th>
+                        <th className="p-4">Role</th>
+                        <th className="p-4">Event Details</th>
+                        <th className="p-4">Old State</th>
+                        <th className="p-4">New State</th>
+                      </>
+                    )}
                   </tr>
-                ) : (
-                  sortedAndFilteredRows.map((row: any) => (
-                    <tr key={row.id} className="hover:bg-gray-900/35 transition text-gray-300">
-                      
-                      {selectedReportType === 'PL' && (
-                        <>
-                          <td className="p-4 whitespace-nowrap">{row.date}</td>
-                          <td className="p-4 font-bold text-gray-200">{row.ref}</td>
-                          <td className="p-4">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              row.type.includes('Sales') 
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25' 
-                                : 'bg-rose-500/10 text-rose-400 border border-rose-500/25'
-                            }`}>
-                              {row.type}
-                            </span>
-                          </td>
-                          <td className="p-4 text-gray-400 truncate max-w-[240px] font-sans">{row.desc}</td>
-                          <td className="p-4 text-right font-bold text-emerald-400">{row.inflow > 0 ? formatKSh(row.inflow) : '-'}</td>
-                          <td className="p-4 text-right font-bold text-rose-400">{row.outflow > 0 ? formatKSh(row.outflow) : '-'}</td>
-                        </>
-                      )}
-
-                      {selectedReportType === 'TAX' && (
-                        <>
-                          <td className="p-4 whitespace-nowrap">{row.date}</td>
-                          <td className="p-4 font-bold text-gray-200">{row.invoice}</td>
-                          <td className="p-4 font-sans font-semibold text-gray-400">{row.customer}</td>
-                          <td className="p-4">{row.payment}</td>
-                          <td className="p-4 text-right font-bold text-gray-200">{formatKSh(row.total)}</td>
-                          <td className="p-4 text-right font-bold text-cyan-400">{formatKSh(row.tax)}</td>
-                          <td className="p-4 text-right font-bold text-amber-400">{formatKSh(row.withholding)}</td>
-                        </>
-                      )}
-
-                      {selectedReportType === 'CASHFLOW' && (
-                        <>
-                          <td className="p-4 whitespace-nowrap">{row.date}</td>
-                          <td className="p-4 text-gray-400 font-sans font-semibold">{row.type}</td>
-                          <td className="p-4">
-                            <span className="px-2 py-0.5 rounded bg-gray-950 border border-brand-border text-gray-400">
-                              {row.method}
-                            </span>
-                          </td>
-                          <td className="p-4 text-gray-200 font-bold">{row.ref}</td>
-                          <td className="p-4 text-right font-bold text-emerald-400">{row.in > 0 ? formatKSh(row.in) : '-'}</td>
-                          <td className="p-4 text-right font-bold text-rose-400">{row.out > 0 ? formatKSh(row.out) : '-'}</td>
-                        </>
-                      )}
-
-                      {selectedReportType === 'INVENTORY' && (
-                        <>
-                          <td className="p-4 font-bold text-gray-200 font-sans max-w-[200px] truncate">{row.name}</td>
-                          <td className="p-4 text-gray-400">{row.category}</td>
-                          <td className="p-4 text-gray-400">{row.sku}</td>
-                          <td className="p-4 text-center font-bold">{row.stock} {row.unit}</td>
-                          <td className="p-4 text-right text-gray-400">{formatKSh(row.cost)}</td>
-                          <td className="p-4 text-right text-gray-200">{formatKSh(row.price)}</td>
-                          <td className="p-4 text-right font-bold text-cyan-400">{formatKSh(row.totalCostValue)}</td>
-                        </>
-                      )}
-
-                      {selectedReportType === 'PROCUREMENT' && (
-                        <>
-                          <td className="p-4 whitespace-nowrap">{row.date}</td>
-                          <td className="p-4 font-bold text-gray-200">{row.po}</td>
-                          <td className="p-4 font-sans font-semibold text-gray-400">{row.supplier}</td>
-                          <td className="p-4">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              row.delivery === 'Delivered' ? 'bg-emerald-500/10 text-emerald-400' :
-                              row.delivery === 'Cancelled' ? 'bg-rose-500/10 text-rose-400' :
-                              'bg-amber-500/10 text-amber-400'
-                            }`}>
-                              {row.delivery}
-                            </span>
-                          </td>
-                          <td className="p-4">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              row.payment === 'Paid' ? 'bg-emerald-500/10 text-emerald-400' :
-                              'bg-amber-500/10 text-amber-400'
-                            }`}>
-                              {row.payment}
-                            </span>
-                          </td>
-                          <td className="p-4 text-right font-bold text-violet-400">{formatKSh(row.cost)}</td>
-                        </>
-                      )}
-
-                      {selectedReportType === 'AUDIT' && (
-                        <>
-                          <td className="p-4 whitespace-nowrap text-gray-400">{row.date} {row.time}</td>
-                          <td className="p-4 text-cyan-400 text-xs font-semibold">{row.user}</td>
-                          <td className="p-4 text-gray-400">{row.role.split(' ')[0]}</td>
-                          <td className="p-4 text-gray-200 max-w-[280px] truncate font-sans">{row.action}</td>
-                          <td className="p-4 text-gray-500 font-sans italic text-[10px] max-w-[120px] truncate">{row.oldVal}</td>
-                          <td className="p-4 text-emerald-400 max-w-[120px] truncate">{row.newVal}</td>
-                        </>
-                      )}
-
+                </thead>
+                <tbody className="divide-y divide-brand-border/60 print:divide-slate-300">
+                  {sortedAndFilteredRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="text-gray-500 text-center py-10 print:text-slate-600">No matching record entries found in this ledger.</td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    sortedAndFilteredRows.map((row: any) => (
+                      <tr key={row.id} className="hover:bg-gray-900/35 transition text-gray-300 print:text-slate-800 print:hover:bg-transparent">
+                        
+                        {selectedReportType === 'PL' && (
+                          <>
+                            <td className="p-4 whitespace-nowrap">{row.date}</td>
+                            <td className="p-4 font-bold text-gray-200 print:text-black">{row.ref}</td>
+                            <td className="p-4">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                row.type.includes('Sales') 
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 print:bg-emerald-100 print:text-emerald-800 print:border-emerald-300' 
+                                  : 'bg-rose-500/10 text-rose-400 border border-rose-500/25 print:bg-rose-100 print:text-rose-800 print:border-rose-300'
+                              }`}>
+                                {row.type}
+                              </span>
+                            </td>
+                            <td className="p-4 text-gray-400 print:text-slate-700 truncate max-w-[240px] font-sans">{row.desc}</td>
+                            <td className="p-4 text-right font-bold text-emerald-400 print:text-emerald-700">{row.inflow > 0 ? formatKSh(row.inflow) : '-'}</td>
+                            <td className="p-4 text-right font-bold text-rose-400 print:text-rose-700">{row.outflow > 0 ? formatKSh(row.outflow) : '-'}</td>
+                          </>
+                        )}
+
+                        {selectedReportType === 'EXPENSES' && (
+                          <>
+                            <td className="p-4 whitespace-nowrap">{row.date}</td>
+                            <td className="p-4 font-bold text-gray-200 print:text-black font-sans">{row.category}</td>
+                            <td className="p-4 font-sans text-gray-400 print:text-slate-700">{row.vendor}</td>
+                            <td className="p-4 font-sans text-gray-400 print:text-slate-700">{row.staff}</td>
+                            <td className="p-4 text-gray-400 print:text-slate-700">{row.branch}</td>
+                            <td className="p-4 text-right font-bold text-rose-400 print:text-rose-700">{formatKSh(row.amount)}</td>
+                            <td className="p-4 text-right">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                row.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 print:bg-emerald-100 print:text-emerald-800' : 'bg-amber-500/10 text-amber-400 border border-amber-500/25'
+                              }`}>
+                                {row.status}
+                              </span>
+                            </td>
+                          </>
+                        )}
+
+                        {selectedReportType === 'TAX' && (
+                          <>
+                            <td className="p-4 whitespace-nowrap">{row.date}</td>
+                            <td className="p-4 font-bold text-gray-200 print:text-black">{row.invoice}</td>
+                            <td className="p-4 font-sans font-semibold text-gray-400 print:text-slate-700">{row.customer}</td>
+                            <td className="p-4">{row.payment}</td>
+                            <td className="p-4 text-right font-bold text-gray-200 print:text-black">{formatKSh(row.total)}</td>
+                            <td className="p-4 text-right font-bold text-cyan-400 print:text-cyan-700">{formatKSh(row.tax)}</td>
+                            <td className="p-4 text-right font-bold text-amber-400 print:text-amber-700">{formatKSh(row.withholding)}</td>
+                          </>
+                        )}
+
+                        {selectedReportType === 'CASHFLOW' && (
+                          <>
+                            <td className="p-4 whitespace-nowrap">{row.date}</td>
+                            <td className="p-4 text-gray-400 print:text-slate-700 font-sans font-semibold">{row.type}</td>
+                            <td className="p-4">
+                              <span className="px-2 py-0.5 rounded bg-gray-950 border border-brand-border text-gray-400 print:bg-slate-100 print:text-slate-800 print:border-slate-300">
+                                {row.method}
+                              </span>
+                            </td>
+                            <td className="p-4 text-gray-200 print:text-black font-bold">{row.ref}</td>
+                            <td className="p-4 text-right font-bold text-emerald-400 print:text-emerald-700">{row.in > 0 ? formatKSh(row.in) : '-'}</td>
+                            <td className="p-4 text-right font-bold text-rose-400 print:text-rose-700">{row.out > 0 ? formatKSh(row.out) : '-'}</td>
+                          </>
+                        )}
+
+                        {selectedReportType === 'AUDIT' && (
+                          <>
+                            <td className="p-4 whitespace-nowrap text-gray-400 print:text-slate-700">{row.date} {row.time}</td>
+                            <td className="p-4 text-cyan-400 print:text-cyan-800 text-xs font-semibold">{row.user}</td>
+                            <td className="p-4 text-gray-400 print:text-slate-700">{row.role.split(' ')[0]}</td>
+                            <td className="p-4 text-gray-200 print:text-black max-w-[280px] truncate font-sans">{row.action}</td>
+                            <td className="p-4 text-gray-500 font-sans italic text-[10px] max-w-[120px] truncate">{row.oldVal}</td>
+                            <td className="p-4 text-emerald-400 print:text-emerald-700 max-w-[120px] truncate">{row.newVal}</td>
+                          </>
+                        )}
+
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
 
       </div>
 

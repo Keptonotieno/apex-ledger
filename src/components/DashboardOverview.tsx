@@ -35,7 +35,9 @@ export const DashboardOverview: React.FC = () => {
     setActiveBranchId,
     registerBusiness,
     addBranch,
-    revertAction
+    revertAction,
+    profiles,
+    customers
   } = useApp();
 
   // Selected date ranges for audit log custom range
@@ -128,18 +130,10 @@ export const DashboardOverview: React.FC = () => {
   const totalOutstandingDebts = debts.reduce((acc, d) => acc + (d.remainingBalance || 0), 0);
 
   // Total employees / Active staff profiles
-  const totalEmployeesCount = timelogs.reduce((acc, log) => {
-    if (!acc.includes(log.userId)) acc.push(log.userId);
-    return acc;
-  }, [] as string[]).length || 3;
+  const totalEmployeesCount = profiles.length;
 
   // Active Customers Count
-  const activeCustomersCount = filteredSales.reduce((acc, s) => {
-    if (s.customerName && s.customerName !== 'Walk-in Customer' && !acc.includes(s.customerName)) {
-      acc.push(s.customerName);
-    }
-    return acc;
-  }, [] as string[]).length || 5;
+  const activeCustomersCount = customers.length;
 
   // Business Growth Rate Index
   const businessGrowthRate = totalSalesCount > 0 
@@ -287,16 +281,7 @@ export const DashboardOverview: React.FC = () => {
     };
   });
 
-  const defaultExpenseCategories = [
-    { name: 'Procurement', value: totalExpenses * 0.4 || 12000, percentage: 40, color: COLORS[0] },
-    { name: 'Salaries', value: totalExpenses * 0.25 || 7500, percentage: 25, color: COLORS[1] },
-    { name: 'Rent', value: totalExpenses * 0.15 || 4500, percentage: 15, color: COLORS[2] },
-    { name: 'Electricity', value: totalExpenses * 0.08 || 2400, percentage: 8, color: COLORS[3] },
-    { name: 'Water & Internet', value: totalExpenses * 0.07 || 2100, percentage: 7, color: COLORS[4] },
-    { name: 'Miscellaneous', value: totalExpenses * 0.05 || 1500, percentage: 5, color: COLORS[5] },
-  ];
-
-  const expenseChartData = expenseCategoriesList.length > 0 ? expenseCategoriesList : defaultExpenseCategories;
+  const expenseChartData = expenseCategoriesList;
 
   // ---------------------------------------------
   // DYNAMIC SYSTEM ACTIVITY AUDIT LOG (FILTERING)
@@ -419,6 +404,58 @@ export const DashboardOverview: React.FC = () => {
   };
 
   // ---------------------------------------------
+  // NO BUSINESS / WORKSPACE REGISTRATION EMPTY-STATE
+  // ---------------------------------------------
+  if (businesses.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 px-4" id="empty-state-register-business">
+        <div className="max-w-md w-full glass-panel p-8 rounded-2xl border border-brand-border space-y-6 text-center shadow-2xl relative overflow-hidden bg-gray-950/40">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-cyan-500 to-transparent"></div>
+          <div className="w-16 h-16 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 flex items-center justify-center mx-auto glow-cyan mb-4">
+            <Briefcase className="w-8 h-8 text-cyan-400" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold text-gray-100 font-sans">No Business Registered Yet</h2>
+            <p className="text-xs text-gray-400">
+              Welcome to Apex Ledger Enterprise! To access your dashboard and active workspace modules, please register your first business below.
+            </p>
+          </div>
+
+          <form onSubmit={handleQuickAddBusiness} className="space-y-4 text-left pt-2">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1 font-mono uppercase tracking-wider">Company / Workspace Name</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g., Summit Holdings Ltd"
+                value={newBizName}
+                onChange={(e) => setNewBizName(e.target.value)}
+                className="w-full bg-gray-950 border border-brand-border rounded-xl px-4 py-2.5 text-xs text-gray-100 focus:outline-none focus:border-cyan-500/40 transition font-sans"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1 font-mono uppercase tracking-wider">Industry / Business Type</label>
+              <input
+                type="text"
+                placeholder="e.g., Retail, Wholesale, Tech"
+                value={newBizBranch}
+                onChange={(e) => setNewBizBranch(e.target.value)}
+                className="w-full bg-gray-950 border border-brand-border rounded-xl px-4 py-2.5 text-xs text-gray-100 focus:outline-none focus:border-cyan-500/40 transition font-sans"
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full py-3 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-xl text-xs font-sans tracking-wider uppercase transition shadow-md shadow-cyan-500/10 cursor-pointer"
+            >
+              Establish First Workspace
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------
   // EMPLOYEE PERSONAL DASHBOARD VIEW
   // ---------------------------------------------
   if (isEmployee) {
@@ -435,7 +472,21 @@ export const DashboardOverview: React.FC = () => {
       .filter(log => log.userId === activeUser.id)
       .reduce((sum, log) => sum + (log.workHours || 0), 0);
 
-    const myTasksList = tasks.filter(t => t.assignedToId === activeUser.id);
+    // Dynamic employee recorded expenses
+    const myExpenses = expenses.filter(e => e.recordedBy.toLowerCase() === activeUser.name.toLowerCase());
+    const myExpensesVolume = myExpenses.reduce((acc, e) => acc + e.amount, 0);
+
+    // Dynamic employee generated net profit (revenue minus Cost of Goods Sold)
+    const mySalesCogs = mySales.reduce((acc, s) => {
+      const itemCost = s.items ? s.items.reduce((sum, item) => sum + ((item.costPriceAtSale || 0) * item.quantity), 0) : 0;
+      return acc + itemCost;
+    }, 0);
+    const myProfit = mySalesVolume - mySalesCogs;
+
+    // Company financial target progress
+    const companyProgressPct = Math.min(100, Math.round((netProfit / (yearlyGoal || 1)) * 100));
+
+    const myTasksList = tasks.filter(t => t.assignedToId === activeUser.id || t.assignedToName.toLowerCase() === activeUser.name.toLowerCase());
     const pendingMyTasks = myTasksList.filter(t => t.status === 'Pending').length;
     const inProgressMyTasks = myTasksList.filter(t => t.status === 'In Progress').length;
 
@@ -466,39 +517,89 @@ export const DashboardOverview: React.FC = () => {
           </button>
         </div>
 
-        {/* Employee Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Employee Stats Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          
+          {/* Shift Attendance Status */}
           <div className="glass-panel p-5 rounded-xl flex flex-col justify-between">
             <span className="text-xs text-slate-400 uppercase font-semibold font-sans">Shift Attendance Status</span>
             <div className="mt-3 flex items-center justify-between">
-              <span className={`text-base font-bold font-sans ${isClockedIn ? 'text-emerald-400' : 'text-slate-400'}`}>
-                {isClockedIn ? '● Online & Present' : '○ Clocked Out / Absent'}
-              </span>
-              <UserCheck className={`w-5 h-5 ${isClockedIn ? 'text-emerald-500' : 'text-slate-500'}`} />
+              <div>
+                <span className={`text-base font-bold font-sans block ${isClockedIn ? 'text-emerald-400' : 'text-slate-400'}`}>
+                  {isClockedIn ? '● Online & Present' : '○ Clocked Out / Absent'}
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono block mt-1">Logged today: {myHoursWorked} Hrs total</span>
+              </div>
+              <UserCheck className={`w-5 h-5 shrink-0 ${isClockedIn ? 'text-emerald-500' : 'text-slate-500'}`} />
             </div>
           </div>
 
+          {/* Personal POS Sales Volume */}
           <div className="glass-panel p-5 rounded-xl flex flex-col justify-between">
             <span className="text-xs text-slate-400 uppercase font-semibold font-sans">Personal POS Sales Volume</span>
             <div className="mt-3 flex items-center justify-between">
-              <span className="text-lg font-bold text-slate-100 font-mono">{formatKES(mySalesVolume)}</span>
-              <ShoppingCart className="w-5 h-5 text-cyan-400" />
+              <div>
+                <span className="text-base font-bold text-slate-100 font-mono block">{formatKES(mySalesVolume)}</span>
+                <span className="text-[10px] text-slate-500 font-mono block mt-1">Processed {mySalesCount} receipts</span>
+              </div>
+              <ShoppingCart className="w-5 h-5 text-cyan-400 shrink-0" />
             </div>
           </div>
 
+          {/* Personal Recorded Expenses */}
           <div className="glass-panel p-5 rounded-xl flex flex-col justify-between">
-            <span className="text-xs text-slate-400 uppercase font-semibold font-sans">Total Shifts Recorded</span>
+            <span className="text-xs text-slate-400 uppercase font-semibold font-sans">Recorded Expenses</span>
             <div className="mt-3 flex items-center justify-between">
-              <span className="text-lg font-bold text-slate-100 font-mono">{mySalesCount} Registers</span>
-              <ShoppingBag className="w-5 h-5 text-blue-400" />
+              <div>
+                <span className="text-base font-bold text-slate-100 font-mono block">{formatKES(myExpensesVolume)}</span>
+                <span className="text-[10px] text-slate-500 font-mono block mt-1 font-sans">Filed {myExpenses.length} claims</span>
+              </div>
+              <TrendingDown className="w-5 h-5 text-rose-400 shrink-0" />
             </div>
           </div>
 
+          {/* Personal Generated Profit */}
           <div className="glass-panel p-5 rounded-xl flex flex-col justify-between">
-            <span className="text-xs text-slate-400 uppercase font-semibold font-sans">Total Hours Logged</span>
+            <span className="text-xs text-slate-400 uppercase font-semibold font-sans">Personal Profit Contribution</span>
             <div className="mt-3 flex items-center justify-between">
-              <span className="text-lg font-bold text-slate-100 font-mono">{myHoursWorked} Hrs</span>
-              <Clock className="w-5 h-5 text-amber-400" />
+              <div>
+                <span className="text-base font-bold text-emerald-400 font-mono block">{formatKES(myProfit)}</span>
+                <span className="text-[10px] text-slate-500 font-sans block mt-1">Net of sales COGS</span>
+              </div>
+              <TrendingUp className="w-5 h-5 text-emerald-400 shrink-0" />
+            </div>
+          </div>
+
+        </div>
+
+        {/* Company Financial Target Progress Banner */}
+        <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-200 uppercase font-sans tracking-wide flex items-center gap-2">
+                <Target className="w-4 h-4 text-cyan-400" />
+                Company Financial Target progress
+              </h3>
+              <p className="text-xs text-slate-500 font-sans mt-0.5">
+                Real-time tracking of workspace profit contribution toward the current annual threshold.
+              </p>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-lg font-bold text-cyan-400 font-mono">{companyProgressPct}%</span>
+              <span className="text-[10px] text-slate-500 font-sans">achieved</span>
+            </div>
+          </div>
+
+          <div className="space-y-2 font-sans">
+            <div className="h-2.5 w-full bg-slate-950 rounded-full overflow-hidden border border-brand-border/40">
+              <div 
+                className="h-full bg-gradient-to-r from-cyan-500 to-emerald-500 transition-all duration-500 rounded-full" 
+                style={{ width: `${companyProgressPct}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+              <span>Current Company Profit: {formatKES(netProfit)}</span>
+              <span>Target Goal: {formatKES(yearlyGoal)}</span>
             </div>
           </div>
         </div>
@@ -1022,43 +1123,51 @@ export const DashboardOverview: React.FC = () => {
             <p className="text-[10px] text-slate-500 mt-0.5">Proportional business budget allocation</p>
           </div>
 
-          <div className="flex items-center gap-4 flex-1 min-h-0">
-            <div className="w-[160px] h-[160px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={expenseChartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={75}
-                    paddingAngle={3}
-                    dataKey="value"
-                  >
-                    {expenseChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b', fontSize: 10 }} />
-                </PieChart>
-              </ResponsiveContainer>
+          {expenseChartData.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+              <FolderOpen className="w-8 h-8 text-slate-600 mb-2 stroke-[1.5]" />
+              <p className="text-xs font-semibold text-slate-400">No data available</p>
+              <p className="text-[10px] text-slate-500 mt-1 max-w-[200px]">Log expenses to display allocation metrics.</p>
             </div>
+          ) : (
+            <div className="flex items-center gap-4 flex-1 min-h-0">
+              <div className="w-[160px] h-[160px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={expenseChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={75}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {expenseChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b', fontSize: 10 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
 
-            {/* Categories Legend */}
-            <div className="flex-1 space-y-2 max-h-[200px] overflow-y-auto pr-1">
-              {expenseChartData.slice(0, 5).map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="text-slate-300 font-medium font-sans">{item.name}</span>
+              {/* Categories Legend */}
+              <div className="flex-1 space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                {expenseChartData.slice(0, 5).map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                      <span className="text-slate-300 font-medium font-sans">{item.name}</span>
+                    </div>
+                    <div className="text-right font-mono text-slate-400">
+                      <span>{item.percentage}%</span>
+                    </div>
                   </div>
-                  <div className="text-right font-mono text-slate-400">
-                    <span>{item.percentage}%</span>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* CALENDAR & ROSTER OVERVIEW (7/12 width) */}

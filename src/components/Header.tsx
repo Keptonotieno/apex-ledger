@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { UserRole } from '../types';
+import { GlobalSearchModal } from './GlobalSearchModal';
 import { 
   Bell, Check, RefreshCw, Clock, LogIn, LogOut,
-  Wifi, HelpCircle, AlertTriangle, ShieldCheck, Menu, Search, ChevronDown
+  Wifi, HelpCircle, AlertTriangle, ShieldCheck, Menu, Search, ChevronDown,
+  Sun, Moon
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -27,12 +29,26 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
     clockInOut,
     profiles,
     setActiveUser,
-    logout
+    logout,
+    theme,
+    toggleTheme
   } = useApp();
 
   const [showNotificationDrawer, setShowNotificationDrawer] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showBusinessDropdown, setShowBusinessDropdown] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  useEffect(() => {
+    const handleShortcut = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setIsSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, []);
 
   const currentBranchName = activeBranchId === 'all' 
     ? 'All Branches' 
@@ -169,15 +185,28 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
       {/* Right: Search, Sync, notifications, profile actions */}
       <div className="flex items-center gap-4 md:gap-6">
         
-        {/* Search input bar */}
-        <div className="hidden md:flex items-center gap-2 bg-gray-950/45 border border-brand-border rounded-xl px-3 py-1.5 w-64 text-xs focus-within:border-cyan-500/50 transition">
-          <Search className="w-4 h-4 text-gray-500" />
-          <input 
-            type="text" 
-            placeholder="Search products, orders..." 
-            className="bg-transparent text-gray-200 outline-none w-full font-sans text-xs placeholder:text-gray-600"
-          />
+        {/* Search input bar (Click to open Global Search Modal) */}
+        <div 
+          onClick={() => setIsSearchOpen(true)}
+          className="hidden md:flex items-center justify-between gap-2 bg-gray-950/45 border border-brand-border rounded-xl px-3 py-1.5 w-64 text-xs hover:border-cyan-500/30 hover:bg-gray-950/60 cursor-pointer transition select-none group"
+          id="header-desktop-search-trigger"
+        >
+          <div className="flex items-center gap-2">
+            <Search className="w-4 h-4 text-gray-500 group-hover:text-cyan-400 transition" />
+            <span className="text-gray-400 group-hover:text-gray-200 transition">Search workspace...</span>
+          </div>
+          <span className="px-1.5 py-0.5 text-[9px] font-mono rounded bg-gray-850 border border-brand-border text-gray-500 shrink-0">⌘K</span>
         </div>
+
+        {/* Mobile Search Button */}
+        <button
+          onClick={() => setIsSearchOpen(true)}
+          className="md:hidden p-2.5 rounded-xl border border-brand-border bg-gray-900/40 text-gray-300 hover:text-cyan-400 hover:border-cyan-500/20 transition cursor-pointer flex items-center justify-center shrink-0"
+          title="Search anything"
+          id="header-mobile-search-btn"
+        >
+          <Search className="w-4.5 h-4.5" />
+        </button>
 
         {/* Attendance Toggle Widget */}
         <button
@@ -200,6 +229,20 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
           </span>
           <span className="text-gray-400">Live Sync</span>
         </div>
+
+        {/* Dynamic Theme Toggle */}
+        <button
+          onClick={toggleTheme}
+          className="p-2.5 rounded-xl border border-brand-border bg-gray-900/40 text-gray-300 hover:text-cyan-400 hover:border-cyan-500/20 transition cursor-pointer flex items-center justify-center shrink-0"
+          title={theme === 'dark' ? 'Switch to High-Contrast Light Mode' : 'Switch to Brand Dark Mode'}
+          id="theme-toggle-btn"
+        >
+          {theme === 'dark' ? (
+            <Sun className="w-4.5 h-4.5 text-amber-400" />
+          ) : (
+            <Moon className="w-4.5 h-4.5 text-slate-700" />
+          )}
+        </button>
 
         {/* Notification Bell */}
         <div className="relative">
@@ -343,6 +386,7 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
 
       </div>
 
+      <GlobalSearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
     </header>
   );
 };

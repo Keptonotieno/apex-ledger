@@ -200,13 +200,27 @@ export const SettingsModule: React.FC = () => {
     setEditingBranchLocation('');
   };
 
-  const handleRemoveBranch = (branchId: string, branchName: string) => {
+  const handleRemoveBranch = async (branchId: string, branchName: string) => {
     if (!canManageBranches) {
       alert('Access Denied: You do not have permission to remove branches.');
       return;
     }
-    if (confirm(`Are you sure you want to shut down branch "${branchName}"? All references will be archived.`)) {
-      deleteBranch(branchId);
+    if (confirm(`Are you sure you want to permanently delete branch "${branchName}"? This action cannot be undone.`)) {
+      try {
+        await deleteBranch(branchId, false);
+        alert(`Branch "${branchName}" has been successfully deleted.`);
+      } catch (err: any) {
+        if (confirm(`${err.message}\n\nWould you like to perform a CASCADING DELETION to automatically and permanently delete all of these dependent records? This action cannot be undone.`)) {
+          if (confirm(`DANGER: Are you absolutely sure? This will wipe out all staff profiles, inventory products, sales, and expenses associated with "${branchName}".`)) {
+            try {
+              await deleteBranch(branchId, true);
+              alert(`Branch "${branchName}" and all associated records have been permanently deleted.`);
+            } catch (cascadeErr: any) {
+              alert(cascadeErr.message || "Failed to execute cascading deletion.");
+            }
+          }
+        }
+      }
     }
   };
 

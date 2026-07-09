@@ -36,20 +36,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
     { id: 'workspaces', name: 'Workspaces & Branches', icon: Building2, minRole: UserRole.MANAGER },
     { id: 'sales', name: 'Sales POS', icon: ShoppingCart, minRole: UserRole.EMPLOYEE },
     { id: 'inventory', name: 'Inventory', icon: Package, minRole: UserRole.EMPLOYEE },
-    { id: 'purchases', name: 'Purchases & Procurement', icon: Truck, minRole: UserRole.EMPLOYEE },
+    { id: 'purchases', name: 'Purchases & Procurement', icon: Truck, minRole: UserRole.MANAGER },
     { id: 'debts', name: 'Debt Tracking', icon: CreditCard, minRole: UserRole.EMPLOYEE },
     { id: 'expenses', name: 'Expenses', icon: DollarSign, minRole: UserRole.EMPLOYEE },
-    { id: 'accounting', name: 'Accounting Ledger', icon: Receipt, minRole: UserRole.EMPLOYEE },
-    { id: 'performance', name: 'Performance Dashboard', icon: BarChart3, minRole: UserRole.EMPLOYEE },
+    { id: 'accounting', name: 'Accounting Ledger', icon: Receipt, minRole: UserRole.MANAGER },
+    { id: 'performance', name: 'Performance Dashboard', icon: BarChart3, minRole: UserRole.MANAGER },
     { id: 'analytics', name: 'Admin Analytics', icon: TrendingUp, minRole: UserRole.MANAGER },
     { id: 'clients', name: 'Client Directory', icon: Users, minRole: UserRole.EMPLOYEE },
     { id: 'feed', name: 'Sales Orders & Feed', icon: ClipboardList, minRole: UserRole.EMPLOYEE },
-    { id: 'reports', name: 'Reports', icon: FileText, minRole: UserRole.EMPLOYEE },
+    { id: 'reports', name: 'Reports', icon: FileText, minRole: UserRole.MANAGER },
     { id: 'calendar', name: 'Calendar', icon: Calendar, minRole: UserRole.EMPLOYEE },
     { id: 'tasks', name: 'Tasks', icon: CheckSquare, minRole: UserRole.EMPLOYEE },
     { id: 'employees', name: 'Employees', icon: UserCheck, minRole: UserRole.MANAGER },
     { id: 'audits', name: 'Audit Logs', icon: ShieldAlert, minRole: UserRole.MANAGER },
-    { id: 'settings', name: 'Settings & DB Sync', icon: Settings, minRole: UserRole.EMPLOYEE }
+    { id: 'settings', name: 'Settings & DB Sync', icon: Settings, minRole: UserRole.MANAGER }
   ];
 
   const handleRoleChange = (userId: string) => {
@@ -82,12 +82,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
   };
 
   // Helper to verify if role is allowed
-  const hasAccess = (itemMinRole: UserRole) => {
+  const hasAccess = (itemMinRole: UserRole, itemId: string) => {
+    if (businesses.length === 0) {
+      return itemId === 'overview' || itemId === 'settings';
+    }
     if (activeUser.role === UserRole.ADMIN) return true;
     if (activeUser.role === UserRole.MANAGER) {
       return itemMinRole !== UserRole.ADMIN;
     }
     // Employee
+    if (itemId === 'expenses') {
+      return activeUser.allowExpenses === true;
+    }
     return itemMinRole === UserRole.EMPLOYEE;
   };
 
@@ -176,11 +182,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
       {/* Navigation List */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         {navItems.map((item) => {
-          const permitted = hasAccess(item.minRole);
+          const permitted = hasAccess(item.minRole, item.id);
           const active = activeView === item.id;
           const Icon = item.icon;
 
           if (!permitted) {
+            // Completely hide restricted views for Employee role as per strict requirement
+            if (activeUser.role === UserRole.EMPLOYEE) {
+              return null;
+            }
             // Render a locked menu item for demo role switcher fun
             return (
               <div

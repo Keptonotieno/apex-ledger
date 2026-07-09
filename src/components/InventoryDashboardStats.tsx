@@ -294,24 +294,44 @@ export const InventoryDashboardStats: React.FC<InventoryDashboardStatsProps> = (
           {/* Dynamic Category Allocation & Unusual Stock Activity Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             
-            {/* Top Profit Driver Brands */}
+            {/* Top Profit Driver Brands / Top Selling Items */}
             <div className="glass-panel p-4 rounded-xl border border-brand-border/60">
-              <span className="text-[10px] text-gray-500 font-mono block uppercase mb-3">Top Gross Profit Generators</span>
-              <div className="space-y-3">
-                {stats.sortedByProfit.slice(0, 4).map((p, index) => {
-                  const profitMargin = p.sellingPrice ? Math.round(((p.sellingPrice - p.costPrice) / p.sellingPrice) * 100) : 0;
-                  return (
-                    <div key={p.id} className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 bg-emerald-500/10 text-emerald-400 font-bold rounded flex items-center justify-center text-[10px]">
-                          #{index + 1}
-                        </span>
-                        <span className="text-gray-300 font-medium truncate max-w-[120px]">{p.name}</span>
+              <span className="text-[10px] text-gray-500 font-mono block uppercase mb-3">
+                {isEmployee ? 'Top Selling Items' : 'Top Gross Profit Generators'}
+              </span>
+              <div className="space-y-3 font-sans">
+                {isEmployee ? (
+                  stats.bestSellers.length === 0 ? (
+                    <p className="text-gray-500 text-center py-6 text-[11px]">No sales recorded yet.</p>
+                  ) : (
+                    stats.bestSellers.slice(0, 4).map((p, index) => (
+                      <div key={p.id} className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 bg-cyan-500/10 text-cyan-400 font-bold rounded flex items-center justify-center text-[10px]">
+                            #{index + 1}
+                          </span>
+                          <span className="text-gray-300 font-medium truncate max-w-[120px]">{p.name}</span>
+                        </div>
+                        <span className="font-mono text-cyan-400 font-bold">{p.unitsSold} units sold</span>
                       </div>
-                      <span className="font-mono text-emerald-400 font-bold">+{profitMargin}% Margin</span>
-                    </div>
-                  );
-                })}
+                    ))
+                  )
+                ) : (
+                  stats.sortedByProfit.slice(0, 4).map((p, index) => {
+                    const profitMargin = p.sellingPrice ? Math.round(((p.sellingPrice - p.costPrice) / p.sellingPrice) * 100) : 0;
+                    return (
+                      <div key={p.id} className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 bg-emerald-500/10 text-emerald-400 font-bold rounded flex items-center justify-center text-[10px]">
+                            #{index + 1}
+                          </span>
+                          <span className="text-gray-300 font-medium truncate max-w-[120px]">{p.name}</span>
+                        </div>
+                        <span className="font-mono text-emerald-400 font-bold">+{profitMargin}% Margin</span>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
 

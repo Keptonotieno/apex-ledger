@@ -61,3 +61,153 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
+
+/* High-Contrast Light Mode Overrides */
+.light {
+  --color-brand-dark: #f1f5f9;
+  --color-brand-panel: #ffffff;
+  --color-brand-panel-hover: #f8fafc;
+  --color-brand-border: #cbd5e1;
+}
+
+.light body {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+
+/* Glass panel light theme styling */
+.light .glass-panel {
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
+}
+
+/* Base text overrides for high contrast */
+.light .text-gray-100, 
+.light .text-slate-100,
+.light .text-slate-200,
+.light .text-gray-200,
+.light h1, .light h2, .light h3, .light h4, .light h5, .light h6,
+.light label, .light legend {
+  color: #0f172a !important;
+}
+
+.light .text-gray-300, 
+.light .text-slate-300 {
+  color: #1e293b !important;
+}
+
+.light .text-gray-400, 
+.light .text-slate-400 {
+  color: #334155 !important;
+}
+
+.light .text-gray-500, 
+.light .text-slate-500 {
+  color: #475569 !important;
+}
+
+.light .text-gray-600, 
+.light .text-slate-600 {
+  color: #64748b !important;
+}
+
+/* Background overrides */
+.light .bg-gray-950,
+.light .bg-slate-950,
+.light .bg-black {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+.light .bg-gray-900,
+.light .bg-slate-900 {
+  background-color: #f1f5f9 !important;
+}
+
+.light .bg-gray-850,
+.light .bg-slate-800,
+.light .bg-gray-800 {
+  background-color: #e2e8f0 !important;
+}
+
+.light .bg-gray-950\/40,
+.light .bg-gray-950\/45,
+.light .bg-gray-950\/65,
+.light .bg-gray-900\/40,
+.light .bg-gray-900\/95,
+.light .bg-slate-900\/40,
+.light .bg-gray-950\/60,
+.light .bg-gray-950\/50,
+.light .bg-cyan-950\/50,
+.light .bg-cyan-950\/40,
+.light .bg-cyan-950\/15 {
+  background-color: rgba(241, 245, 249, 0.95) !important;
+}
+
+/* Border overrides */
+.light .border-brand-border,
+.light .border-brand-border\/20,
+.light .border-brand-border\/40,
+.light .border-brand-border\/50,
+.light .border-brand-border\/60 {
+  border-color: #cbd5e1 !important;
+}
+
+/* Inputs, Selects and Textareas */
+.light input,
+.light select,
+.light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+}
+
+.light input::placeholder {
+  color: #94a3b8 !important;
+}
+
+.light input:focus,
+.light select:focus,
+.light textarea:focus {
+  border-color: #06b6d4 !important;
+  outline: 2px solid rgba(6, 182, 212, 0.2) !important;
+}
+
+/* Table light mode styling */
+.light th {
+  background-color: #f8fafc !important;
+  color: #334155 !important;
+  border-bottom: 2px solid #cbd5e1 !important;
+}
+
+.light td {
+  border-bottom: 1px solid #cbd5e1 !important;
+}
+
+/* Hover background changes */
+.light .hover\:bg-gray-800:hover,
+.light .hover\:bg-slate-800:hover,
+.light .hover\:bg-gray-900\/40:hover {
+  background-color: #e2e8f0 !important;
+}
+
+.light .hover\:text-cyan-400:hover {
+  color: #0891b2 !important;
+}
+
+/* Scrollbar overrides for light mode */
+.light ::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+
+.light ::-webkit-scrollbar-thumb:hover {
+  background: #06b6d4;
+}
+

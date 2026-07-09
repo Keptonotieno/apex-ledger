@@ -45,6 +45,16 @@ export const ClientDirectory: React.FC = () => {
 
   // New Customer Form States
   const [showAddForm, setShowAddForm] = useState(false);
+
+  useEffect(() => {
+    const handleTriggerAddForm = () => {
+      setShowAddForm(true);
+    };
+    window.addEventListener('trigger-add-client-form', handleTriggerAddForm);
+    return () => {
+      window.removeEventListener('trigger-add-client-form', handleTriggerAddForm);
+    };
+  }, []);
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');

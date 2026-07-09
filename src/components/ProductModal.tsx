@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Product, UserRole } from '../types';
+import { Product, UserRole, Category } from '../types';
 import { X, Package, DollarSign, List, Truck, FileText, Plus, Check, Image, Trash2, HelpCircle } from 'lucide-react';
 
 interface ProductModalProps {
@@ -7,9 +7,10 @@ interface ProductModalProps {
   onClose: () => void;
   editingProduct: Product | null;
   onSave: (data: any) => void;
-  categories: string[];
+  categories: Category[];
   onAddCategory: (category: string) => void;
   isCategoriesEnabled?: boolean;
+  isEmployee?: boolean;
 }
 
 export const ProductModal: React.FC<ProductModalProps> = ({
@@ -19,7 +20,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   onSave,
   categories,
   onAddCategory,
-  isCategoriesEnabled = true
+  isCategoriesEnabled = true,
+  isEmployee = false
 }) => {
   // Tabs for structured portfolio form
   const [activeFormTab, setActiveFormTab] = useState<'info' | 'pricing' | 'supplier' | 'media'>('info');
@@ -42,7 +44,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   const [minStockAlert, setMinStockAlert] = useState(5); // Reorder Level
   const [maxStock, setMaxStock] = useState(100);
   const [unit, setUnit] = useState('Units'); // Fixed Unit type (or custom)
-  const [category, setCategory] = useState('Electronics');
+  const [category, setCategory] = useState('');
   const [newCustomCategory, setNewCustomCategory] = useState('');
   const [showCustomCatInput, setShowCustomCatInput] = useState(false);
 
@@ -86,7 +88,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
       setQuantity(editingProduct.quantity || 0);
       setMinStockAlert(editingProduct.minStockAlert || 5);
       setMaxStock(editingProduct.maxStock || 100);
-      setCategory(editingProduct.category || 'Uncategorized');
+      setCategory(editingProduct.category || '');
       setSupplier(editingProduct.supplier || '');
       setSupplierPhone(editingProduct.supplierPhone || '');
       setSupplierEmail(editingProduct.supplierEmail || '');
@@ -113,9 +115,9 @@ export const ProductModal: React.FC<ProductModalProps> = ({
       setMaxStock(100);
       setUnit('Units');
       
-      const defaultCategory = (isCategoriesEnabled && categories.filter(c => c !== 'All' && c !== 'Uncategorized').length > 0)
-        ? (categories.filter(c => c !== 'All' && c !== 'Uncategorized')[0] || 'Uncategorized')
-        : 'Uncategorized';
+      const defaultCategory = (isCategoriesEnabled && categories.length > 0)
+        ? (categories[0].name || '')
+        : '';
       setCategory(defaultCategory);
       setSupplier('');
       setSupplierPhone('');
@@ -139,6 +141,7 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   if (!isOpen) return null;
 
   const handleCreateCustomCategory = () => {
+    if (isEmployee) return;
     if (!newCustomCategory.trim()) return;
     onAddCategory(newCustomCategory.trim());
     setCategory(newCustomCategory.trim());
@@ -311,20 +314,26 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                           <select
                             value={category}
                             onChange={(e) => setCategory(e.target.value)}
-                            className="flex-1 bg-gray-950/60 border border-brand-border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/40 text-xs"
+                            className="flex-1 bg-gray-950/60 border border-brand-border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/40 text-xs font-mono"
                           >
-                            {categories.filter(c => c !== 'All').map(c => (
-                              <option key={c} value={c}>{c}</option>
-                            ))}
+                            {categories.length === 0 ? (
+                              <option value="">No categories available</option>
+                            ) : (
+                              categories.map(c => (
+                                <option key={c.id} value={c.name}>{c.name}</option>
+                              ))
+                            )}
                           </select>
-                          <button
-                            type="button"
-                            onClick={() => setShowCustomCatInput(true)}
-                            className="px-3 bg-gray-950 border border-brand-border text-cyan-400 rounded-lg hover:bg-gray-900 transition cursor-pointer"
-                            title="Add Custom Category"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
+                          {!isEmployee && (
+                            <button
+                              type="button"
+                              onClick={() => setShowCustomCatInput(true)}
+                              className="px-3 bg-gray-950 border border-brand-border text-cyan-400 rounded-lg hover:bg-gray-900 transition cursor-pointer flex items-center justify-center"
+                              title="Add Custom Category"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <div className="flex gap-1">
@@ -333,19 +342,19 @@ export const ProductModal: React.FC<ProductModalProps> = ({
                             placeholder="Category name"
                             value={newCustomCategory}
                             onChange={(e) => setNewCustomCategory(e.target.value)}
-                            className="flex-1 bg-gray-950/60 border border-brand-border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/40 text-xs"
+                            className="flex-1 bg-gray-950/60 border border-brand-border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/40 text-xs font-mono"
                           />
                           <button
                             type="button"
                             onClick={handleCreateCustomCategory}
-                            className="p-2.5 bg-emerald-950/50 border border-emerald-500/30 text-emerald-400 rounded-lg hover:bg-emerald-900/40 cursor-pointer"
+                            className="p-2.5 bg-emerald-950/50 border border-emerald-500/30 text-emerald-400 rounded-lg hover:bg-emerald-900/40 cursor-pointer flex items-center justify-center"
                           >
                             <Check className="w-4 h-4" />
                           </button>
                           <button
                             type="button"
                             onClick={() => setShowCustomCatInput(false)}
-                            className="p-2.5 bg-gray-950 border border-brand-border text-gray-400 rounded-lg hover:bg-gray-900 cursor-pointer"
+                            className="p-2.5 bg-gray-950 border border-brand-border text-gray-400 rounded-lg hover:bg-gray-900 cursor-pointer flex items-center justify-center"
                           >
                             <X className="w-4 h-4" />
                           </button>

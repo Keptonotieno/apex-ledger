@@ -11,16 +11,19 @@ export const EmployeeModule: React.FC = () => {
     addEmployee, 
     updateEmployee,
     removeEmployee,
-    branches
+    branches,
+    loginWithEmployeeNumber
   } = useApp();
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<UserProfile | null>(null);
   const [formName, setFormName] = useState('');
   const [formEmail, setFormEmail] = useState('');
+  const [formEmployeeId, setFormEmployeeId] = useState('');
   const [formRole, setFormRole] = useState<UserRole>(UserRole.EMPLOYEE);
   const [formBranch, setFormBranch] = useState('Main HQ');
   const [formAvatarUrl, setFormAvatarUrl] = useState<string | null>(null);
+  const [formAllowExpenses, setFormAllowExpenses] = useState(false);
 
   // Custom high-fidelity delete confirmation state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -38,6 +41,23 @@ export const EmployeeModule: React.FC = () => {
     return false;
   };
 
+  const getNextEmployeeId = () => {
+    let nextNum = 1;
+    profiles.forEach(p => {
+      const numStr = p.badgeNumber || (p as any).employeeNumber;
+      if (numStr && typeof numStr === 'string') {
+        const match = numStr.match(/^EMP-(\d+)$/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num >= nextNum) {
+            nextNum = num + 1;
+          }
+        }
+      }
+    });
+    return `EMP-${String(nextNum).padStart(3, '0')}`;
+  };
+
   const handleOpenAdd = () => {
     setEditingEmployee(null);
     setFormName('');
@@ -45,6 +65,8 @@ export const EmployeeModule: React.FC = () => {
     setFormRole(UserRole.EMPLOYEE);
     setFormBranch('Main HQ');
     setFormAvatarUrl(null);
+    setFormAllowExpenses(false);
+    setFormEmployeeId(getNextEmployeeId());
     setShowAddModal(true);
   };
 
@@ -59,47 +81,80 @@ export const EmployeeModule: React.FC = () => {
     setFormRole(p.role);
     setFormBranch(p.branch || 'HQ');
     setFormAvatarUrl(p.avatarUrl || null);
+    setFormAllowExpenses(p.allowExpenses || false);
+    setFormEmployeeId(p.badgeNumber || (p as any).employeeNumber || '');
     setShowAddModal(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formName || !formEmail) return;
+    if (!formName || !formEmail || !formEmployeeId) return;
 
     if (activeUser.role === UserRole.MANAGER && formRole !== UserRole.EMPLOYEE) {
       alert('Access Denied: Managers can only register or assign Employee roles.');
       return;
     }
 
-    if (editingEmployee) {
-      if (!canModify(editingEmployee)) {
-        alert('Access Denied: You are not authorized to edit this profile.');
-        return;
-      }
-      updateEmployee(editingEmployee.id, {
-        name: formName,
-        email: formEmail,
-        role: formRole,
-        branch: formBranch,
-        avatarUrl: formAvatarUrl || undefined
-      });
-      alert(`Employee profile: "${formName}" successfully updated!`);
-    } else {
-      addEmployee({
-        name: formName,
-        email: formEmail,
-        role: formRole,
-        branch: formBranch,
-        avatarUrl: formAvatarUrl || undefined
-      });
-      alert(`Employee profile: "${formName}" successfully registered and issued credentials!`);
+    const employeeIdToSave = formEmployeeId.trim().toUpperCase();
+
+    // Strict client-side uniqueness validation
+    const exists = profiles.some(p => {
+      if (editingEmployee && p.id === editingEmployee.id) return false;
+      const pNum = p.badgeNumber || (p as any).employeeNumber;
+      return pNum && typeof pNum === 'string' && pNum.trim().toUpperCase() === employeeIdToSave;
+    });
+
+    if (exists) {
+      alert(`Validation Error: Employee ID "${employeeIdToSave}" is already assigned to another profile in this workspace. Please enter a unique Employee ID.`);
+      return;
     }
 
-    setShowAddModal(false);
-    setEditingEmployee(null);
-    setFormName('');
-    setFormEmail('');
-    setFormAvatarUrl(null);
+    try {
+      if (editingEmployee) {
+        if (!canModify(editingEmployee)) {
+          alert('Access Denied: You are not authorized to edit this profile.');
+          return;
+        }
+        updateEmployee(editingEmployee.id, {
+          name: formName,
+          email: formEmail,
+          role: formRole,
+          branch: formBranch,
+          badgeNumber: employeeIdToSave,
+          avatarUrl: formAvatarUrl || undefined,
+          allowExpenses: formAllowExpenses
+        });
+        alert(`Employee profile: "${formName}" successfully updated!`);
+        setShowAddModal(false);
+        setEditingEmployee(null);
+      } else {
+        const created = addEmployee({
+          name: formName,
+          email: formEmail,
+          role: formRole,
+          branch: formBranch,
+          badgeNumber: employeeIdToSave,
+          avatarUrl: formAvatarUrl || undefined,
+          allowExpenses: formAllowExpenses
+        });
+        alert(`Employee profile: "${formName}" successfully registered!\n\nGenerated Employee ID / Number: ${created.badgeNumber}\nBranch: ${created.branch}\n\nClick OK to automatically log in to their personal dashboard.`);
+        
+        // Auto-login newly registered employee
+        if (created && created.badgeNumber) {
+          setShowAddModal(false);
+          await loginWithEmployeeNumber(created.badgeNumber);
+        }
+      }
+
+      setShowAddModal(false);
+      setEditingEmployee(null);
+      setFormName('');
+      setFormEmail('');
+      setFormAvatarUrl(null);
+      setFormEmployeeId('');
+    } catch (err: any) {
+      alert(err.message || 'An error occurred while saving the profile.');
+    }
   };
 
   const handleToggleSuspend = (p: UserProfile) => {
@@ -136,10 +191,6 @@ export const EmployeeModule: React.FC = () => {
       alert('This account cannot be deleted.');
       return;
     }
-    if (id === 'u1') {
-      alert('This account cannot be deleted.');
-      return;
-    }
 
     setEmployeeToDelete(target);
     setShowDeleteModal(true);
@@ -149,7 +200,7 @@ export const EmployeeModule: React.FC = () => {
     if (!employeeToDelete) return;
     try {
       removeEmployee(employeeToDelete.id);
-      alert('Employee deleted successfully.');
+      alert('Employee decommissioned successfully. All historical records have been safely retained.');
     } catch (err: any) {
       alert(err.message || 'This account cannot be deleted.');
     } finally {
@@ -193,6 +244,7 @@ export const EmployeeModule: React.FC = () => {
                 <thead className="bg-gray-950/80 border-b border-brand-border text-gray-400 font-mono text-[10px] tracking-wider uppercase">
                   <tr>
                     <th className="p-4">Staff Member</th>
+                    <th className="p-4">Employee ID</th>
                     <th className="p-4">Email Account</th>
                     <th className="p-4">Corporate Role</th>
                     <th className="p-4">Status</th>
@@ -215,6 +267,13 @@ export const EmployeeModule: React.FC = () => {
                           <span className="text-[9px] text-gray-500 font-mono block mt-0.5">{p.branch || 'HQ'}</span>
                         </div>
                       </td>
+                      <td className="p-4 font-mono font-bold">
+                        {p.status === 'Deleted' ? (
+                          <span className="text-gray-500 line-through">{(p.badgeNumber || (p as any).employeeNumber || '').replace('_DELETED', '')}</span>
+                        ) : (
+                          <span className="text-cyan-400">{p.badgeNumber || (p as any).employeeNumber || 'N/A'}</span>
+                        )}
+                      </td>
                       <td className="p-4 font-mono text-gray-400">
                         {p.email}
                       </td>
@@ -230,12 +289,16 @@ export const EmployeeModule: React.FC = () => {
                       <td className="p-4 font-mono">
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-1.5">
-                            <span className={`w-1.5 h-1.5 rounded-full ${p.onlineStatus === 'online' ? 'bg-cyan-400 animate-ping' : 'bg-gray-600'}`} />
-                            <span className={p.onlineStatus === 'online' ? 'text-cyan-400 font-bold' : 'text-gray-500'}>
-                              {p.onlineStatus === 'online' ? 'Online' : 'Offline'}
+                            <span className={`w-1.5 h-1.5 rounded-full ${p.status === 'Deleted' ? 'bg-red-500' : p.onlineStatus === 'online' ? 'bg-cyan-400 animate-ping' : 'bg-gray-600'}`} />
+                            <span className={p.status === 'Deleted' ? 'text-red-500 font-medium' : p.onlineStatus === 'online' ? 'text-cyan-400 font-bold' : 'text-gray-500'}>
+                              {p.status === 'Deleted' ? 'Deactivated' : p.onlineStatus === 'online' ? 'Online' : 'Offline'}
                             </span>
                           </div>
-                          {p.status === 'Suspended' ? (
+                          {p.status === 'Deleted' ? (
+                            <span className="text-[9px] text-red-400 bg-red-950/25 px-1.5 py-0.5 rounded border border-red-500/20 font-bold self-start mt-0.5">
+                              DECOMMISSIONED
+                            </span>
+                          ) : p.status === 'Suspended' ? (
                             <span className="text-[9px] text-rose-400 bg-rose-950/25 px-1.5 py-0.5 rounded border border-rose-500/20 font-bold self-start mt-0.5">
                               SUSPENDED
                             </span>
@@ -251,29 +314,29 @@ export const EmployeeModule: React.FC = () => {
                           <div className="flex items-center justify-center gap-1.5">
                             <button
                               onClick={() => handleOpenEdit(p)}
-                              disabled={!canModify(p)}
+                              disabled={p.status === 'Deleted' || !canModify(p)}
                               className="p-1.5 bg-gray-950 border border-brand-border text-gray-400 hover:text-cyan-400 hover:border-cyan-500/20 disabled:opacity-20 disabled:cursor-not-allowed rounded-lg transition"
-                              title={canModify(p) ? "Edit profile details" : "Access Denied: Managers cannot edit other managers or admins"}
+                              title={p.status === 'Deleted' ? "Account is decommissioned" : canModify(p) ? "Edit profile details" : "Access Denied"}
                             >
                               <Edit className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => handleToggleSuspend(p)}
-                              disabled={p.id === activeUser.id || !canModify(p)}
+                              disabled={p.status === 'Deleted' || p.id === activeUser.id || !canModify(p)}
                               className={`p-1.5 bg-gray-950 border border-brand-border rounded-lg transition disabled:opacity-20 disabled:cursor-not-allowed ${
                                 p.status === 'Suspended'
                                   ? 'text-emerald-400 hover:text-emerald-300 hover:border-emerald-500/20'
                                   : 'text-amber-400 hover:text-amber-300 hover:border-amber-500/20'
                               }`}
-                              title={!canModify(p) ? "Access Denied" : p.status === 'Suspended' ? 'Unsuspend / Restore Employee' : 'Suspend Employee'}
+                              title={p.status === 'Deleted' ? "Account is decommissioned" : !canModify(p) ? "Access Denied" : p.status === 'Suspended' ? 'Unsuspend / Restore Employee' : 'Suspend Employee'}
                             >
                               {p.status === 'Suspended' ? <Check className="w-3.5 h-3.5" /> : <Ban className="w-3.5 h-3.5" />}
                             </button>
                             <button
                               onClick={() => handleRemove(p.id, p.name)}
-                              disabled={activeUser.role !== UserRole.ADMIN || p.id === activeUser.id}
+                              disabled={p.status === 'Deleted' || p.id === activeUser.id || !canModify(p)}
                               className="p-1.5 bg-gray-950 border border-brand-border text-gray-400 hover:text-rose-400 hover:border-rose-500/20 disabled:opacity-20 disabled:cursor-not-allowed rounded-lg transition"
-                              title={activeUser.role === UserRole.ADMIN ? (p.id === activeUser.id ? "Cannot delete yourself" : "Delete profile") : "Access Denied: Only Business Owner (Admin) can permanently delete employees"}
+                              title={p.status === 'Deleted' ? "Account is already decommissioned" : canModify(p) ? "Decommission employee" : "Access Denied"}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -429,6 +492,21 @@ export const EmployeeModule: React.FC = () => {
               </div>
 
               <div>
+                <label className="text-gray-400 block mb-1 font-sans">Employee ID / Number</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. EMP-001"
+                  value={formEmployeeId}
+                  onChange={(e) => setFormEmployeeId(e.target.value.toUpperCase())}
+                  className="w-full bg-gray-950/60 border border-brand-border rounded-lg p-2.5 text-cyan-400 font-mono font-bold outline-none focus:border-cyan-500/30 uppercase"
+                />
+                <p className="text-[10px] text-gray-500 font-sans mt-1">
+                  Must be unique across all corporate profiles. Prefilled with the next available ID.
+                </p>
+              </div>
+
+              <div>
                 <label className="text-gray-400 block mb-1 font-sans">Business Email Address</label>
                 <input
                   type="email"
@@ -473,6 +551,21 @@ export const EmployeeModule: React.FC = () => {
                 </div>
               </div>
 
+              {formRole === UserRole.EMPLOYEE && (
+                <div className="bg-gray-950/40 p-3 rounded-lg border border-brand-border/60 flex items-center justify-between font-sans">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-300 block">Expense Module Access</label>
+                    <span className="text-[10px] text-gray-500">Allow this employee to record and manage expenses</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={formAllowExpenses}
+                    onChange={(e) => setFormAllowExpenses(e.target.checked)}
+                    className="w-4 h-4 rounded border-brand-border text-cyan-500 focus:ring-cyan-500/30 bg-gray-950 cursor-pointer"
+                  />
+                </div>
+              )}
+
               <button
                 type="submit"
                 className="w-full py-2.5 bg-cyan-500 hover:bg-cyan-400 text-gray-950 font-bold font-sans rounded-xl text-center shadow-lg transition"
@@ -505,10 +598,10 @@ export const EmployeeModule: React.FC = () => {
 
               <div className="space-y-2">
                 <h3 className="text-sm font-bold text-gray-200">
-                  Permanently Delete Employee?
+                  Decommission Employee Account?
                 </h3>
                 <p className="text-xs text-gray-400 leading-relaxed">
-                  Are you sure you want to permanently delete this employee? This will permanently remove their profile, role assignments, attendance records, and active sessions. This action is irreversible.
+                  Are you sure you want to delete and decommission this employee? Their login credentials will be permanently invalidated and their active sessions revoked. Crucially, all historical sales, attendance logs, tasks, and audit trails tied to their work will be securely retained for auditing.
                 </p>
                 <div className="bg-gray-950/50 p-3 rounded-xl border border-brand-border/60 text-left space-y-1.5 mt-2">
                   <div className="flex justify-between text-[11px]">

@@ -19,6 +19,7 @@ export interface UserProfile {
   dateJoined?: string;
   lastLogin?: string;
   createdBy?: string;
+  allowExpenses?: boolean;
 }
 
 export interface Business {
@@ -340,3 +341,20 @@ export interface Category {
   business_id?: string;
   branch_id?: string;
 }
+
+export interface TradeCategory {
+  id: string;
+  businessId: string;
+  name: string;
+  description?: string;
+  createdAt?: string;
+}
+
+export interface Department {
+  id: string;
+  businessId: string;
+  name: string;
+  description?: string;
+  createdAt?: string;
+}
+

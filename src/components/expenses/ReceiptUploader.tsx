@@ -20,6 +20,7 @@ export const ReceiptUploader: React.FC<ReceiptUploaderProps> = ({ receiptUrl, on
   const [isProcessing, setIsProcessing] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [showImagePreview, setShowImagePreview] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -225,40 +226,76 @@ export const ReceiptUploader: React.FC<ReceiptUploaderProps> = ({ receiptUrl, on
       )}
 
       {receiptUrl && !isProcessing && (
-        <div className="border border-brand-border bg-gray-950/40 rounded-xl p-3 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 bg-cyan-950/30 border border-cyan-500/20 text-cyan-400 rounded-lg flex items-center justify-center">
-              <FileText className="w-5 h-5" />
+        <div className="space-y-3">
+          <div className="border border-brand-border bg-gray-950/40 rounded-xl p-3 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 bg-cyan-950/30 border border-cyan-500/20 text-cyan-400 rounded-lg flex items-center justify-center">
+                <FileText className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-200">digital_receipt_scanned.png</p>
+                <p className="text-[10px] text-green-400 flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>OCR Extracted Successfully</span>
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="font-semibold text-gray-200">digital_receipt_scanned.png</p>
-              <p className="text-[10px] text-green-400 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>OCR Extracted Successfully</span>
-              </p>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowImagePreview(!showImagePreview)}
+                className="p-1.5 bg-gray-900 hover:bg-gray-800 border border-brand-border text-gray-400 hover:text-cyan-400 rounded-lg transition"
+                title="Toggle Live Preview"
+              >
+                <Eye className="w-3.5 h-3.5" />
+              </button>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  alert('Downloading receipt document mockup: ' + receiptUrl);
+                }}
+                className="p-1.5 bg-gray-900 hover:bg-gray-800 border border-brand-border text-gray-400 hover:text-gray-200 rounded-lg transition"
+                title="Download Receipt"
+              >
+                <Download className="w-3.5 h-3.5" />
+              </a>
+              <button
+                type="button"
+                onClick={() => onChange(undefined)}
+                className="p-1.5 bg-gray-900 hover:bg-gray-800 border border-brand-border text-rose-400 hover:text-rose-300 rounded-lg transition"
+                title="Remove Receipt"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
-          <div className="flex gap-1.5">
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                alert('Downloading receipt document mockup: ' + receiptUrl);
-              }}
-              className="p-1.5 bg-gray-900 hover:bg-gray-800 border border-brand-border text-gray-400 hover:text-gray-200 rounded-lg transition"
-              title="Download Receipt"
-            >
-              <Download className="w-3.5 h-3.5" />
-            </a>
-            <button
-              type="button"
-              onClick={() => onChange(undefined)}
-              className="p-1.5 bg-gray-900 hover:bg-gray-800 border border-brand-border text-rose-400 hover:text-rose-300 rounded-lg transition"
-              title="Remove Receipt"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-          </div>
+
+          {/* Fully Responsive Receipt Preview Container */}
+          {showImagePreview && (
+            <div className="border border-brand-border bg-gray-950/60 rounded-xl p-3 flex flex-col items-center justify-center relative overflow-hidden animate-in fade-in duration-200">
+              <div className="text-[9px] font-bold text-gray-500 mb-2 uppercase tracking-wider font-sans self-start">
+                Live Document Preview (Aspect-Ratio Preserved)
+              </div>
+              
+              <div className="w-full max-w-full overflow-hidden rounded-lg bg-gray-900/40 p-1 border border-brand-border/40 flex items-center justify-center max-h-[320px] md:max-h-[400px]">
+                <img
+                  src={receiptUrl}
+                  alt="Receipt Scan"
+                  className="max-w-full max-h-full object-contain rounded-md shadow-md"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    // Fallback to a clean placeholder receipt mockup if the primary URL fails
+                    e.currentTarget.src = "https://images.unsplash.com/photo-1554415707-6e8cfc93fe23?w=600&auto=format&fit=crop&q=60";
+                  }}
+                />
+              </div>
+
+              <div className="text-[9px] text-gray-500 mt-2 font-sans text-center">
+                Use pinch to zoom or scroll on mobile screens to inspect finer line items.
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

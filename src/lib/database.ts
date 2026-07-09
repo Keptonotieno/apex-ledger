@@ -17,379 +17,25 @@ export const supabase = isSupabaseConfigured
   : null;
 
 // Clear seed tables to ensure pristine multi-tenancy with no demo data on first login
-const DEFAULT_BUSINESSES: Business[] = [
-  {
-    id: 'b1',
-    name: 'Apex Retail Group',
-    ownerId: 'u1',
-    branch: 'Westlands Branch',
-    currency: 'KSh'
-  }
-];
-const DEFAULT_BRANCHES: Branch[] = [
-  {
-    id: 'br1',
-    businessId: 'b1',
-    name: 'Westlands Branch',
-    location: 'Nairobi',
-    status: 'Active'
-  },
-  {
-    id: 'br2',
-    businessId: 'b1',
-    name: 'Mombasa Port Vault',
-    location: 'Mombasa',
-    status: 'Active'
-  }
-];
-const DEFAULT_CATEGORIES: Category[] = [
-  { id: 'cat_1', businessId: 'b1', name: 'Electronics', description: 'Computing devices, smartphones, and accessories' },
-  { id: 'cat_2', businessId: 'b1', name: 'Furniture', description: 'Ergonomic desks, seating, and office fixtures' },
-  { id: 'cat_3', businessId: 'b1', name: 'Accessories', description: 'Peripherals, cables, chargers, and small attachments' },
-  { id: 'cat_4', businessId: 'b1', name: 'Merchandise', description: 'Branded clothing, stationary, and promotional materials' },
-  { id: 'cat_5', businessId: 'b1', name: 'Beverages', description: 'Sodas, mineral water, tea bags, and coffee blends' },
-  { id: 'cat_6', businessId: 'b1', name: 'Services', description: 'Contracted consultancy, maintenance, and expert services' },
-  { id: 'cat_7', businessId: 'b1', name: 'SaaS Licensing', description: 'Software subscriptions, API tokens, and licenses' }
-];
-const DEFAULT_PROFILES: UserProfile[] = [
-  {
-    id: 'u1',
-    name: 'Sarah Manager',
-    email: 'sarah@apex.com',
-    role: UserRole.MANAGER,
-    businessId: 'b1',
-    branch: 'Westlands Branch',
-    onlineStatus: 'offline',
-    status: 'Active',
-    avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100'
-  },
-  {
-    id: 'u2',
-    name: 'John Employee',
-    email: 'john@apex.com',
-    role: UserRole.EMPLOYEE,
-    businessId: 'b1',
-    branch: 'Westlands Branch',
-    onlineStatus: 'offline',
-    status: 'Active',
-    avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100'
-  }
-];
-const DEFAULT_PRODUCTS: Product[] = [
-  {
-    id: 'p1',
-    businessId: 'b1',
-    name: 'Wireless Bluetooth Headphones',
-    category: 'Electronics',
-    barcode: '880912345678',
-    sku: 'EL-HP-01',
-    costPrice: 2500,
-    sellingPrice: 4500,
-    quantity: 45,
-    unit: 'pcs',
-    supplier: 'Sony East Africa',
-    stockStatus: 'In Stock',
-    minStockAlert: 10
-  },
-  {
-    id: 'p2',
-    businessId: 'b1',
-    name: 'Mechanical Gaming Keyboard',
-    category: 'Electronics',
-    barcode: '880912345679',
-    sku: 'EL-KB-02',
-    costPrice: 4000,
-    sellingPrice: 7500,
-    quantity: 25,
-    unit: 'pcs',
-    supplier: 'Logitech Distributors',
-    stockStatus: 'In Stock',
-    minStockAlert: 5
-  },
-  {
-    id: 'p3',
-    businessId: 'b1',
-    name: 'Ergonomic Office Chair',
-    category: 'Furniture',
-    barcode: '880912345680',
-    sku: 'FN-OC-03',
-    costPrice: 8000,
-    sellingPrice: 15000,
-    quantity: 8,
-    unit: 'pcs',
-    supplier: 'Office Depot Ke',
-    stockStatus: 'In Stock',
-    minStockAlert: 3
-  }
-];
-const DEFAULT_CUSTOMERS: Customer[] = [
-  {
-    id: 'c1',
-    businessId: 'b1',
-    name: 'Alina Kaveza',
-    phone: '0712345678',
-    email: 'alina@gmail.com',
-    address: 'Kilimani, Nairobi',
-    purchaseHistoryCount: 12,
-    totalSpent: 54000,
-    debtAmount: 0
-  },
-  {
-    id: 'c2',
-    businessId: 'b1',
-    name: 'Davis Mugendi',
-    phone: '0722345678',
-    email: 'davis@outlook.com',
-    address: 'Kileleshwa, Nairobi',
-    purchaseHistoryCount: 5,
-    totalSpent: 22500,
-    debtAmount: 4500
-  }
-];
-const DEFAULT_DEBTS: DebtRecord[] = [
-  {
-    id: 'd1',
-    businessId: 'b1',
-    customerId: 'c2',
-    customerName: 'Davis Mugendi',
-    type: 'Customer Debt',
-    outstandingAmount: 4500,
-    paidAmount: 0,
-    remainingBalance: 4500,
-    dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    status: 'Unpaid',
-    paymentHistory: []
-  }
-];
-const DEFAULT_SALES: Sale[] = [
-  {
-    id: 's1',
-    invoiceNumber: 'INV-2026-0001',
-    businessId: 'b1',
-    items: [
-      {
-        productId: 'p1',
-        productName: 'Wireless Bluetooth Headphones',
-        quantity: 2,
-        priceAtSale: 4500,
-        costPriceAtSale: 2500
-      }
-    ],
-    totalAmount: 9000,
-    discount: 0,
-    tax: 1440,
-    netAmount: 9000,
-    customerName: 'Alina Kaveza',
-    customerId: 'c1',
-    date: new Date().toISOString().split('T')[0],
-    time: '14:35',
-    cashierName: 'Sarah Manager',
-    cashierRole: UserRole.MANAGER,
-    paymentMethod: 'Mobile Money'
-  },
-  {
-    id: 's2',
-    invoiceNumber: 'INV-2026-0002',
-    businessId: 'b1',
-    items: [
-      {
-        productId: 'p2',
-        productName: 'Mechanical Gaming Keyboard',
-        quantity: 1,
-        priceAtSale: 7500,
-        costPriceAtSale: 4000
-      }
-    ],
-    totalAmount: 7500,
-    discount: 500,
-    tax: 1120,
-    netAmount: 7000,
-    customerName: 'Walk-in Customer',
-    date: new Date().toISOString().split('T')[0],
-    time: '16:10',
-    cashierName: 'John Employee',
-    cashierRole: UserRole.EMPLOYEE,
-    paymentMethod: 'Cash'
-  }
-];
-const DEFAULT_EXPENSES: Expense[] = [
-  {
-    id: 'e1',
-    businessId: 'b1',
-    category: 'Rent',
-    description: 'Monthly office rent payment',
-    amount: 12000,
-    date: new Date().toISOString().split('T')[0],
-    recordedBy: 'Sarah Manager',
-    role: UserRole.MANAGER
-  },
-  {
-    id: 'e2',
-    businessId: 'b1',
-    category: 'Utilities',
-    description: 'Electricity & Water bills',
-    amount: 3500,
-    date: new Date().toISOString().split('T')[0],
-    recordedBy: 'Sarah Manager',
-    role: UserRole.MANAGER
-  }
-];
+const DEFAULT_BUSINESSES: Business[] = [];
+const DEFAULT_BRANCHES: Branch[] = [];
+const DEFAULT_CATEGORIES: Category[] = [];
+const DEFAULT_PROFILES: UserProfile[] = [];
+const DEFAULT_PRODUCTS: Product[] = [];
+const DEFAULT_CUSTOMERS: Customer[] = [];
+const DEFAULT_DEBTS: DebtRecord[] = [];
+const DEFAULT_SALES: Sale[] = [];
+const DEFAULT_EXPENSES: Expense[] = [];
 const DEFAULT_PROCUREMENTS: Procurement[] = [];
 const DEFAULT_TASKS: Task[] = [];
 const DEFAULT_EVENTS: CalendarEvent[] = [];
 const DEFAULT_TIMELOGS: TimeLog[] = [];
 const DEFAULT_NOTIFICATIONS: Notification[] = [];
 const DEFAULT_AUDITS: AuditLog[] = [];
-
-const DEFAULT_BUDGETS: Budget[] = [
-  {
-    id: 'bgt1',
-    businessId: 'b1',
-    category: 'Utilities',
-    spendingLimit: 10000,
-    amountSpent: 3500,
-    remainingBalance: 6500,
-    percentageUsed: 35,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'bgt2',
-    businessId: 'b1',
-    category: 'Rent',
-    spendingLimit: 15000,
-    amountSpent: 12000,
-    remainingBalance: 3000,
-    percentageUsed: 80,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'bgt3',
-    businessId: 'b1',
-    category: 'Marketing',
-    spendingLimit: 5000,
-    amountSpent: 0,
-    remainingBalance: 5000,
-    percentageUsed: 0,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'bgt4',
-    businessId: 'b1',
-    category: 'Payroll',
-    spendingLimit: 50000,
-    amountSpent: 0,
-    remainingBalance: 50000,
-    percentageUsed: 0,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'bgt5',
-    businessId: 'b1',
-    category: 'Supplies',
-    spendingLimit: 20000,
-    amountSpent: 0,
-    remainingBalance: 20000,
-    percentageUsed: 0,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  }
-];
-
-const DEFAULT_INVOICES: Invoice[] = [
-  {
-    id: 'inv1',
-    businessId: 'b1',
-    invoiceNumber: 'INV-2026-001',
-    customerName: 'Davis Mugendi',
-    billingAmount: 15000,
-    lineItemDescription: 'Professional Advisory Services',
-    dueDateOffset: 15,
-    dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    status: 'Sent',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'inv2',
-    businessId: 'b1',
-    invoiceNumber: 'INV-2026-002',
-    customerName: 'Alina Kaveza',
-    billingAmount: 9000,
-    lineItemDescription: 'Bulk Retail Products Delivery',
-    dueDateOffset: 7,
-    dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    status: 'Paid',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'inv3',
-    businessId: 'b1',
-    invoiceNumber: 'INV-2026-003',
-    customerName: 'Walk-in Customer',
-    billingAmount: 4500,
-    lineItemDescription: 'Retail Hardware Accessories',
-    dueDateOffset: 1,
-    dueDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    status: 'Overdue',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  }
-];
-
-const DEFAULT_BANK_TRANSACTIONS: BankTransaction[] = [
-  {
-    id: 'bt1',
-    businessId: 'b1',
-    amount: 15000,
-    date: new Date().toISOString().split('T')[0],
-    reference: 'TXN-81928',
-    source: 'M-Pesa',
-    description: 'Davis Mugendi Invoice Pay',
-    categorySuggestion: 'Revenue',
-    status: 'Pending'
-  },
-  {
-    id: 'bt2',
-    businessId: 'b1',
-    amount: -3500,
-    date: new Date().toISOString().split('T')[0],
-    reference: 'TXN-92182',
-    source: 'Equity Bank',
-    description: 'Kenya Power Bill Payment',
-    categorySuggestion: 'Utilities',
-    status: 'Pending'
-  },
-  {
-    id: 'bt3',
-    businessId: 'b1',
-    amount: -12000,
-    date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    reference: 'TXN-12839',
-    source: 'Stripe',
-    description: 'Rent Payout',
-    categorySuggestion: 'Rent',
-    status: 'Reconciled',
-    reconciliationId: 'rec1',
-    reconciledAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
-  }
-];
-
-const DEFAULT_RECONCILIATIONS: Reconciliation[] = [
-  {
-    id: 'rec1',
-    businessId: 'b1',
-    amount: 12000,
-    paymentReference: 'TXN-12839',
-    category: 'Rent',
-    status: 'Reconciled',
-    timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
-  }
-];
+const DEFAULT_BUDGETS: Budget[] = [];
+const DEFAULT_INVOICES: Invoice[] = [];
+const DEFAULT_BANK_TRANSACTIONS: BankTransaction[] = [];
+const DEFAULT_RECONCILIATIONS: Reconciliation[] = [];
 
 // Helper to load or initialize from localStorage
 function getLocalItem<T>(key: string, defaultValue: T): T {
@@ -449,10 +95,35 @@ class ApexDatabaseManager {
 
   constructor() {
     this.initDatabase();
+    this.verifySessionOnStartup();
     if (isSupabaseConfigured && supabase) {
       this.syncFromSupabase().then(() => {
         this.subscribeRealtime();
       });
+    }
+  }
+
+  async verifySessionOnStartup() {
+    if (this.activeUserId) {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (!res.ok) {
+          this.clearLocalWorkspace();
+          window.dispatchEvent(new Event('storage'));
+        } else {
+          // Load fresh workspace state from persistent SQLite database
+          const workspaceRes = await fetch('/api/workspace/load');
+          if (workspaceRes.ok) {
+            const data = await workspaceRes.json();
+            if (data.success && data.workspace) {
+              this.writeWorkspaceToLocalStorage(data.workspace);
+              window.dispatchEvent(new Event('storage'));
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Session startup verification failed:', err);
+      }
     }
   }
 
@@ -499,7 +170,69 @@ class ApexDatabaseManager {
     }
   }
 
+  private saveTimeout: any = null;
+
+  clearLocalWorkspace() {
+    const keys = [
+      'businesses', 'branches', 'categories', 'profiles', 'products', 
+      'customers', 'debts', 'sales', 'expenses', 'procurements', 
+      'tasks', 'events', 'timelogs', 'notifications', 'audits',
+      'budgets', 'invoices', 'bank_transactions', 'reconciliations'
+    ];
+    keys.forEach(key => {
+      localStorage.removeItem(`apex_ledger_${key}`);
+    });
+    localStorage.removeItem('apex_ledger_active_business_id');
+    localStorage.removeItem('apex_ledger_active_user_id');
+  }
+
+  writeWorkspaceToLocalStorage(workspace: any) {
+    if (!workspace) return;
+    const keys = [
+      'businesses', 'branches', 'categories', 'profiles', 'products', 
+      'customers', 'debts', 'sales', 'expenses', 'procurements', 
+      'tasks', 'events', 'timelogs', 'notifications', 'audits',
+      'budgets', 'invoices', 'bank_transactions', 'reconciliations'
+    ];
+    keys.forEach(key => {
+      const val = workspace[key] || [];
+      localStorage.setItem(`apex_ledger_${key}`, JSON.stringify(val));
+    });
+  }
+
+  saveWorkspaceToServer() {
+    if (this.saveTimeout) clearTimeout(this.saveTimeout);
+    this.saveTimeout = setTimeout(async () => {
+      if (!this.activeUserId || !this.activeBusinessId) return;
+      try {
+        const keys = [
+          'businesses', 'branches', 'categories', 'profiles', 'products', 
+          'customers', 'debts', 'sales', 'expenses', 'procurements', 
+          'tasks', 'events', 'timelogs', 'notifications', 'audits',
+          'budgets', 'invoices', 'bank_transactions', 'reconciliations'
+        ];
+        const workspace: any = {};
+        keys.forEach(key => {
+          workspace[key] = getLocalItem(key, []);
+        });
+
+        await fetch('/api/workspace/save', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ workspace })
+        });
+      } catch (err) {
+        console.error('Error auto-saving workspace to SQLite:', err);
+      }
+    }, 500);
+  }
+
   async syncRowToSupabase(dbName: string, row: any, action: 'upsert' | 'delete') {
+    // Auto-save any local state mutation atomically to SQLite
+    this.saveWorkspaceToServer();
+
     if (!isSupabaseConfigured || !supabase) return;
     try {
       // Create schema table map overrides if needed, or defaults to the same name
@@ -539,64 +272,86 @@ class ApexDatabaseManager {
   }
 
   async login(userId: string, email?: string, password?: string): Promise<boolean> {
-    if (isSupabaseConfigured && supabase && email && password) {
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        const sessionToken = data.session?.access_token || '';
-        if (sessionToken) {
-          localStorage.setItem('apex_ledger_session_token', sessionToken);
-        }
-
-        // Pull fresh data from Supabase first
-        await this.syncFromSupabase();
-
-        // Match profile by email
+    if (!email || !password) {
+      // Allow demo bypass only if a userId is provided and we can locate a matching employee profile
+      if (userId) {
         const profiles = this.getProfiles();
-        const found = profiles.find(p => p.email.toLowerCase() === email.toLowerCase());
+        const found = profiles.find(p => p.id === userId);
         if (found) {
+          if (found.status === 'Deleted' || found.status === 'Archived') {
+            throw new Error('This employee account has been deleted/decommissioned. Access is restricted.');
+          }
           this.activeUserId = found.id;
           localStorage.setItem('apex_ledger_active_user_id', found.id);
-          this.addAudit('Logged In (Supabase)', 'N/A', `${found.name} (${found.role})`);
-          this.subscribeRealtime();
-          window.dispatchEvent(new Event('storage'));
-          return true;
-        } else {
-          // Provision a fallback profile for successfully authenticated Supabase user
-          const newProfile: UserProfile = {
-            id: data.user.id,
-            name: data.user.user_metadata?.full_name || email.split('@')[0],
-            email: email,
-            role: UserRole.ADMIN,
-            businessId: this.activeBusinessId,
-            onlineStatus: 'online',
-            branch: '',
-            avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=60'
-          };
-          const currentProfiles = this.getProfiles();
-          currentProfiles.push(newProfile);
-          setLocalItem('profiles', currentProfiles);
-          await this.syncRowToSupabase('profiles', newProfile, 'upsert');
-
-          this.activeUserId = newProfile.id;
-          localStorage.setItem('apex_ledger_active_user_id', newProfile.id);
-          this.subscribeRealtime();
+          this.addAudit('Logged In', 'N/A', `${found.name} (${found.role})`);
           window.dispatchEvent(new Event('storage'));
           return true;
         }
-      } catch (err) {
-        console.error('Supabase Login Error:', err);
-        throw err;
       }
+      throw new Error('Email and password are required for Owner login.');
     }
 
-    // Fallback/Demo profile login
-    const profiles = this.getProfiles();
-    const found = profiles.find(p => p.id === userId);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Authentication failed');
+      }
+
+      // Clear existing local workspace completely
+      this.clearLocalWorkspace();
+
+      // Write loaded workspace into LocalStorage
+      this.writeWorkspaceToLocalStorage(data.workspace);
+
+      // Set session identifiers locally
+      this.activeUserId = data.userId;
+      this.activeBusinessId = data.businessId;
+      localStorage.setItem('apex_ledger_active_user_id', data.userId);
+      localStorage.setItem('apex_ledger_active_business_id', data.businessId);
+
+      this.addAudit('Logged In', `${data.user.name} (Owner)`, 'N/A', '127.0.0.1');
+
+      window.dispatchEvent(new Event('storage'));
+      return true;
+    } catch (err: any) {
+      console.error('Login API error:', err);
+      throw err;
+    }
+  }
+
+  async loginWithEmployeeNumber(employeeNumber: string): Promise<boolean> {
+    const allProfiles = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
+    const found = allProfiles.find(p => 
+      (p.badgeNumber && p.badgeNumber.trim() === employeeNumber.trim()) || 
+      ((p as any).employeeNumber && (p as any).employeeNumber.trim() === employeeNumber.trim())
+    );
+
     if (found) {
+      if (found.status === 'Deleted' || found.status === 'Archived') {
+        throw new Error('This employee account has been deleted/decommissioned. Access is restricted.');
+      }
+      if (found.status === 'Suspended') {
+        throw new Error('This employee account is suspended. Please contact your manager.');
+      }
       this.activeUserId = found.id;
+      this.activeBusinessId = found.businessId;
+      
+      // Enforce the active branch
+      const empBranch = found.branch || 'Main HQ';
+      const branches = getLocalItem<Branch[]>('branches', DEFAULT_BRANCHES);
+      const bFound = branches.find(b => b.businessId === found.businessId && b.name === empBranch);
+      this.activeBranchId = bFound ? bFound.id : 'all';
+
       localStorage.setItem('apex_ledger_active_user_id', found.id);
-      this.addAudit('Logged In', 'N/A', `${found.name} (${found.role})`);
+      localStorage.setItem('apex_ledger_active_business_id', found.businessId);
+      localStorage.setItem('apex_ledger_active_branch_id', this.activeBranchId);
+
+      this.addAudit('Employee Logged In', 'N/A', `${found.name} (${found.role})`);
       window.dispatchEvent(new Event('storage'));
       return true;
     }
@@ -606,16 +361,12 @@ class ApexDatabaseManager {
   async logout() {
     const user = this.getCurrentUser();
     
-    // Invalidate Supabase authentication session if configured
-    if (isSupabaseConfigured && supabase) {
-      try {
-        await supabase.auth.signOut();
-      } catch (err) {
-        console.error('Supabase SignOut Error:', err);
-      }
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (err) {
+      console.error('Logout API error:', err);
     }
 
-    // Capture dynamic client-side IP if available, else fallback
     let clientIp = '197.232.1.84';
     try {
       const res = await fetch('https://api.ipify.org?format=json');
@@ -627,15 +378,12 @@ class ApexDatabaseManager {
       // ignore
     }
 
-    // Record the logout event in the Audit Log WITH user, role, device, IP, and timestamp
-    this.addAudit('Logged Out', `${user.name} (${user.role})`, 'N/A', clientIp);
+    if (user) {
+      this.addAudit('Logged Out', `${user.name} (${user.role})`, 'N/A', clientIp);
+    }
 
-    // Clear session-specific fields, tokens, and active session
-    this.activeUserId = '';
-    localStorage.removeItem('apex_ledger_active_user_id');
-    localStorage.removeItem('apex_ledger_session_token');
-    
-    // Clear session storage to comply with tokens / session requirements
+    // Clear local storage workspace securely so nothing is leaked, but SQL is intact!
+    this.clearLocalWorkspace();
     sessionStorage.clear();
 
     // Notify other tabs
@@ -643,14 +391,16 @@ class ApexDatabaseManager {
   }
 
   private initDatabase() {
-    // Legacy cleanup to make sure 'Apex Ledger Enterprise' and 'Apex Retail Branch 1' are completely removed
+    // Purge any legacy seed business records to ensure a completely pristine start
     const existingBizStr = localStorage.getItem('apex_ledger_businesses');
     if (existingBizStr) {
       try {
         const list = JSON.parse(existingBizStr) as Business[];
         const filtered = list.filter(b => 
+          b.name !== 'Apex Retail Group' &&
           b.name !== 'Apex Ledger Enterprise' && 
           b.name !== 'Apex Retail Branch 1' &&
+          b.id !== 'b1' &&
           b.id !== 'b2'
         );
         if (filtered.length !== list.length) {
@@ -669,6 +419,56 @@ class ApexDatabaseManager {
         }
       } catch (e) {
         // Safe fallback
+      }
+    }
+
+    // Purge legacy seed user profiles
+    const existingProfilesStr = localStorage.getItem('apex_ledger_profiles');
+    if (existingProfilesStr) {
+      try {
+        const list = JSON.parse(existingProfilesStr) as UserProfile[];
+        const filtered = list.filter(p => 
+          p.id !== 'u1' && 
+          p.id !== 'u2' &&
+          p.email !== 'sarah@apex.com' &&
+          p.email !== 'john@apex.com'
+        );
+        if (filtered.length !== list.length) {
+          localStorage.setItem('apex_ledger_profiles', JSON.stringify(filtered));
+        }
+      } catch (e) {}
+    }
+
+    // Purge any associated residual default data keys
+    const keysToPurge = ['products', 'customers', 'debts', 'sales', 'expenses', 'branches', 'budgets', 'invoices', 'bank_transactions', 'reconciliations'];
+    for (const key of keysToPurge) {
+      const str = localStorage.getItem(`apex_ledger_${key}`);
+      if (str) {
+        try {
+          const list = JSON.parse(str) as any[];
+          const filtered = list.filter((item: any) => 
+            item.businessId !== 'b1' && 
+            item.businessId !== 'b2' && 
+            item.id !== 'p1' && 
+            item.id !== 'p2' && 
+            item.id !== 'p3' &&
+            item.id !== 'br1' &&
+            item.id !== 'br2' &&
+            item.id !== 'rec1' &&
+            item.id !== 'bt1' &&
+            item.id !== 'bt2' &&
+            item.id !== 'bt3' &&
+            item.id !== 'inv1' &&
+            item.id !== 'inv2' &&
+            item.id !== 'inv3' &&
+            item.id !== 'd1' &&
+            item.id !== 'c1' &&
+            item.id !== 'c2'
+          );
+          if (filtered.length !== list.length) {
+            localStorage.setItem(`apex_ledger_${key}`, JSON.stringify(filtered));
+          }
+        } catch (e) {}
       }
     }
 
@@ -771,15 +571,27 @@ class ApexDatabaseManager {
   // Core Data Getters (Filtered by Active Business for Multi-tenant Isolation!)
   getBusinesses(includeArchived: boolean = false): Business[] {
     const list = getLocalItem<Business[]>('businesses', DEFAULT_BUSINESSES);
-    if (includeArchived) return list;
-    return list.filter(b => !b.archived);
+    if (!this.isLoggedIn()) {
+      return [];
+    }
+    const currentUser = this.getCurrentUser();
+    let filtered: Business[] = [];
+    if (currentUser.role === UserRole.ADMIN) {
+      // Business Owner sees only their owned businesses
+      filtered = list.filter(b => b.ownerId === this.activeUserId);
+    } else {
+      // Employees/Managers see only their assigned business
+      filtered = list.filter(b => b.id === currentUser.businessId);
+    }
+    if (includeArchived) return filtered;
+    return filtered.filter(b => !b.archived);
   }
 
   getCurrentBusiness(): Business {
     const list = this.getBusinesses(true);
     return list.find(b => b.id === this.activeBusinessId) || list.find(b => !b.archived) || list[0] || {
       id: '',
-      name: 'Corporate Workspace',
+      name: 'No Active Workspace',
       ownerId: '',
       branch: '',
       currency: 'KSh'
@@ -788,7 +600,15 @@ class ApexDatabaseManager {
 
   getProfiles(): UserProfile[] {
     const all = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
-    const filtered = all.filter(u => u.businessId === this.activeBusinessId);
+    const currentUser = this.getCurrentUser();
+    const activeBizId = currentUser.role === UserRole.EMPLOYEE ? currentUser.businessId : this.activeBusinessId;
+    const filtered = all.filter(u => u.businessId === activeBizId);
+    
+    if (currentUser.role === UserRole.EMPLOYEE) {
+      const empBranch = currentUser.branch || 'Main HQ';
+      return filtered.filter(u => u.branch === empBranch || (u as any).branchId === empBranch || u.id === currentUser.id);
+    }
+
     if (this.activeBranchId && this.activeBranchId !== 'all') {
       // Find active branch name
       const bName = this.getCurrentBranchName();
@@ -799,7 +619,18 @@ class ApexDatabaseManager {
 
   getCurrentUser(): UserProfile {
     const list = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
-    return list.find(u => u.id === this.activeUserId) || list[0] || {
+    if (!this.activeUserId) {
+      return {
+        id: '',
+        name: 'Guest User',
+        email: '',
+        role: UserRole.EMPLOYEE,
+        businessId: '',
+        onlineStatus: 'offline',
+        branch: ''
+      };
+    }
+    return list.find(u => u.id === this.activeUserId) || {
       id: '',
       name: 'System User',
       email: '',
@@ -812,7 +643,15 @@ class ApexDatabaseManager {
 
   getProducts(): Product[] {
     const all = getLocalItem<Product[]>('products', DEFAULT_PRODUCTS);
-    const filtered = all.filter(p => p.businessId === this.activeBusinessId);
+    const currentUser = this.getCurrentUser();
+    const activeBizId = currentUser.role === UserRole.EMPLOYEE ? currentUser.businessId : this.activeBusinessId;
+    const filtered = all.filter(p => p.businessId === activeBizId);
+    
+    if (currentUser.role === UserRole.EMPLOYEE) {
+      const empBranch = currentUser.branch || 'Main HQ';
+      return filtered.filter(p => (p as any).branch === empBranch || (p as any).branchId === empBranch);
+    }
+
     if (this.activeBranchId && this.activeBranchId !== 'all') {
       return filtered.filter(p => (p as any).branchId === this.activeBranchId || (p as any).branch === this.getCurrentBranchName());
     }
@@ -821,7 +660,15 @@ class ApexDatabaseManager {
 
   getCustomers(): Customer[] {
     const all = getLocalItem<Customer[]>('customers', DEFAULT_CUSTOMERS);
-    const filtered = all.filter(c => c.businessId === this.activeBusinessId || c.business_id === this.activeBusinessId || c.workspaceId === this.activeBusinessId || c.workspace_id === this.activeBusinessId);
+    const currentUser = this.getCurrentUser();
+    const activeBizId = currentUser.role === UserRole.EMPLOYEE ? currentUser.businessId : this.activeBusinessId;
+    const filtered = all.filter(c => c.businessId === activeBizId || c.business_id === activeBizId || c.workspaceId === activeBizId || c.workspace_id === activeBizId);
+    
+    if (currentUser.role === UserRole.EMPLOYEE) {
+      const empBranch = currentUser.branch || 'Main HQ';
+      return filtered.filter(c => c.branchId === empBranch || c.branch_id === empBranch || (c as any).branch === empBranch);
+    }
+
     if (this.activeBranchId && this.activeBranchId !== 'all') {
       return filtered.filter(c => c.branchId === this.activeBranchId || c.branch_id === this.activeBranchId || (c as any).branch === this.getCurrentBranchName());
     }
@@ -830,7 +677,15 @@ class ApexDatabaseManager {
 
   getDebts(): DebtRecord[] {
     const all = getLocalItem<DebtRecord[]>('debts', DEFAULT_DEBTS);
-    const filtered = all.filter(d => d.businessId === this.activeBusinessId);
+    const currentUser = this.getCurrentUser();
+    const activeBizId = currentUser.role === UserRole.EMPLOYEE ? currentUser.businessId : this.activeBusinessId;
+    const filtered = all.filter(d => d.businessId === activeBizId);
+    
+    if (currentUser.role === UserRole.EMPLOYEE) {
+      const empBranch = currentUser.branch || 'Main HQ';
+      return filtered.filter(d => (d as any).branchId === empBranch || (d as any).branch === empBranch);
+    }
+
     if (this.activeBranchId && this.activeBranchId !== 'all') {
       return filtered.filter(d => (d as any).branchId === this.activeBranchId || (d as any).branch === this.getCurrentBranchName());
     }
@@ -839,7 +694,15 @@ class ApexDatabaseManager {
 
   getSales(): Sale[] {
     const all = getLocalItem<Sale[]>('sales', DEFAULT_SALES);
-    const filtered = all.filter(s => s.businessId === this.activeBusinessId);
+    const currentUser = this.getCurrentUser();
+    const activeBizId = currentUser.role === UserRole.EMPLOYEE ? currentUser.businessId : this.activeBusinessId;
+    const filtered = all.filter(s => s.businessId === activeBizId);
+    
+    if (currentUser.role === UserRole.EMPLOYEE) {
+      const empBranch = currentUser.branch || 'Main HQ';
+      return filtered.filter(s => (s as any).branchId === empBranch || (s as any).branch === empBranch);
+    }
+
     if (this.activeBranchId && this.activeBranchId !== 'all') {
       return filtered.filter(s => (s as any).branchId === this.activeBranchId || (s as any).branch === this.getCurrentBranchName());
     }
@@ -848,36 +711,60 @@ class ApexDatabaseManager {
 
   getExpenses(): Expense[] {
     const all = getLocalItem<Expense[]>('expenses', DEFAULT_EXPENSES);
-    const filtered = all.filter(e => e.businessId === this.activeBusinessId);
+    const currentUser = this.getCurrentUser();
+    const activeBizId = currentUser.role === UserRole.EMPLOYEE ? currentUser.businessId : this.activeBusinessId;
+    const filtered = all.filter(e => e.businessId === activeBizId);
+    
+    if (currentUser.role === UserRole.EMPLOYEE) {
+      const empBranch = currentUser.branch || 'Main HQ';
+      return filtered.filter(e => (e as any).branchId === empBranch || (e as any).branch === empBranch || e.branch === empBranch);
+    }
+
     if (this.activeBranchId && this.activeBranchId !== 'all') {
-      return filtered.filter(e => (e as any).branchId === this.activeBranchId || (e as any).branch === this.getCurrentBranchName());
+      return filtered.filter(e => (e as any).branchId === this.activeBranchId || (e as any).branch === this.getCurrentBranchName() || e.branch === this.getCurrentBranchName());
     }
     return filtered;
   }
 
   getBudgets(): Budget[] {
     const all = getLocalItem<Budget[]>('budgets', DEFAULT_BUDGETS);
-    return all.filter(b => b.businessId === this.activeBusinessId);
+    const currentUser = this.getCurrentUser();
+    const activeBizId = currentUser.role === UserRole.EMPLOYEE ? currentUser.businessId : this.activeBusinessId;
+    return all.filter(b => b.businessId === activeBizId);
   }
 
   getInvoices(): Invoice[] {
     const all = getLocalItem<Invoice[]>('invoices', DEFAULT_INVOICES);
-    return all.filter(i => i.businessId === this.activeBusinessId && !i.deletedAt);
+    const currentUser = this.getCurrentUser();
+    const activeBizId = currentUser.role === UserRole.EMPLOYEE ? currentUser.businessId : this.activeBusinessId;
+    return all.filter(i => i.businessId === activeBizId && !i.deletedAt);
   }
 
   getBankTransactions(): BankTransaction[] {
     const all = getLocalItem<BankTransaction[]>('bank_transactions', DEFAULT_BANK_TRANSACTIONS);
-    return all.filter(b => b.businessId === this.activeBusinessId);
+    const currentUser = this.getCurrentUser();
+    const activeBizId = currentUser.role === UserRole.EMPLOYEE ? currentUser.businessId : this.activeBusinessId;
+    return all.filter(b => b.businessId === activeBizId);
   }
 
   getReconciliations(): Reconciliation[] {
     const all = getLocalItem<Reconciliation[]>('reconciliations', DEFAULT_RECONCILIATIONS);
-    return all.filter(r => r.businessId === this.activeBusinessId);
+    const currentUser = this.getCurrentUser();
+    const activeBizId = currentUser.role === UserRole.EMPLOYEE ? currentUser.businessId : this.activeBusinessId;
+    return all.filter(r => r.businessId === activeBizId);
   }
 
   getProcurements(): Procurement[] {
     const all = getLocalItem<Procurement[]>('procurements', DEFAULT_PROCUREMENTS);
-    const filtered = all.filter(p => p.businessId === this.activeBusinessId);
+    const currentUser = this.getCurrentUser();
+    const activeBizId = currentUser.role === UserRole.EMPLOYEE ? currentUser.businessId : this.activeBusinessId;
+    const filtered = all.filter(p => p.businessId === activeBizId);
+    
+    if (currentUser.role === UserRole.EMPLOYEE) {
+      const empBranch = currentUser.branch || 'Main HQ';
+      return filtered.filter(p => (p as any).branchId === empBranch || (p as any).branch === empBranch);
+    }
+
     if (this.activeBranchId && this.activeBranchId !== 'all') {
       return filtered.filter(p => (p as any).branchId === this.activeBranchId || (p as any).branch === this.getCurrentBranchName());
     }
@@ -886,7 +773,15 @@ class ApexDatabaseManager {
 
   getTasks(): Task[] {
     const all = getLocalItem<Task[]>('tasks', DEFAULT_TASKS);
-    const filtered = all.filter(t => t.businessId === this.activeBusinessId);
+    const currentUser = this.getCurrentUser();
+    const activeBizId = currentUser.role === UserRole.EMPLOYEE ? currentUser.businessId : this.activeBusinessId;
+    const filtered = all.filter(t => t.businessId === activeBizId);
+    
+    if (currentUser.role === UserRole.EMPLOYEE) {
+      const empBranch = currentUser.branch || 'Main HQ';
+      return filtered.filter(t => (t as any).branchId === empBranch || (t as any).branch === empBranch || t.assignedToId === currentUser.id);
+    }
+
     if (this.activeBranchId && this.activeBranchId !== 'all') {
       return filtered.filter(t => (t as any).branchId === this.activeBranchId || (t as any).branch === this.getCurrentBranchName());
     }
@@ -895,7 +790,15 @@ class ApexDatabaseManager {
 
   getEvents(): CalendarEvent[] {
     const all = getLocalItem<CalendarEvent[]>('events', DEFAULT_EVENTS);
-    const filtered = all.filter(e => e.businessId === this.activeBusinessId);
+    const currentUser = this.getCurrentUser();
+    const activeBizId = currentUser.role === UserRole.EMPLOYEE ? currentUser.businessId : this.activeBusinessId;
+    const filtered = all.filter(e => e.businessId === activeBizId);
+    
+    if (currentUser.role === UserRole.EMPLOYEE) {
+      const empBranch = currentUser.branch || 'Main HQ';
+      return filtered.filter(e => (e as any).branchId === empBranch || (e as any).branch === empBranch);
+    }
+
     if (this.activeBranchId && this.activeBranchId !== 'all') {
       return filtered.filter(e => (e as any).branchId === this.activeBranchId || (e as any).branch === this.getCurrentBranchName());
     }
@@ -904,7 +807,15 @@ class ApexDatabaseManager {
 
   getTimeLogs(): TimeLog[] {
     const all = getLocalItem<TimeLog[]>('timelogs', DEFAULT_TIMELOGS);
-    const filtered = all.filter(l => l.businessId === this.activeBusinessId);
+    const currentUser = this.getCurrentUser();
+    const activeBizId = currentUser.role === UserRole.EMPLOYEE ? currentUser.businessId : this.activeBusinessId;
+    const filtered = all.filter(l => l.businessId === activeBizId);
+    
+    if (currentUser.role === UserRole.EMPLOYEE) {
+      const empBranch = currentUser.branch || 'Main HQ';
+      return filtered.filter(l => (l as any).branchId === empBranch || (l as any).branch === empBranch || l.userId === currentUser.id);
+    }
+
     if (this.activeBranchId && this.activeBranchId !== 'all') {
       return filtered.filter(l => (l as any).branchId === this.activeBranchId || (l as any).branch === this.getCurrentBranchName());
     }
@@ -913,7 +824,15 @@ class ApexDatabaseManager {
 
   getNotifications(): Notification[] {
     const all = getLocalItem<Notification[]>('notifications', DEFAULT_NOTIFICATIONS);
-    const filtered = all.filter(n => n.businessId === this.activeBusinessId);
+    const currentUser = this.getCurrentUser();
+    const activeBizId = currentUser.role === UserRole.EMPLOYEE ? currentUser.businessId : this.activeBusinessId;
+    const filtered = all.filter(n => n.businessId === activeBizId);
+    
+    if (currentUser.role === UserRole.EMPLOYEE) {
+      const empBranch = currentUser.branch || 'Main HQ';
+      return filtered.filter(n => (n as any).branchId === empBranch || (n as any).branch === empBranch);
+    }
+
     if (this.activeBranchId && this.activeBranchId !== 'all') {
       return filtered.filter(n => (n as any).branchId === this.activeBranchId || (n as any).branch === this.getCurrentBranchName());
     }
@@ -922,7 +841,15 @@ class ApexDatabaseManager {
 
   getAudits(): AuditLog[] {
     const all = getLocalItem<AuditLog[]>('audits', DEFAULT_AUDITS);
-    const filtered = all.filter(a => a.businessId === this.activeBusinessId);
+    const currentUser = this.getCurrentUser();
+    const activeBizId = currentUser.role === UserRole.EMPLOYEE ? currentUser.businessId : this.activeBusinessId;
+    const filtered = all.filter(a => a.businessId === activeBizId);
+    
+    if (currentUser.role === UserRole.EMPLOYEE) {
+      const empBranch = currentUser.branch || 'Main HQ';
+      return filtered.filter(a => (a as any).branchId === empBranch || (a as any).branch === empBranch || a.userEmail === currentUser.email);
+    }
+
     if (this.activeBranchId && this.activeBranchId !== 'all') {
       return filtered.filter(a => (a as any).branchId === this.activeBranchId || (a as any).branch === this.getCurrentBranchName());
     }
@@ -1015,14 +942,258 @@ class ApexDatabaseManager {
     }
   }
 
-  deleteBranch(branchId: string) {
-    const all = getLocalItem<Branch[]>('branches', DEFAULT_BRANCHES);
-    const branchToRemove = all.find(b => b.id === branchId);
-    if (branchToRemove) {
+  hasBranchDependencies(branchId: string, branchName: string): { has: boolean; details: string[] } {
+    const details: string[] = [];
+
+    // 1. Check Profiles (excluding owner or active user if needed, but let's check any non-suspended staff profile)
+    const profiles = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
+    const assignedEmployees = profiles.filter(
+      p => p.businessId === this.activeBusinessId && (p.branch === branchName || (p as any).branchId === branchId)
+    );
+    if (assignedEmployees.length > 0) {
+      details.push(`${assignedEmployees.length} active employee(s) (${assignedEmployees.map(e => e.name).join(', ')})`);
+    }
+
+    // 2. Check Products
+    const products = getLocalItem<Product[]>('products', DEFAULT_PRODUCTS);
+    const assignedProducts = products.filter(
+      p => p.businessId === this.activeBusinessId && ((p as any).branchId === branchId || (p as any).branch === branchName)
+    );
+    if (assignedProducts.length > 0) {
+      details.push(`${assignedProducts.length} product(s) in inventory`);
+    }
+
+    // 3. Check Sales
+    const sales = getLocalItem<Sale[]>('sales', DEFAULT_SALES);
+    const assignedSales = sales.filter(
+      s => s.businessId === this.activeBusinessId && ((s as any).branchId === branchId || (s as any).branch === branchName)
+    );
+    if (assignedSales.length > 0) {
+      details.push(`${assignedSales.length} sale transaction(s)`);
+    }
+
+    // 4. Check Expenses
+    const expenses = getLocalItem<Expense[]>('expenses', DEFAULT_EXPENSES);
+    const assignedExpenses = expenses.filter(
+      e => e.businessId === this.activeBusinessId && ((e as any).branchId === branchId || e.branch === branchName || (e as any).branch === branchName)
+    );
+    if (assignedExpenses.length > 0) {
+      details.push(`${assignedExpenses.length} expense record(s)`);
+    }
+
+    // 5. Check Customers
+    const customers = getLocalItem<Customer[]>('customers', DEFAULT_CUSTOMERS);
+    const assignedCustomers = customers.filter(
+      c => c.businessId === this.activeBusinessId && (c.branchId === branchId || c.branch_id === branchId || (c as any).branch === branchName)
+    );
+    if (assignedCustomers.length > 0) {
+      details.push(`${assignedCustomers.length} customer(s)`);
+    }
+
+    // 6. Check Debts
+    const debts = getLocalItem<DebtRecord[]>('debts', DEFAULT_DEBTS);
+    const assignedDebts = debts.filter(
+      d => d.businessId === this.activeBusinessId && ((d as any).branchId === branchId || (d as any).branch === branchName)
+    );
+    if (assignedDebts.length > 0) {
+      details.push(`${assignedDebts.length} debt record(s)`);
+    }
+
+    // 7. Check Procurements
+    const procurements = getLocalItem<Procurement[]>('procurements', DEFAULT_PROCUREMENTS);
+    const assignedProcurements = procurements.filter(
+      p => p.businessId === this.activeBusinessId && ((p as any).branchId === branchId || (p as any).branch === branchName)
+    );
+    if (assignedProcurements.length > 0) {
+      details.push(`${assignedProcurements.length} procurement order(s)`);
+    }
+
+    // 8. Check Tasks
+    const tasks = getLocalItem<Task[]>('tasks', DEFAULT_TASKS);
+    const assignedTasks = tasks.filter(
+      t => t.businessId === this.activeBusinessId && ((t as any).branchId === branchId || (t as any).branch === branchName)
+    );
+    if (assignedTasks.length > 0) {
+      details.push(`${assignedTasks.length} task(s)`);
+    }
+
+    // 9. Check Events
+    const events = getLocalItem<CalendarEvent[]>('events', DEFAULT_EVENTS);
+    const assignedEvents = events.filter(
+      e => e.businessId === this.activeBusinessId && ((e as any).branchId === branchId || (e as any).branch === branchName)
+    );
+    if (assignedEvents.length > 0) {
+      details.push(`${assignedEvents.length} calendar event(s)`);
+    }
+
+    // 10. Check Time Logs
+    const timelogs = getLocalItem<TimeLog[]>('timelogs', DEFAULT_TIMELOGS);
+    const assignedTimelogs = timelogs.filter(
+      l => l.businessId === this.activeBusinessId && ((l as any).branchId === branchId || (l as any).branch === branchName)
+    );
+    if (assignedTimelogs.length > 0) {
+      details.push(`${assignedTimelogs.length} time log(s)`);
+    }
+
+    return { has: details.length > 0, details };
+  }
+
+  cascadeDeleteBranchRecords(branchId: string, branchName: string) {
+    // 1. Delete profiles
+    const profiles = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
+    const remainingProfiles = profiles.filter(
+      p => p.businessId !== this.activeBusinessId || (p.branch !== branchName && (p as any).branchId !== branchId)
+    );
+    setLocalItem('profiles', remainingProfiles);
+
+    // 2. Delete products
+    const products = getLocalItem<Product[]>('products', DEFAULT_PRODUCTS);
+    const remainingProducts = products.filter(
+      p => p.businessId !== this.activeBusinessId || ((p as any).branchId !== branchId && (p as any).branch !== branchName)
+    );
+    setLocalItem('products', remainingProducts);
+
+    // 3. Delete sales
+    const sales = getLocalItem<Sale[]>('sales', DEFAULT_SALES);
+    const remainingSales = sales.filter(
+      s => s.businessId !== this.activeBusinessId || ((s as any).branchId !== branchId && (s as any).branch !== branchName)
+    );
+    setLocalItem('sales', remainingSales);
+
+    // 4. Delete expenses
+    const expenses = getLocalItem<Expense[]>('expenses', DEFAULT_EXPENSES);
+    const remainingExpenses = expenses.filter(
+      e => e.businessId !== this.activeBusinessId || ((e as any).branchId !== branchId && e.branch !== branchName && (e as any).branch !== branchName)
+    );
+    setLocalItem('expenses', remainingExpenses);
+
+    // 5. Delete customers
+    const customers = getLocalItem<Customer[]>('customers', DEFAULT_CUSTOMERS);
+    const remainingCustomers = customers.filter(
+      c => c.businessId !== this.activeBusinessId || (c.branchId !== branchId && c.branch_id !== branchId && (c as any).branch !== branchName)
+    );
+    setLocalItem('customers', remainingCustomers);
+
+    // 6. Delete debts
+    const debts = getLocalItem<DebtRecord[]>('debts', DEFAULT_DEBTS);
+    const remainingDebts = debts.filter(
+      d => d.businessId !== this.activeBusinessId || ((d as any).branchId !== branchId && (d as any).branch !== branchName)
+    );
+    setLocalItem('debts', remainingDebts);
+
+    // 7. Delete procurements
+    const procurements = getLocalItem<Procurement[]>('procurements', DEFAULT_PROCUREMENTS);
+    const remainingProcurements = procurements.filter(
+      p => p.businessId !== this.activeBusinessId || ((p as any).branchId !== branchId && (p as any).branch !== branchName)
+    );
+    setLocalItem('procurements', remainingProcurements);
+
+    // 8. Delete tasks
+    const tasks = getLocalItem<Task[]>('tasks', DEFAULT_TASKS);
+    const remainingTasks = tasks.filter(
+      t => t.businessId !== this.activeBusinessId || ((t as any).branchId !== branchId && (t as any).branch !== branchName)
+    );
+    setLocalItem('tasks', remainingTasks);
+
+    // 9. Delete events
+    const events = getLocalItem<CalendarEvent[]>('events', DEFAULT_EVENTS);
+    const remainingEvents = events.filter(
+      e => e.businessId !== this.activeBusinessId || ((e as any).branchId !== branchId && (e as any).branch !== branchName)
+    );
+    setLocalItem('events', remainingEvents);
+
+    // 10. Delete timelogs
+    const timelogs = getLocalItem<TimeLog[]>('timelogs', DEFAULT_TIMELOGS);
+    const remainingTimelogs = timelogs.filter(
+      l => l.businessId !== this.activeBusinessId || ((l as any).branchId !== branchId && (l as any).branch !== branchName)
+    );
+    setLocalItem('timelogs', remainingTimelogs);
+
+    // 11. Delete categories
+    const categories = getLocalItem<Category[]>('categories', DEFAULT_CATEGORIES);
+    const remainingCategories = categories.filter(
+      c => c.businessId !== this.activeBusinessId || ((c as any).branchId !== branchId && (c as any).branch_id !== branchId)
+    );
+    setLocalItem('categories', remainingCategories);
+  }
+
+  deleteBranch(branchId: string, cascade: boolean = false) {
+    // 1. Database Transaction Backup
+    const backup = {
+      branches: localStorage.getItem('apex_ledger_branches'),
+      profiles: localStorage.getItem('apex_ledger_profiles'),
+      products: localStorage.getItem('apex_ledger_products'),
+      sales: localStorage.getItem('apex_ledger_sales'),
+      expenses: localStorage.getItem('apex_ledger_expenses'),
+      customers: localStorage.getItem('apex_ledger_customers'),
+      debts: localStorage.getItem('apex_ledger_debts'),
+      procurements: localStorage.getItem('apex_ledger_procurements'),
+      tasks: localStorage.getItem('apex_ledger_tasks'),
+      events: localStorage.getItem('apex_ledger_events'),
+      timelogs: localStorage.getItem('apex_ledger_timelogs'),
+      categories: localStorage.getItem('apex_ledger_categories'),
+      audits: localStorage.getItem('apex_ledger_audits'),
+    };
+
+    try {
+      console.log(`[DatabaseManager] Starting Decommission Transaction for Branch: ${branchId}`);
+
+      const all = getLocalItem<Branch[]>('branches', DEFAULT_BRANCHES);
+      const branchToRemove = all.find(b => b.id === branchId);
+      if (!branchToRemove) {
+        throw new Error(`Corporate branch with ID ${branchId} does not exist.`);
+      }
+
+      // Check role-based permissions
+      const currentUser = this.getCurrentUser();
+      const currentBusiness = this.getCurrentBusiness();
+      const isOwner = currentUser?.role === UserRole.ADMIN;
+      const isManager = currentUser?.role === UserRole.MANAGER;
+      const canManage = isOwner || (isManager && !!currentBusiness?.allowManagersToManageBranches);
+      if (!canManage) {
+        throw new Error("Transaction Rollback: Unauthorized access. Only Business Owners or authorized Managers can delete branches.");
+      }
+
+      if (!cascade) {
+        const check = this.hasBranchDependencies(branchId, branchToRemove.name);
+        if (check.has) {
+          throw new Error(`Cannot delete branch "${branchToRemove.name}" because it contains active dependencies: ${check.details.join(', ')}.`);
+        }
+      } else {
+        this.cascadeDeleteBranchRecords(branchId, branchToRemove.name);
+      }
+
       const filtered = all.filter(b => b.id !== branchId);
       setLocalItem('branches', filtered);
+
+      // If we deleted the active branch, reset it to 'all'
+      if (this.activeBranchId === branchId) {
+        this.activeBranchId = 'all';
+        localStorage.setItem('apex_ledger_active_branch_id', 'all');
+      }
+
       this.addAudit('Shut Down Corporate Branch', branchToRemove.name, 'DECOMMISSIONED');
       this.syncRowToSupabase('branches', branchToRemove, 'delete');
+      
+      console.log(`[DatabaseManager] Decommission Transaction COMMITTED successfully for Branch: ${branchId}`);
+    } catch (err: any) {
+      console.error(`[DatabaseManager] Transaction FAILED: ${err.message}. Rolling back database state...`);
+      // ROLLBACK TRANSACTION
+      if (backup.branches) localStorage.setItem('apex_ledger_branches', backup.branches);
+      if (backup.profiles) localStorage.setItem('apex_ledger_profiles', backup.profiles);
+      if (backup.products) localStorage.setItem('apex_ledger_products', backup.products);
+      if (backup.sales) localStorage.setItem('apex_ledger_sales', backup.sales);
+      if (backup.expenses) localStorage.setItem('apex_ledger_expenses', backup.expenses);
+      if (backup.customers) localStorage.setItem('apex_ledger_customers', backup.customers);
+      if (backup.debts) localStorage.setItem('apex_ledger_debts', backup.debts);
+      if (backup.procurements) localStorage.setItem('apex_ledger_procurements', backup.procurements);
+      if (backup.tasks) localStorage.setItem('apex_ledger_tasks', backup.tasks);
+      if (backup.events) localStorage.setItem('apex_ledger_events', backup.events);
+      if (backup.timelogs) localStorage.setItem('apex_ledger_timelogs', backup.timelogs);
+      if (backup.categories) localStorage.setItem('apex_ledger_categories', backup.categories);
+      if (backup.audits) localStorage.setItem('apex_ledger_audits', backup.audits);
+
+      throw err;
     }
   }
 
@@ -1913,99 +2084,108 @@ class ApexDatabaseManager {
   }
 
   async registerTenant(ownerName: string, businessName: string, email: string, password: string): Promise<boolean> {
-    let finalUserId = 'u_owner_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-    let finalBusinessId = 'b_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
-
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: ownerName
-            }
-          }
-        });
-        if (error) throw error;
-        if (data.user) {
-          finalUserId = data.user.id;
-        }
-      } catch (err) {
-        console.error('Supabase Sign Up Error:', err);
-        throw err;
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fullName: ownerName, businessName, email, password })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Registration failed');
       }
+
+      // Write returned workspace data into localStorage
+      this.writeWorkspaceToLocalStorage(data.workspace);
+
+      // Set active workspace & user session
+      this.activeUserId = data.userId;
+      this.activeBusinessId = data.businessId;
+      localStorage.setItem('apex_ledger_active_user_id', data.userId);
+      localStorage.setItem('apex_ledger_active_business_id', data.businessId);
+
+      this.addAudit('Created User Profile', 'N/A', `${ownerName} (Owner / Admin)`);
+      this.addAudit('Logged In (New Tenant)', 'N/A', `${ownerName} (Owner / Admin)`);
+
+      window.dispatchEvent(new Event('storage'));
+      return true;
+    } catch (err: any) {
+      console.error('Registration API error:', err);
+      throw err;
     }
-
-    // Create the business tenant
-    const businesses = getLocalItem<Business[]>('businesses', DEFAULT_BUSINESSES);
-    const newBiz: Business = {
-      id: finalBusinessId,
-      name: businessName,
-      ownerId: finalUserId,
-      branch: '',
-      currency: 'KSh'
-    };
-    businesses.push(newBiz);
-    setLocalItem('businesses', businesses);
-    await this.syncRowToSupabase('businesses', newBiz, 'upsert');
-
-    // Create the owner user profile
-    const profiles = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
-    const newProfile: UserProfile = {
-      id: finalUserId,
-      name: ownerName,
-      email,
-      role: UserRole.ADMIN, // "Owner / Admin"
-      businessId: finalBusinessId,
-      onlineStatus: 'online',
-      branch: '',
-      avatarUrl: undefined, // Blank by default
-      status: 'Active'
-    };
-    profiles.push(newProfile);
-    setLocalItem('profiles', profiles);
-    await this.syncRowToSupabase('profiles', newProfile, 'upsert');
-
-    // Set active workspace & user session
-    this.activeUserId = finalUserId;
-    this.activeBusinessId = finalBusinessId;
-    localStorage.setItem('apex_ledger_active_user_id', finalUserId);
-    localStorage.setItem('apex_ledger_active_business_id', finalBusinessId);
-
-    // Add Audit Logs
-    this.addAudit('Registered New Tenant Workspace', 'N/A', `${businessName}`);
-    this.addAudit('Created User Profile', 'N/A', `${ownerName} (Owner / Admin)`);
-    this.addAudit('Logged In (New Tenant)', 'N/A', `${ownerName} (Owner / Admin)`);
-
-    this.subscribeRealtime();
-    window.dispatchEvent(new Event('storage'));
-    return true;
   }
 
-  addEmployee(profile: Omit<UserProfile, 'id' | 'businessId' | 'onlineStatus'>) {
+  addEmployee(profile: Omit<UserProfile, 'id' | 'businessId' | 'onlineStatus'>): UserProfile {
     const all = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
+    
+    let empNumber = profile.badgeNumber;
+    if (empNumber) {
+      // Validate uniqueness
+      const exists = all.some(p => {
+        const pNum = p.badgeNumber || (p as any).employeeNumber;
+        return pNum && typeof pNum === 'string' && pNum.trim().toUpperCase() === empNumber.trim().toUpperCase();
+      });
+      if (exists) {
+        throw new Error(`Employee ID "${empNumber}" is already in use. Please enter a unique Employee ID.`);
+      }
+    } else {
+      // Auto-generate a unique sequential Employee Number like EMP-001, EMP-002, etc.
+      let nextNum = 1;
+      all.forEach(p => {
+        const numStr = p.badgeNumber || (p as any).employeeNumber;
+        if (numStr && typeof numStr === 'string') {
+          const match = numStr.match(/^EMP-(\d+)$/i);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (num >= nextNum) {
+              nextNum = num + 1;
+            }
+          }
+        }
+      });
+      empNumber = `EMP-${String(nextNum).padStart(3, '0')}`;
+    }
+
     const newProfile: UserProfile = {
       ...profile,
       id: 'u_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
       businessId: this.activeBusinessId,
       onlineStatus: 'offline',
-      status: 'Active'
+      status: 'Active',
+      badgeNumber: empNumber
     };
+    (newProfile as any).employeeNumber = empNumber;
+
     all.push(newProfile);
     setLocalItem('profiles', all);
 
     this.syncRowToSupabase('profiles', newProfile, 'upsert');
 
     this.addAudit('Created User Profile', 'N/A', `${profile.name} (${profile.role})`);
+    return newProfile;
   }
 
   updateEmployee(userId: string, updates: Partial<UserProfile>) {
     const all = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
     const index = all.findIndex(p => p.id === userId);
     if (index === -1) return;
+
+    if (updates.badgeNumber) {
+      const exists = all.some(p => {
+        if (p.id === userId) return false;
+        const pNum = p.badgeNumber || (p as any).employeeNumber;
+        return pNum && typeof pNum === 'string' && pNum.trim().toUpperCase() === updates.badgeNumber!.trim().toUpperCase();
+      });
+      if (exists) {
+        throw new Error(`Employee ID "${updates.badgeNumber}" is already in use. Please enter a unique Employee ID.`);
+      }
+    }
+
     const oldVal = { ...all[index] };
     all[index] = { ...all[index], ...updates };
+    if (updates.badgeNumber) {
+      (all[index] as any).employeeNumber = updates.badgeNumber;
+    }
     setLocalItem('profiles', all);
 
     this.syncRowToSupabase('profiles', all[index], 'upsert');
@@ -2015,64 +2195,45 @@ class ApexDatabaseManager {
 
   removeEmployee(userId: string) {
     const all = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
-    const target = all.find(p => p.id === userId);
-    if (!target) {
+    const index = all.findIndex(p => p.id === userId);
+    if (index === -1) {
       throw new Error("Employee profile not found.");
     }
+    const target = all[index];
 
     // Safety Rules validation:
-    const admins = all.filter(p => p.role === UserRole.ADMIN);
+    const admins = all.filter(p => p.role === UserRole.ADMIN && p.status !== 'Deleted');
     if (userId === this.activeUserId) {
       throw new Error("This account cannot be deleted."); // Cannot delete currently logged-in Admin
     }
     if (target.role === UserRole.ADMIN && admins.length <= 1) {
       throw new Error("This account cannot be deleted."); // Cannot delete the last remaining Admin
     }
-    if (userId === 'u1') {
-      throw new Error("This account cannot be deleted."); // System owner account / protected system accounts
-    }
 
     try {
-      // 1. Remove profile from the tenant profiles database
-      const updatedProfiles = all.filter(p => p.id !== userId);
+      // 1. Soft-delete the profile in the tenant profiles database
+      const oldBadgeNumber = target.badgeNumber || (target as any).employeeNumber || '';
+      const newBadgeNumber = oldBadgeNumber ? `${oldBadgeNumber}_DELETED` : '';
 
-      // 2. Cascade delete: Purge employee attendance records (timelogs)
-      const timelogsAll = getLocalItem<TimeLog[]>('timelogs', DEFAULT_TIMELOGS);
-      const updatedTimelogs = timelogsAll.filter(t => t.userId !== userId);
+      target.status = 'Deleted';
+      target.badgeNumber = newBadgeNumber;
+      (target as any).employeeNumber = newBadgeNumber;
 
-      // 3. Cascade update: Safely archive employee task records and mark them unassigned
-      const tasksAll = getLocalItem<Task[]>('tasks', DEFAULT_TASKS);
-      const updatedTasks = tasksAll.map(t => {
-        if (t.assignedToId === userId) {
-          return {
-            ...t,
-            assignedToId: 'unassigned',
-            assignedToName: 'Archived User / Unassigned',
-            status: 'Pending' as const
-          };
-        }
-        return t;
-      });
+      // Save updated dataset atomically in the local database
+      setLocalItem('profiles', all);
 
-      // Save all datasets atomically in the local database
-      setLocalItem('profiles', updatedProfiles);
-      setLocalItem('timelogs', updatedTimelogs);
-      setLocalItem('tasks', updatedTasks);
+      // Sync the decommissioned profile to Supabase (if configured) via upsert
+      this.syncRowToSupabase('profiles', target, 'upsert');
 
-      this.syncRowToSupabase('profiles', target, 'delete');
-      if (isSupabaseConfigured && supabase) {
-        supabase.from('timelogs').delete().eq('user_id', userId);
-      }
+      // 2. Create a high-fidelity audit log containing all required metadata
+      const oldValueDetail = `ID: ${target.id} | Name: ${target.name} | Email: ${target.email} | Original Employee ID: ${oldBadgeNumber}`;
+      const newValueDetail = `Decommissioned by User ID: ${this.activeUserId} | Employee ID invalidated. Historical records retained.`;
+      this.addAudit('Decommissioned Employee', oldValueDetail, newValueDetail);
 
-      // 4. Create a high-fidelity audit log containing all required metadata
-      const oldValueDetail = `ID: ${target.id} | Name: ${target.name} | Email: ${target.email} | Role: ${target.role}`;
-      const newValueDetail = `Deleted by Admin ID: ${this.activeUserId} | Corporate purge complete.`;
-      this.addAudit('Permanently Deleted Employee', oldValueDetail, newValueDetail);
-
-      // 5. Send Real-Time alert notification to the corporate feed
+      // 3. Send Real-Time alert notification to the corporate feed
       this.addNotification(
-        'Employee Deletion Alert',
-        `The profile for ${target.name} has been permanently offboarded from the business tenant.`,
+        'Employee Decommissioned',
+        `The profile for ${target.name} has been decommissioned. Login access is disabled; historical records have been archived.`,
         'alert'
       );
 
@@ -2080,7 +2241,7 @@ class ApexDatabaseManager {
       window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error('Error in removeEmployee transaction:', error);
-      throw new Error(error?.message || 'Database transaction failed during deletion.');
+      throw new Error(error?.message || 'Database transaction failed during decommission.');
     }
   }
 

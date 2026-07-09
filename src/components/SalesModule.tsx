@@ -34,6 +34,16 @@ export const SalesModule: React.FC = () => {
   // Primary navigation tabs: 'dashboard' vs 'pos'
   const [activeTab, setActiveTab] = useState<'dashboard' | 'pos'>('dashboard');
 
+  React.useEffect(() => {
+    const handleTriggerPOS = () => {
+      setActiveTab('pos');
+    };
+    window.addEventListener('trigger-pos-tab', handleTriggerPOS);
+    return () => {
+      window.removeEventListener('trigger-pos-tab', handleTriggerPOS);
+    };
+  }, []);
+
   // ==========================================
   // STATE DEFINITIONS - POS TERMINAL TAB
   // ==========================================

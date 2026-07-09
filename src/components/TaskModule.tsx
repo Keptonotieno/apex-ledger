@@ -247,8 +247,8 @@ export const TaskModule: React.FC = () => {
                   >
                     <option value="">Choose User...</option>
                     {profiles.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.role.split(' ')[0]})
+                      <option key={p.id} value={p.id} disabled={p.status === 'Deleted'}>
+                        {p.name} ({p.role.split(' ')[0]}) {p.status === 'Deleted' ? ' [Deactivated]' : ''}
                       </option>
                     ))}
                   </select>
@@ -331,8 +331,8 @@ export const TaskModule: React.FC = () => {
                   >
                     <option value="">Choose User...</option>
                     {profiles.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.role.split(' ')[0]})
+                      <option key={p.id} value={p.id} disabled={p.status === 'Deleted'}>
+                        {p.name} ({p.role.split(' ')[0]}) {p.status === 'Deleted' ? ' [Deactivated]' : ''}
                       </option>
                     ))}
                   </select>

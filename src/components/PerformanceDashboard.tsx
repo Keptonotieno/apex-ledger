@@ -51,6 +51,21 @@ export const PerformanceDashboard: React.FC = () => {
   const isManager = activeUser?.role === UserRole.MANAGER;
   const isAdmin = activeUser?.role === UserRole.ADMIN;
 
+  // Filtered profiles based on logged-in user's role and business
+  const allowedProfiles = useMemo(() => {
+    const bizRawProfiles = profiles.filter(p => p.businessId === activeBusiness?.id || (p as any).business_id === activeBusiness?.id);
+    
+    if (isEmployee && activeUser) {
+      return bizRawProfiles.filter(p => p.id === activeUser.id);
+    }
+    
+    if (isManager) {
+      return bizRawProfiles.filter(p => p.role !== UserRole.ADMIN);
+    }
+    
+    return bizRawProfiles;
+  }, [profiles, activeUser, activeBusiness, isEmployee, isManager]);
+
   // Tabs layout selection
   // 'overview' -> Target meters, rankings, key summary figures
   // 'analytics' -> Team contribution, category shares, revenue timeline trend
@@ -233,11 +248,15 @@ export const PerformanceDashboard: React.FC = () => {
 
   // --- FILTERED DATASETS ---
   const filteredSales = useMemo(() => {
+    const allowedNames = allowedProfiles.map(p => p.name.toLowerCase());
     return sales.filter(s => {
       if (!isDateInRange(s.date, timeRange, customStartDate, customEndDate)) return false;
       
+      // Filter based on allowed profiles
+      if (!allowedNames.includes(s.cashierName.toLowerCase())) return false;
+
       if (selectedBranch !== 'All') {
-        const profile = profiles.find(p => p.name.toLowerCase() === s.cashierName.toLowerCase());
+        const profile = allowedProfiles.find(p => p.name.toLowerCase() === s.cashierName.toLowerCase());
         if (!profile || profile.branch !== selectedBranch) return false;
       }
       
@@ -253,14 +272,18 @@ export const PerformanceDashboard: React.FC = () => {
       
       return true;
     });
-  }, [sales, timeRange, customStartDate, customEndDate, selectedBranch, selectedEmployee, selectedCategory, profiles, products]);
+  }, [sales, timeRange, customStartDate, customEndDate, selectedBranch, selectedEmployee, selectedCategory, allowedProfiles, products]);
 
   const filteredTimelogs = useMemo(() => {
+    const allowedIds = allowedProfiles.map(p => p.id);
     return timelogs.filter(log => {
       if (!isDateInRange(log.date, timeRange, customStartDate, customEndDate)) return false;
       
+      // Filter based on allowed profiles
+      if (!allowedIds.includes(log.userId)) return false;
+
       if (selectedBranch !== 'All') {
-        const profile = profiles.find(p => p.id === log.userId);
+        const profile = allowedProfiles.find(p => p.id === log.userId);
         if (!profile || profile.branch !== selectedBranch) return false;
       }
       
@@ -268,14 +291,18 @@ export const PerformanceDashboard: React.FC = () => {
       
       return true;
     });
-  }, [timelogs, timeRange, customStartDate, customEndDate, selectedBranch, selectedEmployee, profiles]);
+  }, [timelogs, timeRange, customStartDate, customEndDate, selectedBranch, selectedEmployee, allowedProfiles]);
 
   const filteredExpenses = useMemo(() => {
+    const allowedNames = allowedProfiles.map(p => p.name.toLowerCase());
     return expenses.filter(e => {
       if (!isDateInRange(e.date, timeRange, customStartDate, customEndDate)) return false;
       
+      // Filter based on allowed profiles
+      if (!allowedNames.includes(e.recordedBy.toLowerCase())) return false;
+
       if (selectedBranch !== 'All') {
-        const profile = profiles.find(p => p.name.toLowerCase() === e.recordedBy.toLowerCase());
+        const profile = allowedProfiles.find(p => p.name.toLowerCase() === e.recordedBy.toLowerCase());
         if (!profile || profile.branch !== selectedBranch) return false;
       }
       
@@ -284,7 +311,7 @@ export const PerformanceDashboard: React.FC = () => {
       
       return true;
     });
-  }, [expenses, timeRange, customStartDate, customEndDate, selectedBranch, selectedEmployee, selectedCategory, profiles]);
+  }, [expenses, timeRange, customStartDate, customEndDate, selectedBranch, selectedEmployee, selectedCategory, allowedProfiles]);
 
   // Total calculated metrics
   const totalRevenue = useMemo(() => {
@@ -497,10 +524,12 @@ export const PerformanceDashboard: React.FC = () => {
     else if (timeRange === 'This Week') priorRange = 'Last Week';
     else if (timeRange === 'This Month') priorRange = 'Last Month';
 
+    const allowedNames = allowedProfiles.map(p => p.name.toLowerCase());
     const priorSales = sales.filter(s => {
       if (!isDateInRange(s.date, priorRange)) return false;
+      if (!allowedNames.includes(s.cashierName.toLowerCase())) return false;
       if (selectedBranch !== 'All') {
-        const profile = profiles.find(p => p.name.toLowerCase() === s.cashierName.toLowerCase());
+        const profile = allowedProfiles.find(p => p.name.toLowerCase() === s.cashierName.toLowerCase());
         if (!profile || profile.branch !== selectedBranch) return false;
       }
       if (selectedEmployee !== 'All' && s.cashierName !== selectedEmployee) return false;
@@ -516,14 +545,11 @@ export const PerformanceDashboard: React.FC = () => {
       growthPercent,
       isPositive: revDiff >= 0
     };
-  }, [sales, timeRange, totalRevenue, selectedBranch, selectedEmployee, profiles]);
+  }, [sales, timeRange, totalRevenue, selectedBranch, selectedEmployee, allowedProfiles]);
 
   // Isolated Datasets by Workspace, Business, and Branch Filters
   const bizProfiles = useMemo(() => {
-    return profiles.filter(p => {
-      const matchesBusiness = p.businessId === activeBusiness?.id || (p as any).business_id === activeBusiness?.id;
-      if (!matchesBusiness) return false;
-
+    return allowedProfiles.filter(p => {
       // Filter by selected branch
       if (selectedBranch !== 'All') {
         const matchesBranch = p.branch === selectedBranch || (p as any).branch_id === selectedBranch;
@@ -531,50 +557,59 @@ export const PerformanceDashboard: React.FC = () => {
       }
       return true;
     });
-  }, [profiles, activeBusiness, selectedBranch]);
+  }, [allowedProfiles, selectedBranch]);
 
   const bizSales = useMemo(() => {
+    const allowedNames = allowedProfiles.map(p => p.name.toLowerCase());
     return sales.filter(s => {
       const matchesBusiness = s.businessId === activeBusiness?.id || (s as any).business_id === activeBusiness?.id;
       if (!matchesBusiness) return false;
 
+      if (!allowedNames.includes(s.cashierName.toLowerCase())) return false;
+
       // If branch filter is active, find the cashier's branch to match selectedBranch
       if (selectedBranch !== 'All') {
-        const cashier = profiles.find(p => p.name.toLowerCase() === s.cashierName.toLowerCase());
+        const cashier = allowedProfiles.find(p => p.name.toLowerCase() === s.cashierName.toLowerCase());
         const matchesBranch = cashier && (cashier.branch === selectedBranch || (cashier as any).branch_id === selectedBranch);
         if (!matchesBranch) return false;
       }
       return true;
     });
-  }, [sales, activeBusiness, selectedBranch, profiles]);
+  }, [sales, activeBusiness, selectedBranch, allowedProfiles]);
 
   const bizTimelogs = useMemo(() => {
+    const allowedIds = allowedProfiles.map(p => p.id);
     return timelogs.filter(log => {
       const matchesBusiness = log.businessId === activeBusiness?.id || (log as any).business_id === activeBusiness?.id;
       if (!matchesBusiness) return false;
 
+      if (!allowedIds.includes(log.userId)) return false;
+
       if (selectedBranch !== 'All') {
-        const user = profiles.find(p => p.id === log.userId);
+        const user = allowedProfiles.find(p => p.id === log.userId);
         const matchesBranch = user && (user.branch === selectedBranch || (user as any).branch_id === selectedBranch);
         if (!matchesBranch) return false;
       }
       return true;
     });
-  }, [timelogs, activeBusiness, selectedBranch, profiles]);
+  }, [timelogs, activeBusiness, selectedBranch, allowedProfiles]);
 
   const bizTasks = useMemo(() => {
+    const allowedIds = allowedProfiles.map(p => p.id);
     return tasks.filter(t => {
       const matchesBusiness = t.businessId === activeBusiness?.id || (t as any).business_id === activeBusiness?.id;
       if (!matchesBusiness) return false;
 
+      if (!allowedIds.includes(t.assignedToId)) return false;
+
       if (selectedBranch !== 'All') {
-        const user = profiles.find(p => p.id === t.assignedToId);
+        const user = allowedProfiles.find(p => p.id === t.assignedToId);
         const matchesBranch = user && (user.branch === selectedBranch || (user as any).branch_id === selectedBranch);
         if (!matchesBranch) return false;
       }
       return true;
     });
-  }, [tasks, activeBusiness, selectedBranch, profiles]);
+  }, [tasks, activeBusiness, selectedBranch, allowedProfiles]);
 
   // Employee standings Leaderboard Rankings with full dynamic KPIs
   const rankings = useMemo(() => {
@@ -929,9 +964,14 @@ export const PerformanceDashboard: React.FC = () => {
       doc.text('V. PERIODIC HONOUR ROLLS & HALL OF FAME', 12, startAwardsY);
       doc.line(12, startAwardsY + 2, pageWidth - 12, startAwardsY + 2);
 
-      const myAwards = isEmployee 
-        ? awards.filter(aw => aw.employeeName === activeUser?.name)
-        : awards;
+      const allowedNames = allowedProfiles.map(p => p.name.toLowerCase());
+      const myAwards = awards.filter(aw => {
+        if (!allowedNames.includes(aw.employeeName.toLowerCase())) return false;
+        if (isEmployee) {
+          return aw.employeeName === activeUser?.name;
+        }
+        return true;
+      });
 
       const awardTableData = myAwards.map(aw => [
         aw.dateAwarded,
@@ -1061,8 +1101,12 @@ export const PerformanceDashboard: React.FC = () => {
     });
 
     // Sort chronologically (newest first)
+    const allowedNames = allowedProfiles.map(p => p.name.toLowerCase());
     return list
       .filter(ev => {
+        // Enforce allowed profiles security
+        if (!allowedNames.includes(ev.employeeName.toLowerCase())) return false;
+        
         // Enforce employee security
         if (isEmployee && ev.employeeName !== activeUser?.name) return false;
         
@@ -1078,7 +1122,7 @@ export const PerformanceDashboard: React.FC = () => {
         if (dateCompare !== 0) return dateCompare;
         return b.time.localeCompare(a.time);
       });
-  }, [sales, timelogs, tasks, expenses, profiles, isEmployee, activeUser, timeRange, customStartDate, customEndDate, selectedBranch, selectedEmployee]);
+  }, [sales, timelogs, tasks, expenses, allowedProfiles, isEmployee, activeUser, timeRange, customStartDate, customEndDate, selectedBranch, selectedEmployee]);
 
   // Expand / collapse sub customer record feeds inside scorecard cards
   const toggleEmployeeFeed = (name: string) => {
@@ -1213,8 +1257,10 @@ export const PerformanceDashboard: React.FC = () => {
               className="w-full bg-gray-950 border border-brand-border rounded-xl px-2.5 py-1.5 text-gray-300 outline-none hover:border-cyan-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition text-xs font-sans"
             >
               <option value="All">All Employees</option>
-              {profiles.map(p => (
-                <option key={p.id} value={p.name}>{p.name}</option>
+              {allowedProfiles.map(p => (
+                <option key={p.id} value={p.name}>
+                  {p.name} {p.status === 'Deleted' ? '(Deactivated)' : ''}
+                </option>
               ))}
             </select>
           </div>
@@ -1953,8 +1999,10 @@ export const PerformanceDashboard: React.FC = () => {
                       required
                     >
                       <option value="">Select Laureate Employee...</option>
-                      {profiles.filter(p => p.businessId === activeBusiness?.id).map(p => (
-                        <option key={p.id} value={p.id}>{p.name} ({p.role})</option>
+                      {allowedProfiles.map(p => (
+                        <option key={p.id} value={p.id} disabled={p.status === 'Deleted'}>
+                          {p.name} ({p.role}) {p.status === 'Deleted' ? ' [Deactivated]' : ''}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -2026,10 +2074,14 @@ export const PerformanceDashboard: React.FC = () => {
           {/* Awards display cards list */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {(() => {
+              const allowedNames = allowedProfiles.map(p => p.name.toLowerCase());
               const filteredAwards = awards.filter(aw => {
                 // Ensure we isolate by selected business & branch
                 const matchesBusiness = aw.businessId === activeBusiness?.id;
                 if (!matchesBusiness) return false;
+
+                // Ensure the laureate is in the list of allowed profiles
+                if (!allowedNames.includes(aw.employeeName.toLowerCase())) return false;
 
                 // Filter by branch
                 if (selectedBranch !== 'All') {

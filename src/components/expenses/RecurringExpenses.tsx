@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { RefreshCw, Play, Pause, Plus, Calendar, Trash2, ArrowRightLeft, AlertCircle, Sparkles } from 'lucide-react';
 import { formatKSh } from '../../lib/utils';
-import { Expense } from '../../types';
+import { Expense, Department } from '../../types';
 
 export interface RecurringProfile {
   id: string;
@@ -62,10 +62,36 @@ export const RecurringExpenses: React.FC<RecurringExpensesProps> = ({
   const [amount, setAmount] = useState<number>(0);
   const [description, setDescription] = useState('');
   const [frequency, setFrequency] = useState<'Daily' | 'Weekly' | 'Monthly' | 'Quarterly' | 'Yearly'>('Monthly');
-  const [department, setDepartment] = useState('Operations');
+  const [department, setDepartment] = useState('');
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
 
   const localKey = `apex_ledger_recurring_${businessId}`;
+
+  useEffect(() => {
+    if (!businessId) return;
+    const depKey = `apex_ledger_departments_${businessId}`;
+    const stored = localStorage.getItem(depKey);
+    if (stored) {
+      try {
+        setDepartments(JSON.parse(stored));
+      } catch (e) {
+        setDepartments([]);
+      }
+    } else {
+      setDepartments([]);
+    }
+  }, [businessId]);
+
+  useEffect(() => {
+    if (departments.length > 0) {
+      if (!department || !departments.some(d => d.name === department)) {
+        setDepartment(departments[0].name);
+      }
+    } else {
+      setDepartment('');
+    }
+  }, [departments, department]);
 
   useEffect(() => {
     const data = localStorage.getItem(localKey);
@@ -172,6 +198,11 @@ export const RecurringExpenses: React.FC<RecurringExpensesProps> = ({
   const handleAddSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (amount <= 0 || !vendorName.trim()) return;
+
+    if (!department) {
+      alert("No departments available. Please create one first.");
+      return;
+    }
 
     const todayStr = new Date().toISOString().split('T')[0];
     const nextDue = calculateNextDueDate(frequency, todayStr);
@@ -280,21 +311,26 @@ export const RecurringExpenses: React.FC<RecurringExpensesProps> = ({
                 <option value="Yearly">Yearly</option>
               </select>
             </div>
-            <div>
-              <label className="text-gray-400 block mb-1">Department</label>
-              <select
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                className="w-full bg-gray-950/60 border border-brand-border rounded-lg p-2 text-gray-300 outline-none"
-              >
-                <option value="Marketing">Marketing</option>
-                <option value="Payroll & HR">Payroll & HR</option>
-                <option value="Operations">Operations</option>
-                <option value="IT & Software">IT & Software</option>
-                <option value="Administration">Administration</option>
-                <option value="Logistics & Transport">Logistics & Transport</option>
-              </select>
-            </div>
+             <div>
+               <label className="text-gray-400 block mb-1">Department *</label>
+               {departments.length === 0 ? (
+                 <div className="text-[10px] text-rose-400 bg-rose-950/20 border border-rose-900/40 rounded-lg p-2 font-mono">
+                   No departments available. Please create one first.
+                 </div>
+               ) : (
+                 <select
+                   value={department}
+                   onChange={(e) => setDepartment(e.target.value)}
+                   className="w-full bg-gray-950/60 border border-brand-border rounded-lg p-2 text-gray-300 outline-none font-bold text-xs"
+                 >
+                   {departments.map((d) => (
+                     <option key={d.id} value={d.name}>
+                       {d.name}
+                     </option>
+                   ))}
+                 </select>
+               )}
+             </div>
             <div>
               <label className="text-gray-400 block mb-1">Memo / Description</label>
               <input
