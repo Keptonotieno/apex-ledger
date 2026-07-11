@@ -3,10 +3,42 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import pg from 'pg';
+
+const { Pool } = pg;
 
 const DB_PATH = path.join(process.cwd(), 'apex_ledger.db');
 
 let db: sqlite3.Database;
+
+// Check if PostgreSQL (Cloud SQL / Supabase) environment variables are present
+const isPgConfigured = !!(
+  process.env.DATABASE_URL ||
+  process.env.SQL_CONNECTION_STRING ||
+  (process.env.SQL_HOST && process.env.SQL_USER && process.env.SQL_DB_NAME)
+);
+
+let pgPool: pg.Pool | null = null;
+
+if (isPgConfigured) {
+  console.log('PostgreSQL/Supabase configuration found. Instantiating pg Pool...');
+  const connectionString = process.env.DATABASE_URL || process.env.SQL_CONNECTION_STRING;
+  
+  pgPool = new Pool({
+    connectionString,
+    host: connectionString ? undefined : process.env.SQL_HOST,
+    user: connectionString ? undefined : process.env.SQL_USER,
+    password: connectionString ? undefined : process.env.SQL_PASSWORD,
+    database: connectionString ? undefined : process.env.SQL_DB_NAME,
+    connectionTimeoutMillis: 15000,
+    // Supabase and most remote PostgreSQL services require SSL
+    ssl: { rejectUnauthorized: false }
+  });
+
+  pgPool.on('error', (err) => {
+    console.error('Unexpected error on idle SQL pool client:', err);
+  });
+}
 
 // Keep an explicit db object exported so we don't break any imports
 export const dbWrapper = {
@@ -15,11 +47,164 @@ export const dbWrapper = {
       db.close();
       console.log('Real SQLite database closed.');
     }
+    if (pgPool) {
+      pgPool.end();
+      console.log('PostgreSQL pool closed.');
+    }
   }
 };
 export { dbWrapper as db };
 
+function translateQueryToPg(sql: string, params: any[]): { sql: string; params: any[] } {
+  let translatedSql = sql;
+  
+  // Replace SQLite "INSERT OR IGNORE INTO" with PostgreSQL "INSERT INTO ... ON CONFLICT DO NOTHING"
+  if (translatedSql.toLowerCase().includes('insert or ignore into')) {
+    translatedSql = translatedSql.replace(/insert or ignore into/gi, 'INSERT INTO');
+    if (!translatedSql.toLowerCase().includes('on conflict')) {
+      translatedSql += ' ON CONFLICT DO NOTHING';
+    }
+  }
+
+  // PostgreSQL savepoint releases require 'RELEASE SAVEPOINT <name>' instead of just 'RELEASE <name>'
+  if (translatedSql.toLowerCase().includes('release sync_all_ws_tables')) {
+    translatedSql = translatedSql.replace(/release sync_all_ws_tables/gi, 'RELEASE SAVEPOINT sync_all_ws_tables');
+  }
+
+  // Convert positional "?" placeholders to PostgreSQL "$1", "$2", "$3", etc.
+  let index = 1;
+  translatedSql = translatedSql.replace(/\?/g, () => `$${index++}`);
+
+  return { sql: translatedSql, params };
+}
+
+function pgQuery(sql: string, params: any[] = []): Promise<any> {
+  if (!pgPool) throw new Error('PostgreSQL pool is not initialized');
+  const { sql: translatedSql, params: translatedParams } = translateQueryToPg(sql, params);
+  return pgPool.query(translatedSql, translatedParams);
+}
+
+async function initPgDb(): Promise<void> {
+  console.log('Initializing PostgreSQL database schema...');
+  const tables = [
+    `CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      full_name TEXT NOT NULL,
+      business_name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      business_id TEXT NOT NULL,
+      workspace_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'Active'
+    )`,
+    `CREATE TABLE IF NOT EXISTS workspaces (
+      business_id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      workspace_data TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      business_id TEXT NOT NULL,
+      workspace_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      expires_at BIGINT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS employees (
+      id TEXT PRIMARY KEY,
+      full_name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      employee_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      business_id TEXT NOT NULL,
+      workspace_id TEXT NOT NULL,
+      branch_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'Active',
+      registration_date TEXT NOT NULL,
+      created_by TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS timelogs (
+      id TEXT PRIMARY KEY,
+      business_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      user_name TEXT NOT NULL,
+      role TEXT NOT NULL,
+      clock_in TEXT NOT NULL,
+      clock_out TEXT,
+      work_hours REAL,
+      date TEXT NOT NULL,
+      status TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS sales (
+      id TEXT PRIMARY KEY,
+      invoice_number TEXT NOT NULL,
+      business_id TEXT NOT NULL,
+      total_amount REAL NOT NULL,
+      discount REAL NOT NULL,
+      tax REAL NOT NULL,
+      net_amount REAL NOT NULL,
+      customer_name TEXT NOT NULL,
+      customer_id TEXT,
+      date TEXT NOT NULL,
+      time TEXT NOT NULL,
+      cashier_name TEXT NOT NULL,
+      cashier_role TEXT NOT NULL,
+      payment_method TEXT NOT NULL,
+      items_json TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      business_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      assigned_to TEXT NOT NULL,
+      assigned_to_id TEXT,
+      status TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS expenses (
+      id TEXT PRIMARY KEY,
+      business_id TEXT NOT NULL,
+      amount REAL NOT NULL,
+      category TEXT NOT NULL,
+      date TEXT NOT NULL,
+      description TEXT,
+      recorded_by TEXT NOT NULL
+    )`
+  ];
+
+  const indexes = [
+    `CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`,
+    `CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`,
+    `CREATE INDEX IF NOT EXISTS idx_employees_id ON employees(employee_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_employees_business ON employees(business_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_timelogs_business ON timelogs(business_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_timelogs_user ON timelogs(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_timelogs_date ON timelogs(date)`,
+    `CREATE INDEX IF NOT EXISTS idx_sales_business ON sales(business_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_sales_cashier ON sales(cashier_name)`,
+    `CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(date)`,
+    `CREATE INDEX IF NOT EXISTS idx_tasks_business ON tasks(business_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_to)`,
+    `CREATE INDEX IF NOT EXISTS idx_expenses_business ON expenses(business_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date)`
+  ];
+
+  for (const q of tables) {
+    await pgQuery(q);
+  }
+  for (const q of indexes) {
+    await pgQuery(q);
+  }
+
+  console.log('PostgreSQL database schema initialized successfully.');
+  await runSeedAndMigration();
+}
+
 export function initDb(): Promise<void> {
+  if (pgPool) {
+    return initPgDb();
+  }
+
   return new Promise((resolve, reject) => {
     // Open SQLite database
     db = new sqlite3.Database(DB_PATH, (err) => {
@@ -169,10 +354,10 @@ export function initDb(): Promise<void> {
 
 async function runSeedAndMigration(): Promise<void> {
   try {
-    // Check if we already have users in SQLite
+    // Check if we already have users in the database
     const userCountRow = await dbGet('SELECT COUNT(*) as count FROM users');
-    if (userCountRow && userCountRow.count > 0) {
-      console.log('Users exist in real SQLite DB. Skipping migration/seeding.');
+    if (userCountRow && Number(userCountRow.count) > 0) {
+      console.log('Users exist in database. Skipping migration/seeding.');
       return;
     }
 
@@ -498,6 +683,9 @@ export async function syncEmployeesFromWorkspace(businessId: string, workspaceDa
 
 // Promisified query wrappers
 export function dbGet(sql: string, params: any[] = []): Promise<any> {
+  if (pgPool) {
+    return pgQuery(sql, params).then(res => res.rows[0] || null);
+  }
   return new Promise((resolve, reject) => {
     db.get(sql, params, (err, row) => {
       if (err) {
@@ -511,6 +699,9 @@ export function dbGet(sql: string, params: any[] = []): Promise<any> {
 }
 
 export function dbAll(sql: string, params: any[] = []): Promise<any[]> {
+  if (pgPool) {
+    return pgQuery(sql, params).then(res => res.rows || []);
+  }
   return new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => {
       if (err) {
@@ -523,7 +714,40 @@ export function dbAll(sql: string, params: any[] = []): Promise<any[]> {
   });
 }
 
-export function dbRun(sql: string, params: any[] = []): Promise<{ id: number; changes: number }> {
+export async function dbRun(sql: string, params: any[] = []): Promise<{ id: number; changes: number }> {
+  if (pgPool) {
+    try {
+      const res = await pgQuery(sql, params);
+      const cleanSql = sql.replace(/\s+/g, ' ').trim().toLowerCase();
+      const isWorkspaceWrite = cleanSql.includes('workspaces') && (cleanSql.includes('insert') || cleanSql.includes('update'));
+      
+      if (isWorkspaceWrite) {
+        let businessId = '';
+        let workspaceData = '';
+        
+        if (cleanSql.includes('update')) {
+          workspaceData = params[0];
+          businessId = params[1];
+        } else {
+          businessId = params[0];
+          workspaceData = params[2];
+        }
+
+        if (businessId && workspaceData) {
+          try {
+            await syncAllWorkspaceTables(businessId, workspaceData);
+          } catch (syncErr) {
+            console.error('Auto-sync workspace tables error in PostgreSQL:', syncErr);
+          }
+        }
+      }
+      return { id: 0, changes: res.rowCount || 0 };
+    } catch (err) {
+      console.error('PostgreSQL dbRun error:', err, 'SQL:', sql);
+      throw err;
+    }
+  }
+
   return new Promise((resolve, reject) => {
     db.run(sql, params, function (err) {
       if (err) {
