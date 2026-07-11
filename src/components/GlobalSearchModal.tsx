@@ -145,7 +145,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ isOpen, on
         badgeText: 'Status',
         badgeClass: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
         action: () => {
-          clockInOut(activeUser.id);
+          if (activeUser?.id) {
+            clockInOut(activeUser.id);
+          }
           onClose();
         }
       },

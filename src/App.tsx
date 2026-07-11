@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Sidebar } from './components/Sidebar';
+import { DevConsole } from './components/DevConsole';
 import { Header } from './components/Header';
 import { DashboardOverview } from './components/DashboardOverview';
 import { SalesModule } from './components/SalesModule';
@@ -166,6 +167,7 @@ function DashboardLayout() {
 
       </div>
 
+      <DevConsole />
     </div>
   );
 }

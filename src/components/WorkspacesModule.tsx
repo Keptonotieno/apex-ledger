@@ -118,18 +118,18 @@ export const WorkspacesModule: React.FC = () => {
     }
   };
 
-  const handleTransferOwnership = (e: React.FormEvent) => {
+  const handleTransferOwnership = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isOwner || !activeBusiness || !transferTargetId) return;
     const targetUser = profiles.find(p => p.id === transferTargetId);
     if (!targetUser) return;
     if (confirm(`⚠️ CRITICAL SECURITY WARNING ⚠️\n\nAre you sure you want to permanently transfer ownership of workspace "${activeBusiness.name}" to ${targetUser.name} (${targetUser.email})?\n\nThis will instantly downgrade your role to Manager and grant them full Owner permissions over this tenant.`)) {
       // Step 1: Grant admin to target
-      updateEmployee(targetUser.id, { role: UserRole.ADMIN });
+      await updateEmployee(targetUser.id, { role: UserRole.ADMIN });
       // Step 2: Set current user to MANAGER (or step down)
-      updateEmployee(activeUser.id, { role: UserRole.MANAGER });
+      await updateEmployee(activeUser.id, { role: UserRole.MANAGER });
       // Step 3: Set ownerId on Business
-      updateBusiness(activeBusiness.id, { ownerId: targetUser.id });
+      await updateBusiness(activeBusiness.id, { ownerId: targetUser.id });
       
       setShowTransferModal(false);
       setTransferTargetId('');

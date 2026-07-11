@@ -7,6 +7,7 @@ import {
   TrendingUp, Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { usePerformanceMonitor } from '../hooks/usePerformanceMonitor';
 
 export const AccountingModule: React.FC = () => {
   const {
@@ -31,6 +32,11 @@ export const AccountingModule: React.FC = () => {
 
   // Navigation / Tab states
   const [activeTab, setActiveTab] = useState<'budgets' | 'banking' | 'invoices'>('budgets');
+
+  // Integrated performance monitor hook
+  usePerformanceMonitor('AccountingModule', {
+    deps: [budgets.length, invoices.length, bankTransactions.length, activeTab]
+  });
   
   // Search & Filter States
   const [invoiceSearch, setInvoiceSearch] = useState('');

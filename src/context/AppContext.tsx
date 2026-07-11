@@ -92,9 +92,9 @@ interface AppContextType {
   updateBusiness: (id: string, updates: Partial<Business>) => Promise<Business>;
   deleteBusiness: (id: string) => Promise<boolean>;
   registerTenant: (ownerName: string, businessName: string, email: string, password: string) => Promise<boolean>;
-  addEmployee: (profile: Omit<UserProfile, 'id' | 'businessId' | 'onlineStatus'>) => UserProfile;
-  updateEmployee: (userId: string, updates: Partial<UserProfile>) => void;
-  removeEmployee: (userId: string) => void;
+  addEmployee: (profile: Omit<UserProfile, 'id' | 'businessId' | 'onlineStatus'>) => Promise<UserProfile>;
+  updateEmployee: (userId: string, updates: Partial<UserProfile>) => Promise<void>;
+  removeEmployee: (userId: string) => Promise<void>;
   addBranch: (branch: { name: string; location?: string; status: 'Active' | 'Inactive'; managerId?: string; managerName?: string }) => Promise<Branch>;
   updateBranch: (branchId: string, updates: Partial<Branch>) => Promise<Branch>;
   deleteBranch: (branchId: string, cascade?: boolean) => Promise<boolean>;
@@ -350,17 +350,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       triggerRefresh();
       return success;
     },
-    addEmployee: (profile) => {
-      const res = dbManager.addEmployee(profile);
+    addEmployee: async (profile) => {
+      const res = await dbManager.addEmployee(profile);
       triggerRefresh();
       return res;
     },
-    updateEmployee: (userId, updates) => {
-      dbManager.updateEmployee(userId, updates);
+    updateEmployee: async (userId, updates) => {
+      await dbManager.updateEmployee(userId, updates);
       triggerRefresh();
     },
-    removeEmployee: (userId) => {
-      dbManager.removeEmployee(userId);
+    removeEmployee: async (userId) => {
+      await dbManager.removeEmployee(userId);
       triggerRefresh();
     },
     addBranch: async (branch) => {

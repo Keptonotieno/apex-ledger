@@ -1,5 +1,5 @@
 export enum UserRole {
-  ADMIN = 'Business Owner (Admin)',
+  ADMIN = 'Owner / Admin',
   MANAGER = 'Manager',
   EMPLOYEE = 'Employee'
 }
@@ -17,6 +17,7 @@ export interface UserProfile {
   phone?: string;
   badgeNumber?: string;
   dateJoined?: string;
+  registrationDate?: string;
   lastLogin?: string;
   createdBy?: string;
   allowExpenses?: boolean;

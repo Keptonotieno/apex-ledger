@@ -7,12 +7,13 @@ import {
   Key, FolderOpen, ShoppingCart, BarChart3, ChevronDown, ListTodo,
   Clock, UserCheck, Lock, DollarSign, Package, CreditCard, FileText, 
   User, CheckSquare, Target, Percent, Undo, Activity, RotateCcw, Shield,
-  Trash2, PieChart as PieIcon, ArrowRight, Check, X
+  Trash2, PieChart as PieIcon, ArrowRight, Check, X, GripVertical, Settings
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Legend, PieChart, Pie, Cell
 } from 'recharts';
+import { usePerformanceMonitor } from '../hooks/usePerformanceMonitor';
 
 export const DashboardOverview: React.FC = () => {
   const { 
@@ -39,6 +40,11 @@ export const DashboardOverview: React.FC = () => {
     profiles,
     customers
   } = useApp();
+
+  // Integrated performance monitor hook
+  usePerformanceMonitor('DashboardOverview', {
+    deps: [sales.length, expenses.length, products.length, debts.length]
+  });
 
   // Selected date ranges for audit log custom range
   const [customStartDate, setCustomStartDate] = useState('');
@@ -76,6 +82,196 @@ export const DashboardOverview: React.FC = () => {
   const isOwner = activeUser?.role === UserRole.ADMIN;
   const isManager = activeUser?.role === UserRole.MANAGER;
   const isEmployee = activeUser?.role === UserRole.EMPLOYEE;
+
+  // --- DRAG AND DROP / PINNING SYSTEM METADATA ---
+  const kpiMeta = React.useMemo<Record<string, { label: string; icon: any; colorClass: string; defaultSpan: string; borderClass: string; shadowClass: string }>>(() => ({
+    revenue: { 
+      label: 'TOTAL REVENUE (YTD)', 
+      icon: TrendingUp, 
+      colorClass: 'cyan', 
+      defaultSpan: 'xl:col-span-3',
+      borderClass: 'border-t-2 border-cyan-500/20',
+      shadowClass: 'shadow-lg shadow-cyan-500/5 glow-cyan-hover'
+    },
+    expenses: { 
+      label: 'TOTAL EXPENSES (YTD)', 
+      icon: TrendingDown, 
+      colorClass: 'rose', 
+      defaultSpan: 'xl:col-span-3',
+      borderClass: 'border-t-2 border-rose-500/20',
+      shadowClass: 'shadow-lg shadow-rose-500/5 glow-cyan-hover'
+    },
+    profit: { 
+      label: 'NET PROFIT', 
+      icon: CheckCircle, 
+      colorClass: 'emerald', 
+      defaultSpan: 'xl:col-span-3',
+      borderClass: 'border-t-2 border-emerald-500/20',
+      shadowClass: 'shadow-lg shadow-emerald-500/5 glow-cyan-hover'
+    },
+    sales: { 
+      label: 'TOTAL SALES ORDERS', 
+      icon: ShoppingCart, 
+      colorClass: 'blue', 
+      defaultSpan: 'xl:col-span-2',
+      borderClass: '',
+      shadowClass: ''
+    },
+    inventory: { 
+      label: 'INVENTORY VALUE', 
+      icon: Package, 
+      colorClass: 'amber', 
+      defaultSpan: 'xl:col-span-2',
+      borderClass: '',
+      shadowClass: ''
+    },
+    debts: { 
+      label: 'OUTSTANDING DEBTS', 
+      icon: CreditCard, 
+      colorClass: 'rose', 
+      defaultSpan: 'xl:col-span-2',
+      borderClass: '',
+      shadowClass: ''
+    },
+    staff: { 
+      label: 'STAFF COUNT', 
+      icon: User, 
+      colorClass: 'cyan', 
+      defaultSpan: 'xl:col-span-1',
+      borderClass: '',
+      shadowClass: ''
+    },
+    clients: { 
+      label: 'CLIENTS', 
+      icon: UserCheck, 
+      colorClass: 'emerald', 
+      defaultSpan: 'xl:col-span-1',
+      borderClass: '',
+      shadowClass: ''
+    },
+    growth: { 
+      label: 'GROWTH INDEX', 
+      icon: Activity, 
+      colorClass: 'indigo', 
+      defaultSpan: 'xl:col-span-1',
+      borderClass: '',
+      shadowClass: ''
+    }
+  }), []);
+
+  const widgetMeta = React.useMemo<Record<string, { label: string; defaultSpan: string }>>(() => ({
+    target_meter: { label: 'Yearly Net Profit Target', defaultSpan: 'lg:col-span-2' },
+    projections: { label: 'Forecast & Projections', defaultSpan: 'lg:col-span-2' },
+    cash_flow_chart: { label: 'Interactive Cash Flow Tracker', defaultSpan: 'lg:col-span-1' },
+    net_worth_chart: { label: 'Net Worth Trajectory', defaultSpan: 'lg:col-span-1' },
+    expense_allocation: { label: 'Expenses Allocation by Category', defaultSpan: 'lg:col-span-1' },
+    calendar_events: { label: 'Shared Corporate Calendar Events', defaultSpan: 'lg:col-span-1' },
+    audit_logs: { label: 'Live Corporate Tenant Audit Trails', defaultSpan: 'lg:col-span-2' }
+  }), []);
+
+  const [pinnedKpis, setPinnedKpis] = useState<string[]>([]);
+  const [pinnedWidgets, setPinnedWidgets] = useState<string[]>([]);
+  const [isCustomizing, setIsCustomizing] = useState(false);
+  const [draggedKpiIndex, setDraggedKpiIndex] = useState<number | null>(null);
+  const [draggedWidgetIndex, setDraggedWidgetIndex] = useState<number | null>(null);
+
+  // Sync layout configuration with localStorage on active business load or swap
+  useEffect(() => {
+    const bizId = activeBusiness?.id || 'default';
+    const savedKpis = localStorage.getItem(`apex_pinned_kpis_${bizId}`);
+    if (savedKpis) {
+      setPinnedKpis(JSON.parse(savedKpis));
+    } else {
+      setPinnedKpis(['revenue', 'expenses', 'profit', 'sales', 'inventory', 'debts', 'staff', 'clients', 'growth']);
+    }
+
+    const savedWidgets = localStorage.getItem(`apex_pinned_widgets_${bizId}`);
+    if (savedWidgets) {
+      setPinnedWidgets(JSON.parse(savedWidgets));
+    } else {
+      setPinnedWidgets(['target_meter', 'projections', 'cash_flow_chart', 'net_worth_chart', 'expense_allocation', 'calendar_events', 'audit_logs']);
+    }
+  }, [activeBusiness]);
+
+  const saveLayout = (newKpis: string[], newWidgets: string[]) => {
+    const bizId = activeBusiness?.id || 'default';
+    localStorage.setItem(`apex_pinned_kpis_${bizId}`, JSON.stringify(newKpis));
+    localStorage.setItem(`apex_pinned_widgets_${bizId}`, JSON.stringify(newWidgets));
+  };
+
+  const handleKpiDragStart = (index: number) => {
+    setDraggedKpiIndex(index);
+  };
+
+  const handleKpiDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedKpiIndex === null || draggedKpiIndex === index) return;
+    const reordered = [...pinnedKpis];
+    const item = reordered[draggedKpiIndex];
+    reordered.splice(draggedKpiIndex, 1);
+    reordered.splice(index, 0, item);
+    setDraggedKpiIndex(index);
+    setPinnedKpis(reordered);
+    saveLayout(reordered, pinnedWidgets);
+  };
+
+  const handleKpiDragEnd = () => {
+    setDraggedKpiIndex(null);
+  };
+
+  const handleWidgetDragStart = (index: number) => {
+    setDraggedWidgetIndex(index);
+  };
+
+  const handleWidgetDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedWidgetIndex === null || draggedWidgetIndex === index) return;
+    const reordered = [...pinnedWidgets];
+    const item = reordered[draggedWidgetIndex];
+    reordered.splice(draggedWidgetIndex, 1);
+    reordered.splice(index, 0, item);
+    setDraggedWidgetIndex(index);
+    setPinnedWidgets(reordered);
+    saveLayout(pinnedKpis, reordered);
+  };
+
+  const handleWidgetDragEnd = () => {
+    setDraggedWidgetIndex(null);
+  };
+
+  const handlePinKpi = (key: string) => {
+    if (pinnedKpis.includes(key)) return;
+    const updated = [...pinnedKpis, key];
+    setPinnedKpis(updated);
+    saveLayout(updated, pinnedWidgets);
+  };
+
+  const handleUnpinKpi = (key: string) => {
+    const updated = pinnedKpis.filter(k => k !== key);
+    setPinnedKpis(updated);
+    saveLayout(updated, pinnedWidgets);
+  };
+
+  const handlePinWidget = (key: string) => {
+    if (pinnedWidgets.includes(key)) return;
+    const updated = [...pinnedWidgets, key];
+    setPinnedWidgets(updated);
+    saveLayout(pinnedKpis, updated);
+  };
+
+  const handleUnpinWidget = (key: string) => {
+    const updated = pinnedWidgets.filter(w => w !== key);
+    setPinnedWidgets(updated);
+    saveLayout(pinnedKpis, updated);
+  };
+
+  const handleResetLayout = () => {
+    const defaultKpis = ['revenue', 'expenses', 'profit', 'sales', 'inventory', 'debts', 'staff', 'clients', 'growth'];
+    const defaultWidgets = ['target_meter', 'projections', 'cash_flow_chart', 'net_worth_chart', 'expense_allocation', 'calendar_events', 'audit_logs'];
+    setPinnedKpis(defaultKpis);
+    setPinnedWidgets(defaultWidgets);
+    saveLayout(defaultKpis, defaultWidgets);
+  };
 
   // Sync Yearly Goal with storage
   useEffect(() => {
@@ -492,29 +688,71 @@ export const DashboardOverview: React.FC = () => {
 
     return (
       <div className="space-y-6" id="employee-dashboard">
-        {/* Welcome Header */}
-        <div className="glass-panel p-6 rounded-2xl border-l-4 border-l-cyan-500 bg-slate-900/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <span className="text-[10px] font-bold text-cyan-400 font-mono tracking-wider uppercase bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-500/10">Employee terminal</span>
-            <h2 className="text-xl font-bold text-slate-100 font-sans mt-1">Saba, {activeUser.name}</h2>
-            <p className="text-xs text-slate-400">
-              Welcome to the Apex corporate network. Manage your point-of-sale registers and track task rosters.
-            </p>
+        {/* Welcome Header and Personal Profile Card */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 glass-panel p-6 rounded-2xl border-l-4 border-l-cyan-500 bg-slate-900/40 flex flex-col justify-between gap-6">
+            <div className="space-y-2">
+              <span className="text-[10px] font-bold text-cyan-400 font-mono tracking-wider uppercase bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-500/10 inline-block">Employee terminal</span>
+              <h2 className="text-2xl font-bold text-slate-100 font-sans mt-1">Saba, {activeUser.name}</h2>
+              <p className="text-xs text-slate-400 max-w-xl">
+                Welcome to the Apex corporate network. You are authenticated with secure end-to-end token validation. Manage your point-of-sale registers and track task rosters.
+              </p>
+            </div>
+
+            {/* Clock In / Out Controller */}
+            <div>
+              <button
+                onClick={() => clockInOut(activeUser.id)}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold shadow-lg transition duration-200 font-sans ${
+                  isClockedIn 
+                    ? 'bg-rose-600 hover:bg-rose-500 text-slate-100 shadow-rose-950/20' 
+                    : 'bg-emerald-600 hover:bg-emerald-500 text-slate-100 shadow-emerald-950/20'
+                }`}
+                id="employee-clockin-out"
+              >
+                <Clock className="w-4 h-4" />
+                <span>{isClockedIn ? 'Clock Out Attendance' : 'Clock In Attendance'}</span>
+              </button>
+            </div>
           </div>
 
-          {/* Clock In / Out Controller */}
-          <button
-            onClick={() => clockInOut(activeUser.id)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold shadow-lg transition duration-200 font-sans ${
-              isClockedIn 
-                ? 'bg-rose-600 hover:bg-rose-500 text-slate-100 shadow-rose-950/20' 
-                : 'bg-emerald-600 hover:bg-emerald-500 text-slate-100 shadow-emerald-950/20'
-            }`}
-            id="employee-clockin-out"
-          >
-            <Clock className="w-4 h-4" />
-            <span>{isClockedIn ? 'Clock Out Attendance' : 'Clock In Attendance'}</span>
-          </button>
+          {/* Secure Profile Badge Card */}
+          <div className="glass-panel p-6 rounded-2xl border border-slate-800 bg-slate-950/20 flex flex-col justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl border border-cyan-500/30 overflow-hidden bg-cyan-950/40 shrink-0 flex items-center justify-center relative shadow-lg">
+                {activeUser.avatarUrl ? (
+                  <img src={activeUser.avatarUrl} alt={activeUser.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-cyan-950/80 text-cyan-400 font-bold text-xl font-mono">
+                    {activeUser.name ? activeUser.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().substring(0, 2) : 'EM'}
+                  </div>
+                )}
+                {/* Status Dot */}
+                <span className={`absolute bottom-1 right-1 w-3.5 h-3.5 rounded-full border-2 border-slate-900 ${isClockedIn ? 'bg-emerald-500' : 'bg-slate-500'}`} />
+              </div>
+              <div className="space-y-1 min-w-0">
+                <h3 className="font-sans text-base font-bold text-slate-100 truncate capitalize">{activeUser.name}</h3>
+                <p className="text-xs text-cyan-400 font-mono font-medium uppercase tracking-wider">{activeUser.role || 'Staff Member'}</p>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-800/80 pt-3 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400 font-sans">Employee ID:</span>
+                <span className="text-slate-100 font-mono font-semibold bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800/80 text-cyan-400">
+                  {activeUser.employeeNumber || activeUser.badgeNumber || 'EMP-001'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400 font-sans">Corporate Branch:</span>
+                <span className="text-slate-100 font-semibold truncate max-w-[160px]">{activeUser.branch || 'Main HQ'}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400 font-sans">Email Address:</span>
+                <span className="text-slate-100 truncate max-w-[160px]" title={activeUser.email}>{activeUser.email || 'N/A'}</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Employee Stats Cards Grid */}
@@ -639,6 +877,742 @@ export const DashboardOverview: React.FC = () => {
     );
   }
 
+  // Helper to render individual content for any KPI card
+  const renderKpiCardContent = (key: string) => {
+    switch (key) {
+      case 'revenue':
+        return (
+          <>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs text-gray-400 font-medium tracking-tight uppercase">TOTAL REVENUE (YTD)</span>
+              <div className="w-8 h-8 rounded-xl bg-cyan-950/55 border border-cyan-500/30 flex items-center justify-center glow-cyan">
+                <TrendingUp className="w-4 h-4 text-cyan-400" />
+              </div>
+            </div>
+            <div>
+              <h3 className="text-2xl font-bold font-mono text-gray-100">
+                {formatKES(totalRevenue)}
+              </h3>
+              <p className="text-[10px] text-gray-500 mt-1.5 flex items-center gap-1">
+                Live updates directly from SQLite synced with Supabase
+              </p>
+            </div>
+          </>
+        );
+      case 'expenses':
+        return (
+          <>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs text-gray-400 font-medium tracking-tight uppercase">TOTAL EXPENSES (YTD)</span>
+              <div className="w-8 h-8 rounded-xl bg-rose-950/55 border border-rose-500/30 flex items-center justify-center">
+                <TrendingDown className="w-4 h-4 text-rose-400" />
+              </div>
+            </div>
+            <div>
+              <h3 className="text-2xl font-bold font-mono text-gray-100">
+                {formatKES(totalExpenses)}
+              </h3>
+              <p className="text-[10px] text-gray-500 mt-1.5">
+                Includes physical operational overhead and procurement values
+              </p>
+            </div>
+          </>
+        );
+      case 'profit':
+        return (
+          <>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs text-gray-400 font-medium tracking-tight uppercase">NET PROFIT</span>
+              <div className="w-8 h-8 rounded-xl bg-emerald-950/55 border border-emerald-500/30 flex items-center justify-center">
+                <CheckCircle className="w-4 h-4 text-emerald-400" />
+              </div>
+            </div>
+            <div>
+              <h3 className={`text-2xl font-bold font-mono ${netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {formatKES(netProfit)}
+              </h3>
+              <p className="text-[10px] text-gray-500 mt-1.5">
+                Reflective net earnings after accounting for COGS subtraction
+              </p>
+            </div>
+          </>
+        );
+      case 'sales':
+        return (
+          <div className="flex flex-col justify-between h-full min-h-[90px]">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">TOTAL SALES ORDERS</span>
+              <ShoppingCart className="w-4 h-4 text-blue-400" />
+            </div>
+            <div className="mt-2.5">
+              <span className="text-xl font-bold text-gray-100 font-mono">{totalSalesCount} Invoices</span>
+              <p className="text-[9px] text-slate-500 mt-0.5">Total transaction volume</p>
+            </div>
+          </div>
+        );
+      case 'inventory':
+        return (
+          <div className="flex flex-col justify-between h-full min-h-[90px]">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">INVENTORY VALUE</span>
+              <Package className="w-4 h-4 text-amber-400" />
+            </div>
+            <div className="mt-2.5">
+              <span className="text-xl font-bold text-gray-100 font-mono">{formatKES(totalInventoryValue)}</span>
+              <p className="text-[9px] text-slate-500 mt-0.5">Asset capital on shelf</p>
+            </div>
+          </div>
+        );
+      case 'debts':
+        return (
+          <div className="flex flex-col justify-between h-full min-h-[90px]">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">OUTSTANDING DEBTS</span>
+              <CreditCard className="w-4 h-4 text-rose-400" />
+            </div>
+            <div className="mt-2.5">
+              <span className="text-xl font-bold text-rose-400 font-mono">{formatKES(totalOutstandingDebts)}</span>
+              <p className="text-[9px] text-slate-500 mt-0.5">Receivable credit facility</p>
+            </div>
+          </div>
+        );
+      case 'staff':
+        return (
+          <div className="flex flex-col justify-between h-full min-h-[90px]">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">STAFF</span>
+              <User className="w-4 h-4 text-cyan-400" />
+            </div>
+            <div className="mt-2.5">
+              <span className="text-xl font-bold text-gray-100 font-mono">{totalEmployeesCount}</span>
+              <p className="text-[9px] text-slate-500 mt-0.5">Active profiles</p>
+            </div>
+          </div>
+        );
+      case 'clients':
+        return (
+          <div className="flex flex-col justify-between h-full min-h-[90px]">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">CLIENTS</span>
+              <UserCheck className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div className="mt-2.5">
+              <span className="text-xl font-bold text-gray-100 font-mono">{activeCustomersCount}</span>
+              <p className="text-[9px] text-slate-500 mt-0.5">Registered clients</p>
+            </div>
+          </div>
+        );
+      case 'growth':
+        return (
+          <div className="flex flex-col justify-between h-full min-h-[90px]">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">GROWTH</span>
+              <Activity className="w-4 h-4 text-indigo-400" />
+            </div>
+            <div className="mt-2.5">
+              <span className="text-xl font-bold text-indigo-400 font-mono">+{businessGrowthRate}%</span>
+              <p className="text-[9px] text-slate-500 mt-0.5">Net margin status</p>
+            </div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
+  // Helper to render individual content for any large widget
+  const renderWidgetContent = (key: string) => {
+    switch (key) {
+      case 'target_meter':
+        return (
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-cyan-950/40 border border-cyan-500/20">
+                  <Target className="w-5 h-5 text-cyan-400 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-200 uppercase font-sans tracking-wide">
+                    Yearly Net Profit Target
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Track executive profit performance versus enterprise goals.
+                  </p>
+                </div>
+              </div>
+
+              {/* Business Owner exclusive goal inputs */}
+              {isOwner ? (
+                <div className="flex items-center gap-2">
+                  {isEditingGoal ? (
+                    <div className="flex items-center gap-2 bg-slate-950/80 p-1 rounded-lg border border-slate-800">
+                      <input
+                        type="number"
+                        value={goalInput}
+                        onChange={(e) => setGoalInput(e.target.value)}
+                        className="bg-transparent text-slate-100 font-mono text-xs w-28 px-2 outline-none"
+                        placeholder="Enter target"
+                      />
+                      <button
+                        onClick={() => handleSaveGoal(parseFloat(goalInput) || 1000000)}
+                        className="p-1 text-emerald-400 hover:bg-emerald-950/20 rounded"
+                        title="Confirm Goal"
+                      >
+                        <Check className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsEditingGoal(false);
+                          setGoalInput(yearlyGoal.toString());
+                        }}
+                        className="p-1 text-rose-400 hover:bg-rose-950/20 rounded"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      {/* Preset quick buttons */}
+                      <div className="hidden md:flex gap-1">
+                        {[500000, 1000000, 5000000, 10000000].map(val => (
+                          <button
+                            key={val}
+                            onClick={() => handleSaveGoal(val)}
+                            className={`px-2 py-1 rounded text-[10px] font-mono border ${
+                              yearlyGoal === val 
+                                ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-400' 
+                                : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:text-slate-200'
+                            }`}
+                          >
+                            {val >= 1000000 ? `${val / 1000000}M` : `${val / 1000}K`}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        onClick={() => setIsEditingGoal(true)}
+                        className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-300 hover:text-cyan-400 hover:border-cyan-500/30 text-xs font-semibold font-sans transition"
+                      >
+                        Set Custom Target
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <span className="text-[10px] bg-slate-950/40 border border-slate-800 text-slate-400 px-3 py-1.5 rounded-lg font-sans">
+                  🔒 Manager View Only
+                </span>
+              )}
+            </div>
+
+            {/* Target metrics progress display */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-500 uppercase font-semibold">Target Goal</span>
+                <p className="text-md font-bold text-slate-100 font-mono">{formatKES(yearlyGoal)}</p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-500 uppercase font-semibold">Current Profit YTD</span>
+                <p className={`text-md font-bold font-mono ${netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {formatKES(netProfit)}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-500 uppercase font-semibold">Remaining Target</span>
+                <p className="text-md font-bold text-slate-300 font-mono">{formatKES(remainingToGoal)}</p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-500 uppercase font-semibold">Estimated Completion Date</span>
+                <p className="text-sm font-bold text-cyan-400 font-sans flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-cyan-500" />
+                  {getEstimatedGoalDate()}
+                </p>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="space-y-2 pt-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-400 font-semibold">Goal Completion</span>
+                <span className="text-cyan-400 font-bold font-mono">{goalProgressPercent}%</span>
+              </div>
+              <div className="w-full h-3 bg-slate-950 rounded-full border border-slate-800 overflow-hidden relative">
+                <div 
+                  className="h-full bg-gradient-to-r from-cyan-500 to-emerald-500 shadow-lg shadow-cyan-500/20 transition-all duration-500 rounded-full"
+                  style={{ width: `${goalProgressPercent}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        );
+      case 'projections':
+        return (
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-slate-200 uppercase font-sans tracking-wide flex items-center gap-2">
+              <Calculator className="w-4.5 h-4.5 text-indigo-400" />
+              Forecast & Performance Projection (KES)
+            </h3>
+            <p className="text-xs text-slate-400">
+              Intelligent projections calculated dynamically from your corporate sales velocity and overhead rates.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
+              {/* Daily Forecast */}
+              <div className="p-4 bg-slate-950/40 border border-slate-800/80 rounded-xl space-y-2">
+                <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Projected Daily</span>
+                <div className="space-y-1">
+                  <p className="text-xs text-slate-400 flex justify-between">Revenue: <span className="font-mono text-slate-200">{formatKES(forecastDailyRevenue)}</span></p>
+                  <p className="text-xs text-slate-400 flex justify-between">Expenses: <span className="font-mono text-rose-400">({formatKES(forecastDailyExpenses)})</span></p>
+                  <div className="border-t border-slate-800/50 pt-1" />
+                  <p className="text-xs font-bold flex justify-between text-emerald-400">Est. Profit: <span className="font-mono">{formatKES(forecastDailyProfit)}</span></p>
+                </div>
+              </div>
+
+              {/* Weekly Forecast */}
+              <div className="p-4 bg-slate-950/40 border border-slate-800/80 rounded-xl space-y-2">
+                <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Projected Weekly</span>
+                <div className="space-y-1">
+                  <p className="text-xs text-slate-400 flex justify-between">Revenue: <span className="font-mono text-slate-200">{formatKES(forecastWeeklyRevenue)}</span></p>
+                  <p className="text-xs text-slate-400 flex justify-between">Expenses: <span className="font-mono text-rose-400">({formatKES(forecastWeeklyExpenses)})</span></p>
+                  <div className="border-t border-slate-800/50 pt-1" />
+                  <p className="text-xs font-bold flex justify-between text-emerald-400">Est. Profit: <span className="font-mono">{formatKES(forecastWeeklyProfit)}</span></p>
+                </div>
+              </div>
+
+              {/* Monthly Forecast */}
+              <div className="p-4 bg-slate-950/40 border border-slate-800/80 rounded-xl space-y-2">
+                <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Projected Monthly</span>
+                <div className="space-y-1">
+                  <p className="text-xs text-slate-400 flex justify-between">Revenue: <span className="font-mono text-slate-200">{formatKES(forecastMonthlyRevenue)}</span></p>
+                  <p className="text-xs text-slate-400 flex justify-between">Expenses: <span className="font-mono text-rose-400">({formatKES(forecastMonthlyExpenses)})</span></p>
+                  <div className="border-t border-slate-800/50 pt-1" />
+                  <p className="text-xs font-bold flex justify-between text-emerald-400">Est. Profit: <span className="font-mono">{formatKES(forecastMonthlyProfit)}</span></p>
+                </div>
+              </div>
+
+              {/* Annual Forecast */}
+              <div className="p-4 bg-slate-950/40 border border-slate-800/80 rounded-xl space-y-2">
+                <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Projected Annual</span>
+                <div className="space-y-1">
+                  <p className="text-xs text-slate-400 flex justify-between">Revenue: <span className="font-mono text-slate-200">{formatKES(forecastAnnualRevenue)}</span></p>
+                  <p className="text-xs text-slate-400 flex justify-between">Expenses: <span className="font-mono text-rose-400">({formatKES(forecastAnnualExpenses)})</span></p>
+                  <div className="border-t border-slate-800/50 pt-1" />
+                  <p className="text-xs font-bold flex justify-between text-emerald-400">Est. Profit: <span className="font-mono">{formatKES(forecastAnnualProfit)}</span></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case 'cash_flow_chart':
+        return (
+          <div className="flex flex-col justify-between h-[340px]">
+            <div className="flex items-center justify-between mb-4 border-b border-slate-800/50 pb-3">
+              <div>
+                <h4 className="text-sm font-bold text-slate-200 uppercase tracking-wide">Interactive Cash Flow Tracker</h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">Cash Inflows vs Outflows (KES)</p>
+              </div>
+
+              {/* Cash Flow Tabs */}
+              <div className="flex bg-slate-950/80 p-1 rounded-lg border border-slate-800 text-[10px] font-mono">
+                {(['daily', 'weekly', 'monthly', 'yearly'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setCashFlowTab(tab)}
+                    className={`px-2.5 py-1 rounded transition capitalize ${
+                      cashFlowTab === tab 
+                        ? 'bg-slate-900 text-cyan-400 border border-slate-800' 
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex-1 w-full min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={getCashFlowData()}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
+                  <YAxis stroke="#64748b" fontSize={11} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b' }}
+                    labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="Inflow" fill="#06b6d4" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Outflow" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        );
+      case 'net_worth_chart':
+        return (
+          <div className="flex flex-col justify-between h-[340px]">
+            <div className="flex items-center justify-between mb-4 border-b border-slate-800/50 pb-3">
+              <div>
+                <h4 className="text-sm font-bold text-slate-200 uppercase tracking-wide">Net Worth Trajectory (KES)</h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">Asset Wealth minus Debt Liabilities</p>
+              </div>
+
+              {/* Net Worth Tabs */}
+              <div className="flex bg-slate-950/80 p-1 rounded-lg border border-slate-800 text-[10px] font-mono">
+                {(['monthly', 'quarterly', 'yearly'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setNetWorthTab(tab)}
+                    className={`px-2.5 py-1 rounded transition capitalize ${
+                      netWorthTab === tab 
+                        ? 'bg-slate-900 text-indigo-400 border border-slate-800' 
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex-1 w-full min-h-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={getNetWorthTrajectory()}>
+                  <defs>
+                    <linearGradient id="colorNetWorth" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
+                  <YAxis stroke="#64748b" fontSize={11} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b' }}
+                    labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }}
+                  />
+                  <Area type="monotone" dataKey="Net Worth" stroke="#6366f1" strokeWidth={2.5} fillOpacity={1} fill="url(#colorNetWorth)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        );
+      case 'expense_allocation':
+        return (
+          <div className="flex flex-col justify-between h-[320px]">
+            <div>
+              <h4 className="text-sm font-bold text-slate-200 uppercase tracking-wide">Expenses Allocation by Category</h4>
+              <p className="text-[10px] text-slate-500 mt-0.5">Proportional business budget allocation</p>
+            </div>
+
+            {expenseChartData.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+                <FolderOpen className="w-8 h-8 text-slate-600 mb-2 stroke-[1.5]" />
+                <p className="text-xs font-semibold text-slate-400">No data available</p>
+                <p className="text-[10px] text-slate-500 mt-1 max-w-[200px]">Log expenses to display allocation metrics.</p>
+              </div>
+            ) : (
+              <div className="flex items-center gap-4 flex-1 min-h-0 pt-3">
+                <div className="w-[150px] h-[150px] shrink-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={expenseChartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={45}
+                        outerRadius={65}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {expenseChartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b', fontSize: 10 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Categories Legend */}
+                <div className="flex-1 space-y-2 max-h-[180px] overflow-y-auto pr-1">
+                  {expenseChartData.slice(0, 5).map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                        <span className="text-slate-300 font-medium font-sans truncate max-w-[90px] inline-block">{item.name}</span>
+                      </div>
+                      <div className="text-right font-mono text-slate-400 shrink-0">
+                        <span>{item.percentage}%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      case 'calendar_events':
+        return (
+          <div className="flex flex-col justify-between h-[320px]">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h4 className="text-sm font-bold text-slate-200 uppercase tracking-wide">Shared Corporate Calendar Events</h4>
+                <p className="text-[10px] text-slate-500 mt-0.5">Upcoming announcements and meetings</p>
+              </div>
+              <span className="text-[10px] bg-cyan-950/40 border border-cyan-500/20 text-cyan-400 px-2.5 py-1 rounded-lg font-mono">
+                Live Feed
+              </span>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pt-3 space-y-2.5 pr-1 max-h-[220px]">
+              {events.length === 0 ? (
+                <div className="text-center py-12 text-slate-500 space-y-2">
+                  <Calendar className="w-8 h-8 text-slate-700 mx-auto" />
+                  <p className="text-xs font-sans">No corporate calendar events scheduled.</p>
+                </div>
+              ) : (
+                events.slice(0, 4).map(event => (
+                  <div key={event.id} className="p-3 bg-slate-950/40 border border-slate-800/80 rounded-xl flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-indigo-950/50 border border-indigo-500/20 flex items-center justify-center font-bold text-indigo-400 font-sans text-xs">
+                        {event.type.substring(0, 1)}
+                      </div>
+                      <div>
+                        <h5 className="text-xs font-bold text-slate-200 font-sans">{event.title}</h5>
+                        <p className="text-[10px] text-slate-400 mt-0.5">{event.description}</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-indigo-400 font-mono font-bold shrink-0">
+                      {event.date}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        );
+      case 'audit_logs':
+        return (
+          <div className="space-y-5" id="live-audit-log-view">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-200 uppercase font-sans tracking-wide flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-cyan-400" />
+                  Live Corporate Tenant Audit Trails
+                </h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Cryptographically logged administrative and employee activities synced securely.
+                </p>
+              </div>
+
+              {/* Quick Date Select Range Overlay Trigger */}
+              {showCustomDateModal && (
+                <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                  <div className="glass-panel p-6 max-w-sm w-full space-y-4">
+                    <h4 className="text-sm font-bold text-slate-200 font-sans">Select Custom Date Range</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Start Date</label>
+                        <input
+                          type="date"
+                          value={customStartDate}
+                          onChange={(e) => setCustomStartDate(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">End Date</label>
+                        <input
+                          type="date"
+                          value={customEndDate}
+                          onChange={(e) => setCustomEndDate(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuditTime('All Time');
+                          setShowCustomDateModal(false);
+                        }}
+                        className="px-3 py-1.5 border border-slate-800 rounded text-slate-400 text-xs font-sans"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAuditTime('Custom Range');
+                          setShowCustomDateModal(false);
+                        }}
+                        className="px-3 py-1.5 bg-cyan-500 text-slate-950 font-bold rounded text-xs font-sans"
+                      >
+                        Apply Filter
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Tenant Activity Filters bar */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* User filter */}
+                <div className="relative">
+                  <select
+                    value={auditUser}
+                    onChange={(e) => setAuditUser(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 text-slate-300 py-1 px-2.5 pr-7 rounded text-[11px] outline-none cursor-pointer hover:border-slate-700 font-sans"
+                  >
+                    <option value="All Users">👤 All Employees</option>
+                    {distinctAuditUsers.map(user => (
+                      <option key={user} value={user}>{user}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+
+                {/* Action filter */}
+                <div className="relative">
+                  <select
+                    value={auditActivity}
+                    onChange={(e) => setAuditActivity(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 text-slate-300 py-1 px-2.5 pr-7 rounded text-[11px] outline-none cursor-pointer hover:border-slate-700 font-sans"
+                  >
+                    <option value="All Activities">⚡ All Action Types</option>
+                    <option value="Insert">➕ Creation / Addition</option>
+                    <option value="Update">📝 Edit / Modifications</option>
+                    <option value="Delete">❌ Deletions / Purges</option>
+                    <option value="Login">🔓 Sign In Records</option>
+                    <option value="Logout">🔒 Sign Out Records</option>
+                    <option value="Sales">🛒 Sales Terminal</option>
+                    <option value="Inventory">📦 Inventory Actions</option>
+                    <option value="Expenses">💸 Expense Actions</option>
+                    <option value="Customers">👥 Customers CRM</option>
+                    <option value="Debts">💳 Debt Records</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+
+                {/* Time filter */}
+                <div className="relative">
+                  <select
+                    value={auditTime}
+                    onChange={(e) => {
+                      if (e.target.value === 'Custom Range') {
+                        setShowCustomDateModal(true);
+                      } else {
+                        setAuditTime(e.target.value);
+                      }
+                    }}
+                    className="bg-slate-950 border border-slate-800 text-slate-300 py-1 px-2.5 pr-7 rounded text-[11px] outline-none cursor-pointer hover:border-slate-700 font-sans"
+                  >
+                    <option value="All Time">📅 All Time Records</option>
+                    <option value="Today">Today</option>
+                    <option value="Yesterday">Yesterday</option>
+                    <option value="This Week">This Week</option>
+                    <option value="Last Week">Last Week</option>
+                    <option value="This Month">This Month</option>
+                    <option value="Last Month">Last Month</option>
+                    <option value="This Year">This Year</option>
+                    <option value="Custom Range">Custom Date Range...</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </div>
+            </div>
+
+            {/* Chronological Audit Feed */}
+            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
+              {filteredAudits.length === 0 ? (
+                <div className="text-center py-12 text-slate-500">
+                  <Lock className="w-10 h-10 text-slate-700 mx-auto mb-2" />
+                  <p className="text-xs font-sans">No matching cryptographically secure audit logs recorded.</p>
+                </div>
+              ) : (
+                filteredAudits.map((log, index) => {
+                  const isRevertible = 
+                    (log.action.toLowerCase().includes('delete') || log.action.toLowerCase().includes('update')) &&
+                    !log.action.toLowerCase().includes('reverted');
+
+                  const isHighRisk = 
+                    log.action.toLowerCase().includes('delete') || 
+                    log.action.toLowerCase().includes('permanently') ||
+                    log.action.toLowerCase().includes('shut down');
+
+                  return (
+                    <div 
+                      key={`${log.id}-${index}`} 
+                      className={`p-3.5 bg-slate-950/40 hover:bg-slate-950/60 border rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 transition ${
+                        isHighRisk 
+                          ? 'border-rose-500/20 bg-rose-950/5' 
+                          : 'border-slate-800/80'
+                      }`}
+                      id={`audit-log-${log.id}-${index}`}
+                    >
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                          <span className="font-bold text-slate-200 text-xs font-sans">
+                            {log.userName}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            {log.role}
+                          </span>
+                          <span className="text-[10px] bg-slate-900 border border-slate-800/50 text-slate-400 px-1.5 py-0.2 rounded font-sans uppercase">
+                            {log.action}
+                          </span>
+                          {isHighRisk && (
+                            <span className="text-[9px] bg-rose-500/10 border border-rose-500/20 text-rose-400 px-1.5 py-0.2 rounded font-bold uppercase font-mono">
+                              ⚠️ HIGH RISK
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-x-4 text-[11px] text-slate-400">
+                          {log.oldValue && log.oldValue !== 'N/A' && (
+                            <span>Previous: <code className="text-slate-500 font-mono text-[10px] bg-slate-950/40 px-1 rounded">{log.oldValue}</code></span>
+                          )}
+                          {log.newValue && log.newValue !== 'N/A' && (
+                            <span className="flex items-center gap-1">
+                              <ArrowRight className="w-3 h-3 text-slate-600" />
+                              New: <code className="text-cyan-400/80 font-mono text-[10px] bg-slate-950/40 px-1 rounded">{log.newValue}</code>
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap gap-x-3 text-[10px] text-slate-500 font-mono">
+                          <span>Date: {log.date} at {log.time}</span>
+                          {log.device && <span>Device: {log.device}</span>}
+                        </div>
+                      </div>
+
+                      {/* Revert Action controls */}
+                      {(isOwner || isManager) && isRevertible && (
+                        <button
+                          type="button"
+                          onClick={() => handleRevertClick(log.id)}
+                          className="flex items-center justify-center gap-1 px-2.5 py-1.5 bg-slate-900 hover:bg-cyan-950/45 hover:text-cyan-400 text-slate-300 font-bold border border-slate-800 hover:border-cyan-500/20 rounded-lg text-[10px] font-sans transition shrink-0"
+                          title="Undo this specific change"
+                        >
+                          <Undo className="w-3 h-3" />
+                          <span>Revert Action</span>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   // ---------------------------------------------
   // OWNER & MANAGER EXECUTIVE DASHBOARD VIEW
   // ---------------------------------------------
@@ -691,6 +1665,18 @@ export const DashboardOverview: React.FC = () => {
         {/* Create Workspace/Branch Controls */}
         <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-end">
           <button
+            onClick={() => setIsCustomizing(!isCustomizing)}
+            className={`flex items-center gap-1.5 px-3 py-2 border rounded-xl text-xs font-medium transition duration-150 cursor-pointer ${
+              isCustomizing 
+                ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' 
+                : 'bg-gray-900 hover:bg-slate-800 border-brand-border text-gray-200'
+            }`}
+          >
+            <Settings className={`w-4 h-4 text-amber-400 ${isCustomizing ? 'animate-spin' : ''}`} />
+            <span>{isCustomizing ? 'Layout Studio Active' : 'Customize Layout'}</span>
+          </button>
+
+          <button
             onClick={() => setShowBizModal(true)}
             className="flex items-center gap-1.5 px-3 py-2 bg-gray-900 hover:bg-cyan-950/20 border border-brand-border hover:border-cyan-500/30 rounded-xl text-xs font-medium text-gray-200 transition duration-150 cursor-pointer"
           >
@@ -708,719 +1694,192 @@ export const DashboardOverview: React.FC = () => {
         </div>
       </div>
 
-      {/* ==================== EXECUTIVE BENTO-GRID KPI CARDS ==================== */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-9 gap-4">
-        
-        {/* TOTAL REVENUE */}
-        <div className="xl:col-span-3 glass-panel p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between border-t-2 border-cyan-500/20 shadow-lg shadow-cyan-500/5 glow-cyan-hover transition duration-300">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-gray-400 font-medium tracking-tight uppercase">TOTAL REVENUE (YTD)</span>
-            <div className="w-8 h-8 rounded-xl bg-cyan-950/55 border border-cyan-500/30 flex items-center justify-center glow-cyan">
-              <TrendingUp className="w-4 h-4 text-cyan-400" />
-            </div>
-          </div>
-          <div>
-            <h3 className="text-2xl font-bold font-mono text-gray-100">
-              {formatKES(totalRevenue)}
-            </h3>
-            <p className="text-[10px] text-gray-500 mt-1.5 flex items-center gap-1">
-              Live updates directly from SQLite synced with Supabase
-            </p>
-          </div>
-        </div>
-
-        {/* TOTAL EXPENSES */}
-        <div className="xl:col-span-3 glass-panel p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between border-t-2 border-rose-500/20 shadow-lg shadow-rose-500/5 glow-cyan-hover transition duration-300">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-gray-400 font-medium tracking-tight uppercase">TOTAL EXPENSES (YTD)</span>
-            <div className="w-8 h-8 rounded-xl bg-rose-950/55 border border-rose-500/30 flex items-center justify-center">
-              <TrendingDown className="w-4 h-4 text-rose-400" />
-            </div>
-          </div>
-          <div>
-            <h3 className="text-2xl font-bold font-mono text-gray-100">
-              {formatKES(totalExpenses)}
-            </h3>
-            <p className="text-[10px] text-gray-500 mt-1.5">
-              Includes physical operational overhead and procurement values
-            </p>
-          </div>
-        </div>
-
-        {/* NET PROFIT */}
-        <div className="xl:col-span-3 glass-panel p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between border-t-2 border-emerald-500/20 shadow-lg shadow-emerald-500/5 glow-cyan-hover transition duration-300">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-gray-400 font-medium tracking-tight uppercase">NET PROFIT</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-950/55 border border-emerald-500/30 flex items-center justify-center">
-              <CheckCircle className="w-4 h-4 text-emerald-400" />
-            </div>
-          </div>
-          <div>
-            <h3 className={`text-2xl font-bold font-mono ${netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {formatKES(netProfit)}
-            </h3>
-            <p className="text-[10px] text-gray-500 mt-1.5">
-              Reflective net earnings after accounting for COGS subtraction
-            </p>
-          </div>
-        </div>
-
-        {/* TOTAL SALES */}
-        <div className="xl:col-span-2 glass-panel p-4.5 rounded-xl flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">TOTAL SALES ORDERS</span>
-            <ShoppingCart className="w-4 h-4 text-blue-400" />
-          </div>
-          <div className="mt-2.5">
-            <span className="text-xl font-bold text-gray-100 font-mono">{totalSalesCount} Invoices</span>
-            <p className="text-[9px] text-slate-500 mt-0.5">Total transaction volume</p>
-          </div>
-        </div>
-
-        {/* INVENTORY VALUE */}
-        <div className="xl:col-span-2 glass-panel p-4.5 rounded-xl flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">INVENTORY VALUE</span>
-            <Package className="w-4 h-4 text-amber-400" />
-          </div>
-          <div className="mt-2.5">
-            <span className="text-xl font-bold text-gray-100 font-mono">{formatKES(totalInventoryValue)}</span>
-            <p className="text-[9px] text-slate-500 mt-0.5">Asset capital on shelf</p>
-          </div>
-        </div>
-
-        {/* OUTSTANDING DEBTS */}
-        <div className="xl:col-span-2 glass-panel p-4.5 rounded-xl flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">OUTSTANDING DEBTS</span>
-            <CreditCard className="w-4 h-4 text-rose-400" />
-          </div>
-          <div className="mt-2.5">
-            <span className="text-xl font-bold text-rose-400 font-mono">{formatKES(totalOutstandingDebts)}</span>
-            <p className="text-[9px] text-slate-500 mt-0.5">Receivable credit facility</p>
-          </div>
-        </div>
-
-        {/* TOTAL EMPLOYEES */}
-        <div className="xl:col-span-1 glass-panel p-4.5 rounded-xl flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">STAFF</span>
-            <User className="w-4 h-4 text-cyan-400" />
-          </div>
-          <div className="mt-2.5">
-            <span className="text-xl font-bold text-gray-100 font-mono">{totalEmployeesCount}</span>
-            <p className="text-[9px] text-slate-500 mt-0.5">Active profiles</p>
-          </div>
-        </div>
-
-        {/* ACTIVE CUSTOMERS */}
-        <div className="xl:col-span-1 glass-panel p-4.5 rounded-xl flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">CLIENTS</span>
-            <UserCheck className="w-4 h-4 text-emerald-400" />
-          </div>
-          <div className="mt-2.5">
-            <span className="text-xl font-bold text-gray-100 font-mono">{activeCustomersCount}</span>
-            <p className="text-[9px] text-slate-500 mt-0.5">Registered clients</p>
-          </div>
-        </div>
-
-        {/* GROWTH % */}
-        <div className="xl:col-span-1 glass-panel p-4.5 rounded-xl flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wide">GROWTH</span>
-            <Activity className="w-4 h-4 text-indigo-400" />
-          </div>
-          <div className="mt-2.5">
-            <span className="text-xl font-bold text-indigo-400 font-mono">+{businessGrowthRate}%</span>
-            <p className="text-[9px] text-slate-500 mt-0.5">Net margin status</p>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ==================== YEARLY PROFIT GOAL WIDGET ==================== */}
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-cyan-950/40 border border-cyan-500/20">
-              <Target className="w-5 h-5 text-cyan-400 animate-pulse" />
-            </div>
+      {/* ==================== WIDGET STUDIO PANEL ==================== */}
+      {isCustomizing && (
+        <div className="glass-panel p-6 rounded-2xl border border-amber-500/30 bg-amber-950/5 space-y-6 relative overflow-hidden transition-all duration-300">
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-500/50 to-transparent"></div>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800/80 pb-4">
             <div>
-              <h3 className="text-sm font-bold text-slate-200 uppercase font-sans tracking-wide">
-                Yearly Net Profit Target
+              <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wide flex items-center gap-2">
+                <Settings className="w-4 h-4 text-amber-400 animate-spin" />
+                Apex Dashboard Layout Studio
               </h3>
-              <p className="text-[11px] text-slate-400">
-                Track executive profit performance versus enterprise goals.
+              <p className="text-xs text-slate-400 mt-1">
+                Customize your home dashboard. Click buttons below to Pin/Unpin, or drag-and-drop the widgets directly on the dashboard page to reorder them.
               </p>
             </div>
-          </div>
-
-          {/* Business Owner exclusive goal inputs */}
-          {isOwner ? (
-            <div className="flex items-center gap-2">
-              {isEditingGoal ? (
-                <div className="flex items-center gap-2 bg-slate-950/80 p-1 rounded-lg border border-slate-800">
-                  <input
-                    type="number"
-                    value={goalInput}
-                    onChange={(e) => setGoalInput(e.target.value)}
-                    className="bg-transparent text-slate-100 font-mono text-xs w-28 px-2 outline-none"
-                    placeholder="Enter target"
-                  />
-                  <button
-                    onClick={() => handleSaveGoal(parseFloat(goalInput) || 1000000)}
-                    className="p-1 text-emerald-400 hover:bg-emerald-950/20 rounded"
-                    title="Confirm Goal"
-                  >
-                    <Check className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      setIsEditingGoal(false);
-                      setGoalInput(yearlyGoal.toString());
-                    }}
-                    className="p-1 text-rose-400 hover:bg-rose-950/20 rounded"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  {/* Preset quick buttons */}
-                  <div className="hidden md:flex gap-1">
-                    {[500000, 1000000, 5000000, 10000000].map(val => (
-                      <button
-                        key={val}
-                        onClick={() => handleSaveGoal(val)}
-                        className={`px-2 py-1 rounded text-[10px] font-mono border ${
-                          yearlyGoal === val 
-                            ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-400' 
-                            : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        {val >= 1000000 ? `${val / 1000000}M` : `${val / 1000}K`}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => setIsEditingGoal(true)}
-                    className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-slate-300 hover:text-cyan-400 hover:border-cyan-500/30 text-xs font-semibold font-sans transition"
-                  >
-                    Set Custom Target
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <span className="text-[10px] bg-slate-950/40 border border-slate-800 text-slate-400 px-3 py-1.5 rounded-lg font-sans">
-              🔒 Manager View Only
-            </span>
-          )}
-        </div>
-
-        {/* Target metrics progress display */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
-          <div className="space-y-1">
-            <span className="text-[10px] text-slate-500 uppercase font-semibold">Target Goal</span>
-            <p className="text-md font-bold text-slate-100 font-mono">{formatKES(yearlyGoal)}</p>
-          </div>
-          <div className="space-y-1">
-            <span className="text-[10px] text-slate-500 uppercase font-semibold">Current Profit YTD</span>
-            <p className={`text-md font-bold font-mono ${netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {formatKES(netProfit)}
-            </p>
-          </div>
-          <div className="space-y-1">
-            <span className="text-[10px] text-slate-500 uppercase font-semibold">Remaining Target</span>
-            <p className="text-md font-bold text-slate-300 font-mono">{formatKES(remainingToGoal)}</p>
-          </div>
-          <div className="space-y-1">
-            <span className="text-[10px] text-slate-500 uppercase font-semibold">Estimated Completion Date</span>
-            <p className="text-sm font-bold text-cyan-400 font-sans flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5 text-cyan-500" />
-              {getEstimatedGoalDate()}
-            </p>
-          </div>
-        </div>
-
-        {/* Progress Bar */}
-        <div className="space-y-2 pt-2">
-          <div className="flex justify-between items-center text-xs">
-            <span className="text-slate-400 font-semibold">Goal Completion</span>
-            <span className="text-cyan-400 font-bold font-mono">{goalProgressPercent}%</span>
-          </div>
-          <div className="w-full h-3 bg-slate-950 rounded-full border border-slate-800 overflow-hidden relative">
-            <div 
-              className="h-full bg-gradient-to-r from-cyan-500 to-emerald-500 shadow-lg shadow-cyan-500/20 transition-all duration-500 rounded-full"
-              style={{ width: `${goalProgressPercent}%` }}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* ==================== FORECAST SECTION ==================== */}
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-        <h3 className="text-sm font-bold text-slate-200 uppercase font-sans tracking-wide flex items-center gap-2">
-          <Calculator className="w-4.5 h-4.5 text-indigo-400" />
-          Forecast & Performance Projection (KES)
-        </h3>
-        <p className="text-xs text-slate-400">
-          Intelligent projections calculated dynamically from your corporate sales velocity and overhead rates.
-        </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
-          {/* Daily Forecast */}
-          <div className="p-4 bg-slate-950/40 border border-slate-800/80 rounded-xl space-y-2">
-            <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Projected Daily</span>
-            <div className="space-y-1">
-              <p className="text-xs text-slate-400 flex justify-between">Revenue: <span className="font-mono text-slate-200">{formatKES(forecastDailyRevenue)}</span></p>
-              <p className="text-xs text-slate-400 flex justify-between">Expenses: <span className="font-mono text-rose-400">({formatKES(forecastDailyExpenses)})</span></p>
-              <div className="border-t border-slate-800/50 pt-1" />
-              <p className="text-xs font-bold flex justify-between text-emerald-400">Est. Profit: <span className="font-mono">{formatKES(forecastDailyProfit)}</span></p>
-            </div>
-          </div>
-
-          {/* Weekly Forecast */}
-          <div className="p-4 bg-slate-950/40 border border-slate-800/80 rounded-xl space-y-2">
-            <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Projected Weekly</span>
-            <div className="space-y-1">
-              <p className="text-xs text-slate-400 flex justify-between">Revenue: <span className="font-mono text-slate-200">{formatKES(forecastWeeklyRevenue)}</span></p>
-              <p className="text-xs text-slate-400 flex justify-between">Expenses: <span className="font-mono text-rose-400">({formatKES(forecastWeeklyExpenses)})</span></p>
-              <div className="border-t border-slate-800/50 pt-1" />
-              <p className="text-xs font-bold flex justify-between text-emerald-400">Est. Profit: <span className="font-mono">{formatKES(forecastWeeklyProfit)}</span></p>
-            </div>
-          </div>
-
-          {/* Monthly Forecast */}
-          <div className="p-4 bg-slate-950/40 border border-slate-800/80 rounded-xl space-y-2">
-            <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Projected Monthly</span>
-            <div className="space-y-1">
-              <p className="text-xs text-slate-400 flex justify-between">Revenue: <span className="font-mono text-slate-200">{formatKES(forecastMonthlyRevenue)}</span></p>
-              <p className="text-xs text-slate-400 flex justify-between">Expenses: <span className="font-mono text-rose-400">({formatKES(forecastMonthlyExpenses)})</span></p>
-              <div className="border-t border-slate-800/50 pt-1" />
-              <p className="text-xs font-bold flex justify-between text-emerald-400">Est. Profit: <span className="font-mono">{formatKES(forecastMonthlyProfit)}</span></p>
-            </div>
-          </div>
-
-          {/* Annual Forecast */}
-          <div className="p-4 bg-slate-950/40 border border-slate-800/80 rounded-xl space-y-2">
-            <span className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Projected Annual</span>
-            <div className="space-y-1">
-              <p className="text-xs text-slate-400 flex justify-between">Revenue: <span className="font-mono text-slate-200">{formatKES(forecastAnnualRevenue)}</span></p>
-              <p className="text-xs text-slate-400 flex justify-between">Expenses: <span className="font-mono text-rose-400">({formatKES(forecastAnnualExpenses)})</span></p>
-              <div className="border-t border-slate-800/50 pt-1" />
-              <p className="text-xs font-bold flex justify-between text-emerald-400">Est. Profit: <span className="font-mono">{formatKES(forecastAnnualProfit)}</span></p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ==================== ROW 3: CHARTS AND VISUALISERS ==================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* INTERACTIVE CASH FLOW MONITOR */}
-        <div className="glass-panel p-6 rounded-2xl flex flex-col justify-between h-[380px] border border-slate-800">
-          <div className="flex items-center justify-between mb-4 border-b border-slate-800/50 pb-3">
-            <div>
-              <h4 className="text-sm font-bold text-slate-200 uppercase tracking-wide">Interactive Cash Flow Tracker</h4>
-              <p className="text-[10px] text-slate-500 mt-0.5">Cash Inflows vs Outflows (KES)</p>
-            </div>
-
-            {/* Cash Flow Tabs */}
-            <div className="flex bg-slate-950/80 p-1 rounded-lg border border-slate-800 text-[10px] font-mono">
-              {(['daily', 'weekly', 'monthly', 'yearly'] as const).map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setCashFlowTab(tab)}
-                  className={`px-2.5 py-1 rounded transition capitalize ${
-                    cashFlowTab === tab 
-                      ? 'bg-slate-900 text-cyan-400 border border-slate-800' 
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex-1 w-full min-h-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={getCashFlowData()}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
-                <YAxis stroke="#64748b" fontSize={11} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b' }}
-                  labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }}
-                />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="Inflow" fill="#06b6d4" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Outflow" fill="#ef4444" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* NET WORTH TRAJECTORY */}
-        <div className="glass-panel p-6 rounded-2xl flex flex-col justify-between h-[380px] border border-slate-800">
-          <div className="flex items-center justify-between mb-4 border-b border-slate-800/50 pb-3">
-            <div>
-              <h4 className="text-sm font-bold text-slate-200 uppercase tracking-wide">Net Worth Trajectory (KES)</h4>
-              <p className="text-[10px] text-slate-500 mt-0.5">Asset Wealth minus Debt Liabilities</p>
-            </div>
-
-            {/* Net Worth Tabs */}
-            <div className="flex bg-slate-950/80 p-1 rounded-lg border border-slate-800 text-[10px] font-mono">
-              {(['monthly', 'quarterly', 'yearly'] as const).map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setNetWorthTab(tab)}
-                  className={`px-2.5 py-1 rounded transition capitalize ${
-                    netWorthTab === tab 
-                      ? 'bg-slate-900 text-indigo-400 border border-slate-800' 
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex-1 w-full min-h-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={getNetWorthTrajectory()}>
-                <defs>
-                  <linearGradient id="colorNetWorth" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
-                <YAxis stroke="#64748b" fontSize={11} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b' }}
-                  labelStyle={{ color: '#94a3b8', fontWeight: 'bold' }}
-                />
-                <Area type="monotone" dataKey="Net Worth" stroke="#6366f1" strokeWidth={2.5} fillOpacity={1} fill="url(#colorNetWorth)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-      </div>
-
-      {/* ==================== ROW 4: EXPENSES ANALYSIS & ALERTS ==================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* EXPENSES BY CATEGORY CHART (5/12 width) */}
-        <div className="lg:col-span-5 glass-panel p-6 rounded-2xl flex flex-col justify-between h-[360px] border border-slate-800">
-          <div>
-            <h4 className="text-sm font-bold text-slate-200 uppercase tracking-wide">Expenses Allocation by Category</h4>
-            <p className="text-[10px] text-slate-500 mt-0.5">Proportional business budget allocation</p>
-          </div>
-
-          {expenseChartData.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-              <FolderOpen className="w-8 h-8 text-slate-600 mb-2 stroke-[1.5]" />
-              <p className="text-xs font-semibold text-slate-400">No data available</p>
-              <p className="text-[10px] text-slate-500 mt-1 max-w-[200px]">Log expenses to display allocation metrics.</p>
-            </div>
-          ) : (
-            <div className="flex items-center gap-4 flex-1 min-h-0">
-              <div className="w-[160px] h-[160px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={expenseChartData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={50}
-                      outerRadius={75}
-                      paddingAngle={3}
-                      dataKey="value"
-                    >
-                      {expenseChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b', fontSize: 10 }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Categories Legend */}
-              <div className="flex-1 space-y-2 max-h-[200px] overflow-y-auto pr-1">
-                {expenseChartData.slice(0, 5).map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                      <span className="text-slate-300 font-medium font-sans">{item.name}</span>
-                    </div>
-                    <div className="text-right font-mono text-slate-400">
-                      <span>{item.percentage}%</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* CALENDAR & ROSTER OVERVIEW (7/12 width) */}
-        <div className="lg:col-span-7 glass-panel p-6 rounded-2xl flex flex-col justify-between h-[360px] border border-slate-800">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <div>
-              <h4 className="text-sm font-bold text-slate-200 uppercase tracking-wide">Shared Corporate Calendar Events</h4>
-              <p className="text-[10px] text-slate-500 mt-0.5">Upcoming announcements and meetings</p>
-            </div>
-            <span className="text-[10px] bg-cyan-950/40 border border-cyan-500/20 text-cyan-400 px-2.5 py-1 rounded-lg font-mono">
-              Live Feed
-            </span>
-          </div>
-
-          <div className="flex-1 overflow-y-auto pt-3 space-y-2.5 pr-1">
-            {events.length === 0 ? (
-              <div className="text-center py-12 text-slate-500 space-y-2">
-                <Calendar className="w-8 h-8 text-slate-700 mx-auto" />
-                <p className="text-xs font-sans">No corporate calendar events scheduled.</p>
-              </div>
-            ) : (
-              events.slice(0, 4).map(event => (
-                <div key={event.id} className="p-3 bg-slate-950/40 border border-slate-800/80 rounded-xl flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-indigo-950/50 border border-indigo-500/20 flex items-center justify-center font-bold text-indigo-400 font-sans text-xs">
-                      {event.type.substring(0, 1)}
-                    </div>
-                    <div>
-                      <h5 className="text-xs font-bold text-slate-200 font-sans">{event.title}</h5>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{event.description}</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-indigo-400 font-mono font-bold">
-                    {event.date}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-      </div>
-
-      {/* ==================== SYSTEM ACTIVITY AUDIT LOG (LIVE AUDIT TRAIL) ==================== */}
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-5" id="live-audit-log-view">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
-          <div>
-            <h3 className="text-sm font-bold text-slate-200 uppercase font-sans tracking-wide flex items-center gap-2">
-              <Lock className="w-4 h-4 text-cyan-400" />
-              Live Corporate Tenant Audit Trails
-            </h3>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Cryptographically logged administrative and employee activities synced securely.
-            </p>
-          </div>
-
-          {/* Quick Date Select Range Overlay Trigger */}
-          {showCustomDateModal && (
-            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-              <div className="glass-panel p-6 max-w-sm w-full space-y-4">
-                <h4 className="text-sm font-bold text-slate-200 font-sans">Select Custom Date Range</h4>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Start Date</label>
-                    <input
-                      type="date"
-                      value={customStartDate}
-                      onChange={(e) => setCustomStartDate(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] text-slate-400 uppercase font-bold mb-1">End Date</label>
-                    <input
-                      type="date"
-                      value={customEndDate}
-                      onChange={(e) => setCustomEndDate(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200"
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    onClick={() => {
-                      setAuditTime('All Time');
-                      setShowCustomDateModal(false);
-                    }}
-                    className="px-3 py-1.5 border border-slate-800 rounded text-slate-400 text-xs font-sans"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => {
-                      setAuditTime('Custom Range');
-                      setShowCustomDateModal(false);
-                    }}
-                    className="px-3 py-1.5 bg-cyan-500 text-slate-950 font-bold rounded text-xs font-sans"
-                  >
-                    Apply Filter
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Tenant Activity Filters bar */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            {/* User filter */}
-            <div className="relative">
-              <select
-                value={auditUser}
-                onChange={(e) => setAuditUser(e.target.value)}
-                className="bg-slate-950 border border-slate-800 text-slate-300 py-1 px-2.5 pr-7 rounded text-[11px] outline-none cursor-pointer hover:border-slate-700 font-sans"
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleResetLayout}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-xs font-semibold text-slate-300 hover:text-slate-100 transition cursor-pointer"
               >
-                <option value="All Users">👤 All Employees</option>
-                {distinctAuditUsers.map(user => (
-                  <option key={user} value={user}>{user}</option>
-                ))}
-              </select>
-              <ChevronDown className="w-3 h-3 text-slate-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-
-            {/* Action filter */}
-            <div className="relative">
-              <select
-                value={auditActivity}
-                onChange={(e) => setAuditActivity(e.target.value)}
-                className="bg-slate-950 border border-slate-800 text-slate-300 py-1 px-2.5 pr-7 rounded text-[11px] outline-none cursor-pointer hover:border-slate-700 font-sans"
+                <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+                <span>Reset Layout</span>
+              </button>
+              <button
+                onClick={() => setIsCustomizing(false)}
+                className="flex items-center gap-1.5 px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition cursor-pointer"
               >
-                <option value="All Activities">⚡ All Action Types</option>
-                <option value="Insert">➕ Creation / Addition</option>
-                <option value="Update">📝 Edit / Modifications</option>
-                <option value="Delete">❌ Deletions / Purges</option>
-                <option value="Login">🔓 Sign In Records</option>
-                <option value="Logout">🔒 Sign Out Records</option>
-                <option value="Sales">🛒 Sales Terminal</option>
-                <option value="Inventory">📦 Inventory Actions</option>
-                <option value="Expenses">💸 Expense Actions</option>
-                <option value="Customers">👥 Customers CRM</option>
-                <option value="Debts">💳 Debt Records</option>
-              </select>
-              <ChevronDown className="w-3 h-3 text-slate-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-
-            {/* Time filter */}
-            <div className="relative">
-              <select
-                value={auditTime}
-                onChange={(e) => {
-                  if (e.target.value === 'Custom Range') {
-                    setShowCustomDateModal(true);
-                  } else {
-                    setAuditTime(e.target.value);
-                  }
-                }}
-                className="bg-slate-950 border border-slate-800 text-slate-300 py-1 px-2.5 pr-7 rounded text-[11px] outline-none cursor-pointer hover:border-slate-700 font-sans"
-              >
-                <option value="All Time">📅 All Time Records</option>
-                <option value="Today">Today</option>
-                <option value="Yesterday">Yesterday</option>
-                <option value="This Week">This Week</option>
-                <option value="Last Week">Last Week</option>
-                <option value="This Month">This Month</option>
-                <option value="Last Month">Last Month</option>
-                <option value="This Year">This Year</option>
-                <option value="Custom Range">Custom Date Range...</option>
-              </select>
-              <ChevronDown className="w-3 h-3 text-slate-500 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Check className="w-3.5 h-3.5" />
+                <span>Done Designing</span>
+              </button>
             </div>
           </div>
-        </div>
 
-        {/* Chronological Audit Feed */}
-        <div className="space-y-3 max-h-[360px] overflow-y-auto pr-2">
-          {filteredAudits.length === 0 ? (
-            <div className="text-center py-12 text-slate-500">
-              <Lock className="w-10 h-10 text-slate-700 mx-auto mb-2" />
-              <p className="text-xs font-sans">No matching cryptographically secure audit logs recorded.</p>
-            </div>
-          ) : (
-            filteredAudits.map((log, index) => {
-              const isRevertible = 
-                (log.action.toLowerCase().includes('delete') || log.action.toLowerCase().includes('update')) &&
-                !log.action.toLowerCase().includes('reverted');
-
-              const isHighRisk = 
-                log.action.toLowerCase().includes('delete') || 
-                log.action.toLowerCase().includes('permanently') ||
-                log.action.toLowerCase().includes('shut down');
-
-              return (
-                <div 
-                  key={`${log.id}-${index}`} 
-                  className={`p-3.5 bg-slate-950/40 hover:bg-slate-950/60 border rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 transition ${
-                    isHighRisk 
-                      ? 'border-rose-500/20 bg-rose-950/5' 
-                      : 'border-slate-800/80'
-                  }`}
-                  id={`audit-log-${log.id}-${index}`}
-                >
-                  <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                      <span className="font-bold text-slate-200 text-xs font-sans">
-                        {log.userName}
-                      </span>
-                      <span className="text-[10px] text-slate-500 font-mono">
-                        {log.role}
-                      </span>
-                      <span className="text-[10px] bg-slate-900 border border-slate-800/50 text-slate-400 px-1.5 py-0.2 rounded font-sans uppercase">
-                        {log.action}
-                      </span>
-                      {isHighRisk && (
-                        <span className="text-[9px] bg-rose-500/10 border border-rose-500/20 text-rose-400 px-1.5 py-0.2 rounded font-bold uppercase font-mono">
-                          ⚠️ HIGH RISK
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-x-4 text-[11px] text-slate-400">
-                      {log.oldValue && log.oldValue !== 'N/A' && (
-                        <span>Previous: <code className="text-slate-500 font-mono text-[10px] bg-slate-950/40 px-1 rounded">{log.oldValue}</code></span>
-                      )}
-                      {log.newValue && log.newValue !== 'N/A' && (
-                        <span className="flex items-center gap-1">
-                          <ArrowRight className="w-3 h-3 text-slate-600" />
-                          New: <code className="text-cyan-400/80 font-mono text-[10px] bg-slate-950/40 px-1 rounded">{log.newValue}</code>
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap gap-x-3 text-[10px] text-slate-500 font-mono">
-                      <span>Date: {log.date} at {log.time}</span>
-                      {log.device && <span>Device: {log.device}</span>}
-                    </div>
-                  </div>
-
-                  {/* Revert Action controls */}
-                  {(isOwner || isManager) && isRevertible && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* KPI METRICS PINNING PANEL */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wider font-mono">1. KPI Summary Cards</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {Object.entries(kpiMeta).map(([key, rawInfo]) => {
+                  const info = rawInfo as any;
+                  const isPinned = pinnedKpis.includes(key);
+                  const IconComponent = info.icon;
+                  return (
                     <button
-                      onClick={() => handleRevertClick(log.id)}
-                      className="flex items-center justify-center gap-1 px-2.5 py-1.5 bg-slate-900 hover:bg-cyan-950/45 hover:text-cyan-400 text-slate-300 font-bold border border-slate-800 hover:border-cyan-500/20 rounded-lg text-[10px] font-sans transition shrink-0"
-                      title="Undo this specific change"
+                      key={key}
+                      onClick={() => isPinned ? handleUnpinKpi(key) : handlePinKpi(key)}
+                      className={`p-2.5 rounded-xl border text-left transition flex items-center gap-2 text-xs font-sans font-medium ${
+                        isPinned
+                          ? 'bg-cyan-500/10 border-cyan-500/40 text-cyan-200'
+                          : 'bg-slate-950 border-slate-800/60 text-slate-400 hover:text-slate-300 hover:border-slate-700'
+                      }`}
                     >
-                      <Undo className="w-3 h-3" />
-                      <span>Revert Action</span>
+                      <IconComponent className={`w-3.5 h-3.5 ${isPinned ? 'text-cyan-400' : 'text-slate-500'}`} />
+                      <span className="truncate flex-1">{info.label.replace(' (YTD)', '')}</span>
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isPinned ? 'bg-cyan-400' : 'bg-slate-700'}`} />
                     </button>
-                  )}
-                </div>
-              );
-            })
-          )}
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* LARGE WIDGETS PINNING PANEL */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider font-mono">2. Analytical Panels & Charts</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {Object.entries(widgetMeta).map(([key, rawInfo]) => {
+                  const info = rawInfo as any;
+                  const isPinned = pinnedWidgets.includes(key);
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => isPinned ? handleUnpinWidget(key) : handlePinWidget(key)}
+                      className={`p-2.5 rounded-xl border text-left transition flex items-center justify-between gap-2 text-xs font-sans font-medium ${
+                        isPinned
+                          ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-200'
+                          : 'bg-slate-950 border-slate-800/60 text-slate-400 hover:text-slate-300 hover:border-slate-700'
+                      }`}
+                    >
+                      <span className="truncate">{info.label}</span>
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isPinned ? 'bg-emerald-400' : 'bg-slate-700'}`} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ==================== EXECUTIVE BENTO-GRID KPI CARDS ==================== */}
+      {pinnedKpis.length === 0 ? (
+        <div className="glass-panel p-8 text-center rounded-2xl border border-slate-800 bg-slate-950/20">
+          <Layers className="w-10 h-10 text-slate-600 mx-auto mb-2" />
+          <p className="text-sm font-semibold text-slate-400">All summary KPI cards are unpinned</p>
+          <p className="text-xs text-slate-500 mt-1">Open the Layout Studio to choose which metrics to pin to your home view.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-9 gap-4" id="kpi-cards-grid">
+          {pinnedKpis.map((key, index) => {
+            const kpiInfo = kpiMeta[key];
+            if (!kpiInfo) return null;
+            return (
+              <div
+                key={key}
+                draggable={isCustomizing}
+                onDragStart={() => handleKpiDragStart(index)}
+                onDragOver={(e) => handleKpiDragOver(e, index)}
+                onDragEnd={handleKpiDragEnd}
+                className={`relative group transition-all duration-300 ${kpiInfo.defaultSpan} ${
+                  isCustomizing 
+                    ? 'cursor-grab active:cursor-grabbing border-2 border-dashed border-cyan-500/30 bg-cyan-950/5 p-5 rounded-2xl hover:border-cyan-500/60' 
+                    : `glass-panel p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between transition duration-300 ${kpiInfo.borderClass} ${kpiInfo.shadowClass}`
+                } ${
+                  isCustomizing && draggedKpiIndex === index ? 'opacity-30 border-cyan-500 bg-cyan-950/10' : ''
+                }`}
+              >
+                {isCustomizing && (
+                  <div className="absolute top-2 right-2 flex items-center gap-1.5 z-10 bg-slate-900/85 px-1.5 py-0.5 rounded border border-slate-800 text-[10px] text-cyan-400">
+                    <GripVertical className="w-3 h-3" />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleUnpinKpi(key);
+                      }}
+                      className="p-0.5 hover:text-rose-400 text-slate-400 transition"
+                      title="Unpin metric"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+                {renderKpiCardContent(key)}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ==================== DYNAMIC DRAGGABLE DASHBOARD WIDGETS ==================== */}
+      {pinnedWidgets.length === 0 ? (
+        <div className="glass-panel p-8 text-center rounded-2xl border border-slate-800 bg-slate-950/20">
+          <Layers className="w-10 h-10 text-slate-600 mx-auto mb-2" />
+          <p className="text-sm font-semibold text-slate-400">All interactive widgets are unpinned</p>
+          <p className="text-xs text-slate-500 mt-1">Open the Layout Studio to select and pin charts or targets to your main view.</p>
+        </div>
+      ) : (
+        <div className="space-y-6" id="draggable-widgets-grid">
+          {pinnedWidgets.map((key, index) => {
+            const widgetInfo = widgetMeta[key];
+            if (!widgetInfo) return null;
+            return (
+              <div
+                key={key}
+                draggable={isCustomizing}
+                onDragStart={() => handleWidgetDragStart(index)}
+                onDragOver={(e) => handleWidgetDragOver(e, index)}
+                onDragEnd={handleWidgetDragEnd}
+                className={`relative group transition-all duration-300 ${
+                  isCustomizing 
+                    ? 'cursor-grab active:cursor-grabbing border-2 border-dashed border-cyan-500/30 bg-cyan-950/5 p-6 rounded-2xl hover:border-cyan-500/60' 
+                    : 'glass-panel p-6 rounded-2xl border border-slate-800'
+                } ${
+                  isCustomizing && draggedWidgetIndex === index ? 'opacity-30 border-cyan-500 bg-cyan-950/10' : ''
+                }`}
+              >
+                {isCustomizing && (
+                  <div className="absolute top-3 right-3 flex items-center gap-1.5 z-20 bg-slate-900/85 px-2 py-1 rounded border border-slate-800 text-[10px] text-cyan-400">
+                    <GripVertical className="w-3.5 h-3.5" />
+                    <span className="font-semibold text-slate-200">{widgetInfo.label}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleUnpinWidget(key);
+                      }}
+                      className="p-0.5 hover:text-rose-400 text-slate-400 transition"
+                      title="Unpin widget"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+                {renderWidgetContent(key)}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Quick Create modals for Business & Branch */}
       {showBizModal && (

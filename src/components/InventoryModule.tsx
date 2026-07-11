@@ -12,6 +12,7 @@ import { InventoryDashboardStats } from './InventoryDashboardStats';
 import { ProductModal } from './ProductModal';
 import { BulkAdjustmentModal } from './BulkAdjustmentModal';
 import { ProductCard } from './ProductCard';
+import { usePerformanceMonitor } from '../hooks/usePerformanceMonitor';
 
 interface StockAdjustment {
   id: string;
@@ -44,6 +45,11 @@ export const InventoryModule: React.FC = () => {
 
   // Active navigation tab
   const [activeTab, setActiveTab] = useState<'Catalog' | 'Movements' | 'Procurements' | 'Intelligence' | 'Bulk'>('Catalog');
+
+  // Integrated performance monitor hook
+  usePerformanceMonitor('InventoryModule', {
+    deps: [products.length, procurements.length, activeTab]
+  });
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // Search & Filters

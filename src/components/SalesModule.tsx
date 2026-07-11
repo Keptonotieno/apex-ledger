@@ -12,6 +12,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Legend, PieChart, Pie, Cell
 } from 'recharts';
+import { usePerformanceMonitor } from '../hooks/usePerformanceMonitor';
 
 export const SalesModule: React.FC = () => {
   const { 
@@ -33,6 +34,11 @@ export const SalesModule: React.FC = () => {
 
   // Primary navigation tabs: 'dashboard' vs 'pos'
   const [activeTab, setActiveTab] = useState<'dashboard' | 'pos'>('dashboard');
+
+  // Integrated performance monitor hook
+  usePerformanceMonitor('SalesModule', {
+    deps: [sales.length, products.length, customers.length, activeTab]
+  });
 
   React.useEffect(() => {
     const handleTriggerPOS = () => {

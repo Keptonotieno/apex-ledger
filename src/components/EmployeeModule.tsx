@@ -1,7 +1,96 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { UserRole, UserProfile } from '../types';
 import { Users, Plus, UserPlus, Clock, Trash2, Shield, X, Lock, Edit, Ban, Check, Camera } from 'lucide-react';
+
+/**
+ * Generates a robust, non-colliding, alphanumeric registration number by querying
+ * the existing database of employee profiles.
+ * Ensures the generated ID starts with 'EMP-' followed by a sequential number padded to 3 digits,
+ * completely avoiding duplicates or collisions.
+ * 
+ * @param existingProfiles Array of current employee profiles in the database/workspace
+ * @returns A unique alphanumeric employee ID string
+ */
+export const generateUniqueEmployeeID = (existingProfiles: UserProfile[]): string => {
+  const existingIds = new Set<string>();
+  
+  // Track all existing employee IDs in uppercase to prevent casing-based collisions
+  existingProfiles.forEach(p => {
+    const badge = p.badgeNumber || (p as any).employeeNumber;
+    if (badge && typeof badge === 'string') {
+      existingIds.add(badge.trim().toUpperCase());
+    }
+  });
+
+  // Calculate the next sequential integer suffix based on matching EMP-XXX patterns
+  let nextNum = 1;
+  existingProfiles.forEach(p => {
+    const badge = p.badgeNumber || (p as any).employeeNumber;
+    if (badge && typeof badge === 'string') {
+      const match = badge.match(/^EMP-(\d+)$/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num >= nextNum) {
+          nextNum = num + 1;
+        }
+      }
+    }
+  });
+
+  // Generate candidate and double-check against all loaded IDs for absolute safety
+  let candidate = `EMP-${String(nextNum).padStart(3, '0')}`;
+  while (existingIds.has(candidate)) {
+    nextNum++;
+    candidate = `EMP-${String(nextNum).padStart(3, '0')}`;
+  }
+
+  return candidate;
+};
+
+/**
+ * Validates foreign key constraints against the database before any INSERT operation
+ * to ensure strict data isolation across multi-tenant records.
+ */
+export const validateForeignKeyConstraints = (
+  businessId: string,
+  workspaceId: string,
+  branchName: string,
+  businessesList: any[],
+  branchesList: any[]
+): { isValid: boolean; error?: string } => {
+  // 1. Verify business_id exists and is active/valid in the system
+  const targetBusiness = businessesList.find(b => b.id === businessId);
+  if (!targetBusiness && businessId !== 'b_biz_demo') {
+    return {
+      isValid: false,
+      error: `Foreign Key Constraint Violation: business_id "${businessId}" does not reference any active business.`
+    };
+  }
+
+  // 2. Verify workspace_id is non-empty and matches tenant mapping
+  if (!workspaceId || typeof workspaceId !== 'string' || workspaceId.trim() === '') {
+    return {
+      isValid: false,
+      error: 'Foreign Key Constraint Violation: workspace_id is invalid or empty.'
+    };
+  }
+
+  // 3. Verify branchName / branch_id is registered under the current business_id (for strict multi-tenant isolation)
+  if (branchName !== 'Main HQ') {
+    const branchExists = branchesList.some(
+      b => b.name === branchName && (b.businessId === businessId || b.business_id === businessId)
+    );
+    if (!branchExists) {
+      return {
+        isValid: false,
+        error: `Foreign Key Constraint Violation: branch "${branchName}" is not registered under business_id "${businessId}".`
+      };
+    }
+  }
+
+  return { isValid: true };
+};
 
 export const EmployeeModule: React.FC = () => {
   const { 
@@ -12,13 +101,50 @@ export const EmployeeModule: React.FC = () => {
     updateEmployee,
     removeEmployee,
     branches,
-    loginWithEmployeeNumber
+    loginWithEmployeeNumber,
+    activeBusiness,
+    businesses
   } = useApp();
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<UserProfile | null>(null);
+  const [employeesList, setEmployeesList] = useState<UserProfile[]>([]);
+  const [isLoadingEmployees, setIsLoadingEmployees] = useState(true);
+
+  const fetchEmployees = async () => {
+    setIsLoadingEmployees(true);
+    try {
+      const res = await fetch('/api/performance/employees');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.employees)) {
+          setEmployeesList(data.employees);
+          setIsLoadingEmployees(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching employees from SQLite index lookup:', e);
+    }
+    setEmployeesList(profiles);
+    setIsLoadingEmployees(false);
+  };
+
+  const activeBizId = activeBusiness?.id;
+  const profilesKey = `${activeBizId}_${profiles.length}_${profiles.map(p => p.status).join(',')}`;
+
+  useEffect(() => {
+    fetchEmployees();
+  }, [profilesKey, activeBizId]);
+  const [registrationSuccess, setRegistrationSuccess] = useState<{
+    name: string;
+    badgeNumber: string;
+    role: string;
+    branch: string;
+  } | null>(null);
   const [formName, setFormName] = useState('');
   const [formEmail, setFormEmail] = useState('');
+  const [formPassword, setFormPassword] = useState('');
   const [formEmployeeId, setFormEmployeeId] = useState('');
   const [formRole, setFormRole] = useState<UserRole>(UserRole.EMPLOYEE);
   const [formBranch, setFormBranch] = useState('Main HQ');
@@ -42,26 +168,24 @@ export const EmployeeModule: React.FC = () => {
   };
 
   const getNextEmployeeId = () => {
-    let nextNum = 1;
-    profiles.forEach(p => {
-      const numStr = p.badgeNumber || (p as any).employeeNumber;
-      if (numStr && typeof numStr === 'string') {
-        const match = numStr.match(/^EMP-(\d+)$/i);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num >= nextNum) {
-            nextNum = num + 1;
-          }
-        }
-      }
-    });
-    return `EMP-${String(nextNum).padStart(3, '0')}`;
+    let allProfiles: any[] = [];
+    try {
+      allProfiles = JSON.parse(localStorage.getItem('apex_ledger_profiles') || '[]');
+    } catch (e) {
+      allProfiles = employeesList;
+    }
+    if (!allProfiles || allProfiles.length === 0) {
+      allProfiles = employeesList;
+    }
+    return generateUniqueEmployeeID(allProfiles);
   };
 
   const handleOpenAdd = () => {
+    setRegistrationSuccess(null);
     setEditingEmployee(null);
     setFormName('');
     setFormEmail('');
+    setFormPassword('');
     setFormRole(UserRole.EMPLOYEE);
     setFormBranch('Main HQ');
     setFormAvatarUrl(null);
@@ -75,9 +199,11 @@ export const EmployeeModule: React.FC = () => {
       alert('Access Denied: You are not authorized to modify this profile.');
       return;
     }
+    setRegistrationSuccess(null);
     setEditingEmployee(p);
     setFormName(p.name);
     setFormEmail(p.email);
+    setFormPassword('');
     setFormRole(p.role);
     setFormBranch(p.branch || 'HQ');
     setFormAvatarUrl(p.avatarUrl || null);
@@ -97,15 +223,22 @@ export const EmployeeModule: React.FC = () => {
 
     const employeeIdToSave = formEmployeeId.trim().toUpperCase();
 
-    // Strict client-side uniqueness validation
-    const exists = profiles.some(p => {
+    // Strict client-side uniqueness validation globally
+    let allProfiles: any[] = [];
+    try {
+      allProfiles = JSON.parse(localStorage.getItem('apex_ledger_profiles') || '[]');
+    } catch (e) {
+      allProfiles = profiles;
+    }
+    const exists = allProfiles.some(p => {
       if (editingEmployee && p.id === editingEmployee.id) return false;
+      if (p.status === 'Deleted') return false;
       const pNum = p.badgeNumber || (p as any).employeeNumber;
       return pNum && typeof pNum === 'string' && pNum.trim().toUpperCase() === employeeIdToSave;
     });
 
     if (exists) {
-      alert(`Validation Error: Employee ID "${employeeIdToSave}" is already assigned to another profile in this workspace. Please enter a unique Employee ID.`);
+      alert(`Validation Error: Employee ID "${employeeIdToSave}" is already assigned to another profile in the system. Please enter a unique Employee ID.`);
       return;
     }
 
@@ -115,41 +248,60 @@ export const EmployeeModule: React.FC = () => {
           alert('Access Denied: You are not authorized to edit this profile.');
           return;
         }
-        updateEmployee(editingEmployee.id, {
+        await updateEmployee(editingEmployee.id, {
           name: formName,
           email: formEmail,
           role: formRole,
           branch: formBranch,
           badgeNumber: employeeIdToSave,
           avatarUrl: formAvatarUrl || undefined,
-          allowExpenses: formAllowExpenses
-        });
+          allowExpenses: formAllowExpenses,
+          password: formPassword || undefined
+        } as any);
         alert(`Employee profile: "${formName}" successfully updated!`);
         setShowAddModal(false);
         setEditingEmployee(null);
       } else {
-        const created = addEmployee({
+        // Validate multi-tenant foreign key constraints (business_id, workspace_id, branch_id)
+        const bId = activeBusiness?.id || '';
+        const wId = activeUser?.workspace_id || (activeUser as any).workspaceId || activeBusiness?.id || 'w_work_demo';
+        
+        const fKeyValidation = validateForeignKeyConstraints(
+          bId,
+          wId,
+          formBranch,
+          businesses,
+          branches
+        );
+
+        if (!fKeyValidation.isValid) {
+          alert(fKeyValidation.error);
+          return;
+        }
+
+        const created = await addEmployee({
           name: formName,
           email: formEmail,
           role: formRole,
           branch: formBranch,
           badgeNumber: employeeIdToSave,
           avatarUrl: formAvatarUrl || undefined,
-          allowExpenses: formAllowExpenses
+          allowExpenses: formAllowExpenses,
+          password: formPassword || undefined
+        } as any);
+        setRegistrationSuccess({
+          name: formName,
+          badgeNumber: created.badgeNumber || employeeIdToSave,
+          role: created.role,
+          branch: created.branch || formBranch
         });
-        alert(`Employee profile: "${formName}" successfully registered!\n\nGenerated Employee ID / Number: ${created.badgeNumber}\nBranch: ${created.branch}\n\nClick OK to automatically log in to their personal dashboard.`);
-        
-        // Auto-login newly registered employee
-        if (created && created.badgeNumber) {
-          setShowAddModal(false);
-          await loginWithEmployeeNumber(created.badgeNumber);
-        }
       }
 
       setShowAddModal(false);
       setEditingEmployee(null);
       setFormName('');
       setFormEmail('');
+      setFormPassword('');
       setFormAvatarUrl(null);
       setFormEmployeeId('');
     } catch (err: any) {
@@ -182,11 +334,11 @@ export const EmployeeModule: React.FC = () => {
       alert('This account cannot be deleted.');
       return;
     }
-    const target = profiles.find(p => p.id === id);
+    const target = employeesList.find(p => p.id === id);
     if (!target) return;
 
     // Safety checks for last remaining admin and protected system accounts
-    const admins = profiles.filter(p => p.role === UserRole.ADMIN);
+    const admins = employeesList.filter(p => p.role === UserRole.ADMIN);
     if (target.role === UserRole.ADMIN && admins.length <= 1) {
       alert('This account cannot be deleted.');
       return;
@@ -196,10 +348,10 @@ export const EmployeeModule: React.FC = () => {
     setShowDeleteModal(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!employeeToDelete) return;
     try {
-      removeEmployee(employeeToDelete.id);
+      await removeEmployee(employeeToDelete.id);
       alert('Employee decommissioned successfully. All historical records have been safely retained.');
     } catch (err: any) {
       alert(err.message || 'This account cannot be deleted.');
@@ -238,6 +390,47 @@ export const EmployeeModule: React.FC = () => {
             )}
           </div>
 
+          {registrationSuccess && (
+            <div className="glass-panel p-5 rounded-xl border border-emerald-500/30 bg-emerald-950/20 text-emerald-200 flex items-start gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
+              <div className="p-2 bg-emerald-500/20 rounded-lg text-emerald-400 shrink-0">
+                <Check className="w-5 h-5" />
+              </div>
+              <div className="space-y-1 flex-1 min-w-0">
+                <h4 className="font-bold text-sm text-slate-100 font-sans">Employee Added Successfully!</h4>
+                <p className="text-xs text-slate-300">
+                  Profile for <strong className="text-emerald-400 font-sans">{registrationSuccess.name}</strong> has been registered.
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3 bg-slate-950/40 p-3 rounded-lg border border-slate-800/60 text-[11px] font-mono">
+                  <div>
+                    <span className="text-slate-400 block mb-0.5">Employee ID:</span>
+                    <span className="text-cyan-400 font-semibold">{registrationSuccess.badgeNumber}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block mb-0.5">Assigned Role:</span>
+                    <span className="text-slate-200 capitalize">{registrationSuccess.role}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block mb-0.5">Branch Location:</span>
+                    <span className="text-slate-200">{registrationSuccess.branch}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block mb-0.5">Current Session:</span>
+                    <span className="text-emerald-400 font-sans font-semibold">Owner/Manager (Unchanged)</span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-2 font-sans">
+                  The directory list has updated. The employee can use their unique Employee ID to log in separately on the login screen.
+                </p>
+              </div>
+              <button 
+                onClick={() => setRegistrationSuccess(null)}
+                className="text-slate-400 hover:text-slate-200 cursor-pointer p-1 rounded hover:bg-slate-800/40"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           <div className="glass-panel rounded-2xl overflow-hidden border border-brand-border">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
@@ -252,7 +445,7 @@ export const EmployeeModule: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-brand-border/40 text-gray-200 font-sans">
-                  {profiles.map((p) => (
+                  {employeesList.map((p) => (
                     <tr key={p.id} className="hover:bg-gray-900/30 transition">
                       <td className="p-4 flex items-center gap-3">
                         {p.avatarUrl ? (
@@ -517,6 +710,22 @@ export const EmployeeModule: React.FC = () => {
                   className="w-full bg-gray-950/60 border border-brand-border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/30 font-mono"
                 />
               </div>
+
+              {(formRole === UserRole.MANAGER || formRole === UserRole.ADMIN) && (
+                <div>
+                  <label className="text-gray-400 block mb-1 font-sans">
+                    Secure Password {editingEmployee ? '(Leave blank to keep unchanged)' : '(Required for corporate login)'}
+                  </label>
+                  <input
+                    type="password"
+                    required={!editingEmployee}
+                    placeholder="••••••••"
+                    value={formPassword}
+                    onChange={(e) => setFormPassword(e.target.value)}
+                    className="w-full bg-gray-950/60 border border-brand-border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/30 font-mono"
+                  />
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-3 font-sans">
                 <div>

@@ -195,7 +195,20 @@ class ApexDatabaseManager {
       'budgets', 'invoices', 'bank_transactions', 'reconciliations'
     ];
     keys.forEach(key => {
-      const val = workspace[key] || [];
+      let val = workspace[key] || [];
+      if (key === 'businesses' && Array.isArray(val)) {
+        const profiles = workspace.profiles || [];
+        const ownerProfile = profiles.find((p: any) => 
+          p.role === UserRole.ADMIN || 
+          p.role === 'Owner / Admin' || 
+          p.role === 'Business Owner (Admin)'
+        );
+        const ownerId = ownerProfile ? ownerProfile.id : '';
+        val = val.map((b: any) => ({
+          ...b,
+          ownerId: b.ownerId || ownerId
+        }));
+      }
       localStorage.setItem(`apex_ledger_${key}`, JSON.stringify(val));
     });
   }
@@ -203,30 +216,38 @@ class ApexDatabaseManager {
   saveWorkspaceToServer() {
     if (this.saveTimeout) clearTimeout(this.saveTimeout);
     this.saveTimeout = setTimeout(async () => {
-      if (!this.activeUserId || !this.activeBusinessId) return;
-      try {
-        const keys = [
-          'businesses', 'branches', 'categories', 'profiles', 'products', 
-          'customers', 'debts', 'sales', 'expenses', 'procurements', 
-          'tasks', 'events', 'timelogs', 'notifications', 'audits',
-          'budgets', 'invoices', 'bank_transactions', 'reconciliations'
-        ];
-        const workspace: any = {};
-        keys.forEach(key => {
-          workspace[key] = getLocalItem(key, []);
-        });
-
-        await fetch('/api/workspace/save', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ workspace })
-        });
-      } catch (err) {
-        console.error('Error auto-saving workspace to SQLite:', err);
-      }
+      await this.forceSaveWorkspaceToServer();
     }, 500);
+  }
+
+  async forceSaveWorkspaceToServer() {
+    if (this.saveTimeout) {
+      clearTimeout(this.saveTimeout);
+      this.saveTimeout = null;
+    }
+    if (!this.activeUserId || !this.activeBusinessId) return;
+    try {
+      const keys = [
+        'businesses', 'branches', 'categories', 'profiles', 'products', 
+        'customers', 'debts', 'sales', 'expenses', 'procurements', 
+        'tasks', 'events', 'timelogs', 'notifications', 'audits',
+        'budgets', 'invoices', 'bank_transactions', 'reconciliations'
+      ];
+      const workspace: any = {};
+      keys.forEach(key => {
+        workspace[key] = getLocalItem(key, []);
+      });
+
+      await fetch('/api/workspace/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ workspace })
+      });
+    } catch (err) {
+      console.error('Error auto-saving workspace to SQLite:', err);
+    }
   }
 
   async syncRowToSupabase(dbName: string, row: any, action: 'upsert' | 'delete') {
@@ -325,35 +346,47 @@ class ApexDatabaseManager {
   }
 
   async loginWithEmployeeNumber(employeeNumber: string): Promise<boolean> {
-    const allProfiles = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
-    const found = allProfiles.find(p => 
-      (p.badgeNumber && p.badgeNumber.trim() === employeeNumber.trim()) || 
-      ((p as any).employeeNumber && (p as any).employeeNumber.trim() === employeeNumber.trim())
-    );
+    try {
+      const res = await fetch('/api/auth/employee-login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ employeeNumber })
+      });
 
-    if (found) {
-      if (found.status === 'Deleted' || found.status === 'Archived') {
-        throw new Error('This employee account has been deleted/decommissioned. Access is restricted.');
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Authentication failed.');
       }
-      if (found.status === 'Suspended') {
-        throw new Error('This employee account is suspended. Please contact your manager.');
+
+      const data = await res.json();
+      if (data.success) {
+        // Write loaded workspace into LocalStorage
+        this.writeWorkspaceToLocalStorage(data.workspace);
+
+        // Set session identifiers locally
+        this.activeUserId = data.userId;
+        this.activeBusinessId = data.businessId;
+        
+        // Find the active branch
+        const found = data.workspace.profiles?.find((p: any) => p.id === data.userId);
+        const empBranch = found?.branch || 'Main HQ';
+        const branches = data.workspace.branches || [];
+        const bFound = branches.find((b: any) => b.businessId === data.businessId && b.name === empBranch);
+        this.activeBranchId = bFound ? bFound.id : 'all';
+
+        localStorage.setItem('apex_ledger_active_user_id', data.userId);
+        localStorage.setItem('apex_ledger_active_business_id', data.businessId);
+        localStorage.setItem('apex_ledger_active_branch_id', this.activeBranchId);
+
+        this.addAudit('Employee Logged In', 'N/A', `${found?.name || 'Employee'} (${found?.role || 'Staff'})`);
+        window.dispatchEvent(new Event('storage'));
+        return true;
       }
-      this.activeUserId = found.id;
-      this.activeBusinessId = found.businessId;
-      
-      // Enforce the active branch
-      const empBranch = found.branch || 'Main HQ';
-      const branches = getLocalItem<Branch[]>('branches', DEFAULT_BRANCHES);
-      const bFound = branches.find(b => b.businessId === found.businessId && b.name === empBranch);
-      this.activeBranchId = bFound ? bFound.id : 'all';
-
-      localStorage.setItem('apex_ledger_active_user_id', found.id);
-      localStorage.setItem('apex_ledger_active_business_id', found.businessId);
-      localStorage.setItem('apex_ledger_active_branch_id', this.activeBranchId);
-
-      this.addAudit('Employee Logged In', 'N/A', `${found.name} (${found.role})`);
-      window.dispatchEvent(new Event('storage'));
-      return true;
+    } catch (err: any) {
+      console.error('Employee login error:', err);
+      throw err;
     }
     return false;
   }
@@ -577,8 +610,8 @@ class ApexDatabaseManager {
     const currentUser = this.getCurrentUser();
     let filtered: Business[] = [];
     if (currentUser.role === UserRole.ADMIN) {
-      // Business Owner sees only their owned businesses
-      filtered = list.filter(b => b.ownerId === this.activeUserId);
+      // Business Owner sees only their owned businesses or the active business
+      filtered = list.filter(b => !b.ownerId || b.ownerId === this.activeUserId || b.id === currentUser.businessId);
     } else {
       // Employees/Managers see only their assigned business
       filtered = list.filter(b => b.id === currentUser.businessId);
@@ -605,8 +638,7 @@ class ApexDatabaseManager {
     const filtered = all.filter(u => u.businessId === activeBizId);
     
     if (currentUser.role === UserRole.EMPLOYEE) {
-      const empBranch = currentUser.branch || 'Main HQ';
-      return filtered.filter(u => u.branch === empBranch || (u as any).branchId === empBranch || u.id === currentUser.id);
+      return filtered.filter(u => u.id === currentUser.id);
     }
 
     if (this.activeBranchId && this.activeBranchId !== 'all') {
@@ -699,8 +731,7 @@ class ApexDatabaseManager {
     const filtered = all.filter(s => s.businessId === activeBizId);
     
     if (currentUser.role === UserRole.EMPLOYEE) {
-      const empBranch = currentUser.branch || 'Main HQ';
-      return filtered.filter(s => (s as any).branchId === empBranch || (s as any).branch === empBranch);
+      return filtered.filter(s => (s as any).cashierId === currentUser.id || s.cashierName?.toLowerCase() === currentUser.name?.toLowerCase());
     }
 
     if (this.activeBranchId && this.activeBranchId !== 'all') {
@@ -716,8 +747,7 @@ class ApexDatabaseManager {
     const filtered = all.filter(e => e.businessId === activeBizId);
     
     if (currentUser.role === UserRole.EMPLOYEE) {
-      const empBranch = currentUser.branch || 'Main HQ';
-      return filtered.filter(e => (e as any).branchId === empBranch || (e as any).branch === empBranch || e.branch === empBranch);
+      return filtered.filter(e => e.recordedBy?.toLowerCase() === currentUser.name?.toLowerCase() || e.employeeResponsible?.toLowerCase() === currentUser.name?.toLowerCase());
     }
 
     if (this.activeBranchId && this.activeBranchId !== 'all') {
@@ -778,8 +808,7 @@ class ApexDatabaseManager {
     const filtered = all.filter(t => t.businessId === activeBizId);
     
     if (currentUser.role === UserRole.EMPLOYEE) {
-      const empBranch = currentUser.branch || 'Main HQ';
-      return filtered.filter(t => (t as any).branchId === empBranch || (t as any).branch === empBranch || t.assignedToId === currentUser.id);
+      return filtered.filter(t => t.assignedToId === currentUser.id || t.assignedToName?.toLowerCase() === currentUser.name?.toLowerCase());
     }
 
     if (this.activeBranchId && this.activeBranchId !== 'all') {
@@ -812,8 +841,7 @@ class ApexDatabaseManager {
     const filtered = all.filter(l => l.businessId === activeBizId);
     
     if (currentUser.role === UserRole.EMPLOYEE) {
-      const empBranch = currentUser.branch || 'Main HQ';
-      return filtered.filter(l => (l as any).branchId === empBranch || (l as any).branch === empBranch || l.userId === currentUser.id);
+      return filtered.filter(l => l.userId === currentUser.id);
     }
 
     if (this.activeBranchId && this.activeBranchId !== 'all') {
@@ -846,8 +874,7 @@ class ApexDatabaseManager {
     const filtered = all.filter(a => a.businessId === activeBizId);
     
     if (currentUser.role === UserRole.EMPLOYEE) {
-      const empBranch = currentUser.branch || 'Main HQ';
-      return filtered.filter(a => (a as any).branchId === empBranch || (a as any).branch === empBranch || a.userEmail === currentUser.email);
+      return filtered.filter(a => (a as any).userId === currentUser.id || a.userEmail === currentUser.email);
     }
 
     if (this.activeBranchId && this.activeBranchId !== 'all') {
@@ -2115,69 +2142,48 @@ class ApexDatabaseManager {
     }
   }
 
-  addEmployee(profile: Omit<UserProfile, 'id' | 'businessId' | 'onlineStatus'>): UserProfile {
-    const all = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
-    
-    let empNumber = profile.badgeNumber;
-    if (empNumber) {
-      // Validate uniqueness
-      const exists = all.some(p => {
-        const pNum = p.badgeNumber || (p as any).employeeNumber;
-        return pNum && typeof pNum === 'string' && pNum.trim().toUpperCase() === empNumber.trim().toUpperCase();
-      });
-      if (exists) {
-        throw new Error(`Employee ID "${empNumber}" is already in use. Please enter a unique Employee ID.`);
-      }
-    } else {
-      // Auto-generate a unique sequential Employee Number like EMP-001, EMP-002, etc.
-      let nextNum = 1;
-      all.forEach(p => {
-        const numStr = p.badgeNumber || (p as any).employeeNumber;
-        if (numStr && typeof numStr === 'string') {
-          const match = numStr.match(/^EMP-(\d+)$/i);
-          if (match) {
-            const num = parseInt(match[1], 10);
-            if (num >= nextNum) {
-              nextNum = num + 1;
-            }
-          }
-        }
-      });
-      empNumber = `EMP-${String(nextNum).padStart(3, '0')}`;
+  async addEmployee(profile: Omit<UserProfile, 'id' | 'businessId' | 'onlineStatus'>): Promise<UserProfile> {
+    const res = await fetch('/api/employee/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ employee: profile })
+    });
+
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || 'Failed to register employee on backend.');
     }
 
-    const newProfile: UserProfile = {
-      ...profile,
-      id: 'u_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
-      businessId: this.activeBusinessId,
-      onlineStatus: 'offline',
-      status: 'Active',
-      badgeNumber: empNumber
-    };
-    (newProfile as any).employeeNumber = empNumber;
+    const { profile: newProfile } = await res.json();
 
+    // Sync state locally so UI is fully up to date immediately
+    const all = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
     all.push(newProfile);
     setLocalItem('profiles', all);
 
-    this.syncRowToSupabase('profiles', newProfile, 'upsert');
-
     this.addAudit('Created User Profile', 'N/A', `${profile.name} (${profile.role})`);
+
+    // Dispatch local storage event for instant multi-tab and active session synchronization
+    window.dispatchEvent(new Event('storage'));
+
     return newProfile;
   }
 
-  updateEmployee(userId: string, updates: Partial<UserProfile>) {
+  async updateEmployee(userId: string, updates: Partial<UserProfile>): Promise<void> {
     const all = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
     const index = all.findIndex(p => p.id === userId);
     if (index === -1) return;
 
     if (updates.badgeNumber) {
       const exists = all.some(p => {
-        if (p.id === userId) return false;
+        if (p.id === userId || p.status === 'Deleted') return false;
         const pNum = p.badgeNumber || (p as any).employeeNumber;
         return pNum && typeof pNum === 'string' && pNum.trim().toUpperCase() === updates.badgeNumber!.trim().toUpperCase();
       });
       if (exists) {
-        throw new Error(`Employee ID "${updates.badgeNumber}" is already in use. Please enter a unique Employee ID.`);
+        throw new Error(`Employee ID "${updates.badgeNumber}" is already in use in the system. Please enter a unique Employee ID.`);
       }
     }
 
@@ -2188,12 +2194,13 @@ class ApexDatabaseManager {
     }
     setLocalItem('profiles', all);
 
-    this.syncRowToSupabase('profiles', all[index], 'upsert');
-
     this.addAudit('Updated User Profile', `${oldVal.name} (${oldVal.role})`, `${all[index].name} (${all[index].role}, Status: ${all[index].status})`);
+
+    // Force an immediate save to SQLite
+    await this.forceSaveWorkspaceToServer();
   }
 
-  removeEmployee(userId: string) {
+  async removeEmployee(userId: string): Promise<void> {
     const all = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
     const index = all.findIndex(p => p.id === userId);
     if (index === -1) {
@@ -2222,9 +2229,6 @@ class ApexDatabaseManager {
       // Save updated dataset atomically in the local database
       setLocalItem('profiles', all);
 
-      // Sync the decommissioned profile to Supabase (if configured) via upsert
-      this.syncRowToSupabase('profiles', target, 'upsert');
-
       // 2. Create a high-fidelity audit log containing all required metadata
       const oldValueDetail = `ID: ${target.id} | Name: ${target.name} | Email: ${target.email} | Original Employee ID: ${oldBadgeNumber}`;
       const newValueDetail = `Decommissioned by User ID: ${this.activeUserId} | Employee ID invalidated. Historical records retained.`;
@@ -2236,6 +2240,9 @@ class ApexDatabaseManager {
         `The profile for ${target.name} has been decommissioned. Login access is disabled; historical records have been archived.`,
         'alert'
       );
+
+      // Force an immediate save to SQLite
+      await this.forceSaveWorkspaceToServer();
 
       // Dispatch local storage event for instant multi-tab and active session synchronization
       window.dispatchEvent(new Event('storage'));

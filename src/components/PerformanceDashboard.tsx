@@ -51,9 +51,92 @@ export const PerformanceDashboard: React.FC = () => {
   const isManager = activeUser?.role === UserRole.MANAGER;
   const isAdmin = activeUser?.role === UserRole.ADMIN;
 
+  // Tabs layout selection
+  // 'overview' -> Target meters, rankings, key summary figures
+  // 'analytics' -> Team contribution, category shares, revenue timeline trend
+  // 'attendance_payroll' -> Worked shifts, overtime hours, late arrivals, absent days, payroll summary
+  // 'awards' -> Hall of Fame, recognized achievements list, Grant Award button
+  // 'profiles' -> Detailed scorecard per employee with Customer Record Feed disclosure
+  // 'timeline' -> Immutable activity feed matching corporate events
+  const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'attendance_payroll' | 'awards' | 'profiles' | 'timeline'>('overview');
+
+  // Indexed SQLite Local Cache
+  const [indexedEmployees, setIndexedEmployees] = useState<any[]>([]);
+  const [indexedSales, setIndexedSales] = useState<any[]>([]);
+  const [indexedTimelogs, setIndexedTimelogs] = useState<any[]>([]);
+  const [indexedTasks, setIndexedTasks] = useState<any[]>([]);
+  const [indexedExpenses, setIndexedExpenses] = useState<any[]>([]);
+  const [isLoadingIndexed, setIsLoadingIndexed] = useState<boolean>(true);
+
+  const activeBizId = activeBusiness?.id;
+  const profilesKey = `${activeBizId}_${profiles.length}_${profiles.map(p => p.status).join(',')}`;
+  const salesKey = `${activeBizId}_${sales.length}_${sales.reduce((acc, s) => acc + s.netAmount, 0)}`;
+  const timelogsKey = `${activeBizId}_${timelogs.length}_${timelogs.map(t => t.status).join(',')}`;
+  const tasksKey = `${activeBizId}_${tasks.length}_${tasks.map(t => t.status).join(',')}`;
+  const expensesKey = `${activeBizId}_${expenses.length}_${expenses.reduce((acc, e) => acc + e.amount, 0)}`;
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadIndexedData = async () => {
+      setIsLoadingIndexed(true);
+      try {
+        const [empRes, salesRes, logsRes, tasksRes, expRes] = await Promise.all([
+          fetch('/api/performance/employees'),
+          fetch('/api/performance/sales'),
+          fetch('/api/performance/timelogs'),
+          fetch('/api/performance/tasks'),
+          fetch('/api/performance/expenses')
+        ]);
+
+        if (empRes.ok && salesRes.ok && logsRes.ok && tasksRes.ok && expRes.ok) {
+          const empData = await empRes.json();
+          const salesData = await salesRes.json();
+          const logsData = await logsRes.json();
+          const tasksData = await tasksRes.json();
+          const expData = await expRes.json();
+
+          if (isMounted) {
+            if (empData.success && Array.isArray(empData.employees)) {
+              setIndexedEmployees(empData.employees);
+            }
+            if (salesData.success && Array.isArray(salesData.sales)) {
+              setIndexedSales(salesData.sales);
+            }
+            if (logsData.success && Array.isArray(logsData.timelogs)) {
+              setIndexedTimelogs(logsData.timelogs);
+            }
+            if (tasksData.success && Array.isArray(tasksData.tasks)) {
+              setIndexedTasks(tasksData.tasks);
+            }
+            if (expData.success && Array.isArray(expData.expenses)) {
+              setIndexedExpenses(expData.expenses);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error loading indexed SQLite lookups for Performance Dashboard:', err);
+      } finally {
+        if (isMounted) {
+          setIsLoadingIndexed(false);
+        }
+      }
+    };
+
+    loadIndexedData();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeBizId, profilesKey, salesKey, timelogsKey, tasksKey, expensesKey]);
+
+  const displayEmployees = indexedEmployees.length > 0 ? indexedEmployees : profiles;
+  const displaySales = indexedSales.length > 0 ? indexedSales : sales;
+  const displayTimelogs = indexedTimelogs.length > 0 ? indexedTimelogs : timelogs;
+  const displayTasks = indexedTasks.length > 0 ? indexedTasks : tasks;
+  const displayExpenses = indexedExpenses.length > 0 ? indexedExpenses : expenses;
+
   // Filtered profiles based on logged-in user's role and business
   const allowedProfiles = useMemo(() => {
-    const bizRawProfiles = profiles.filter(p => p.businessId === activeBusiness?.id || (p as any).business_id === activeBusiness?.id);
+    const bizRawProfiles = displayEmployees.filter(p => p.businessId === activeBusiness?.id || (p as any).business_id === activeBusiness?.id);
     
     if (isEmployee && activeUser) {
       return bizRawProfiles.filter(p => p.id === activeUser.id);
@@ -64,16 +147,7 @@ export const PerformanceDashboard: React.FC = () => {
     }
     
     return bizRawProfiles;
-  }, [profiles, activeUser, activeBusiness, isEmployee, isManager]);
-
-  // Tabs layout selection
-  // 'overview' -> Target meters, rankings, key summary figures
-  // 'analytics' -> Team contribution, category shares, revenue timeline trend
-  // 'attendance_payroll' -> Worked shifts, overtime hours, late arrivals, absent days, payroll summary
-  // 'awards' -> Hall of Fame, recognized achievements list, Grant Award button
-  // 'profiles' -> Detailed scorecard per employee with Customer Record Feed disclosure
-  // 'timeline' -> Immutable activity feed matching corporate events
-  const [activeTab, setActiveTab] = useState<'overview' | 'analytics' | 'attendance_payroll' | 'awards' | 'profiles' | 'timeline'>('overview');
+  }, [displayEmployees, activeUser, activeBusiness, isEmployee, isManager]);
 
   // PDF Export Generation State
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -187,12 +261,12 @@ export const PerformanceDashboard: React.FC = () => {
     if (isEmployee && activeUser) {
       setSelectedEmployee(activeUser.name);
       // Force selected branch to match employee's branch if defined
-      const me = profiles.find(p => p.id === activeUser.id);
+      const me = displayEmployees.find(p => p.id === activeUser.id);
       if (me && me.branch) {
         setSelectedBranch(me.branch);
       }
     }
-  }, [isEmployee, activeUser, profiles]);
+  }, [isEmployee, activeUser, displayEmployees]);
 
   // --- DATE RANGE COMPARER ---
   const isDateInRange = (dateStr: string, range: string, start?: string, end?: string) => {
@@ -249,7 +323,7 @@ export const PerformanceDashboard: React.FC = () => {
   // --- FILTERED DATASETS ---
   const filteredSales = useMemo(() => {
     const allowedNames = allowedProfiles.map(p => p.name.toLowerCase());
-    return sales.filter(s => {
+    return displaySales.filter(s => {
       if (!isDateInRange(s.date, timeRange, customStartDate, customEndDate)) return false;
       
       // Filter based on allowed profiles
@@ -272,11 +346,11 @@ export const PerformanceDashboard: React.FC = () => {
       
       return true;
     });
-  }, [sales, timeRange, customStartDate, customEndDate, selectedBranch, selectedEmployee, selectedCategory, allowedProfiles, products]);
+  }, [displaySales, timeRange, customStartDate, customEndDate, selectedBranch, selectedEmployee, selectedCategory, allowedProfiles, products]);
 
   const filteredTimelogs = useMemo(() => {
     const allowedIds = allowedProfiles.map(p => p.id);
-    return timelogs.filter(log => {
+    return displayTimelogs.filter(log => {
       if (!isDateInRange(log.date, timeRange, customStartDate, customEndDate)) return false;
       
       // Filter based on allowed profiles
@@ -291,11 +365,11 @@ export const PerformanceDashboard: React.FC = () => {
       
       return true;
     });
-  }, [timelogs, timeRange, customStartDate, customEndDate, selectedBranch, selectedEmployee, allowedProfiles]);
+  }, [displayTimelogs, timeRange, customStartDate, customEndDate, selectedBranch, selectedEmployee, allowedProfiles]);
 
   const filteredExpenses = useMemo(() => {
     const allowedNames = allowedProfiles.map(p => p.name.toLowerCase());
-    return expenses.filter(e => {
+    return displayExpenses.filter(e => {
       if (!isDateInRange(e.date, timeRange, customStartDate, customEndDate)) return false;
       
       // Filter based on allowed profiles
@@ -311,7 +385,7 @@ export const PerformanceDashboard: React.FC = () => {
       
       return true;
     });
-  }, [expenses, timeRange, customStartDate, customEndDate, selectedBranch, selectedEmployee, selectedCategory, allowedProfiles]);
+  }, [displayExpenses, timeRange, customStartDate, customEndDate, selectedBranch, selectedEmployee, selectedCategory, allowedProfiles]);
 
   // Total calculated metrics
   const totalRevenue = useMemo(() => {
@@ -525,7 +599,7 @@ export const PerformanceDashboard: React.FC = () => {
     else if (timeRange === 'This Month') priorRange = 'Last Month';
 
     const allowedNames = allowedProfiles.map(p => p.name.toLowerCase());
-    const priorSales = sales.filter(s => {
+    const priorSales = displaySales.filter(s => {
       if (!isDateInRange(s.date, priorRange)) return false;
       if (!allowedNames.includes(s.cashierName.toLowerCase())) return false;
       if (selectedBranch !== 'All') {
@@ -545,7 +619,7 @@ export const PerformanceDashboard: React.FC = () => {
       growthPercent,
       isPositive: revDiff >= 0
     };
-  }, [sales, timeRange, totalRevenue, selectedBranch, selectedEmployee, allowedProfiles]);
+  }, [displaySales, timeRange, totalRevenue, selectedBranch, selectedEmployee, allowedProfiles]);
 
   // Isolated Datasets by Workspace, Business, and Branch Filters
   const bizProfiles = useMemo(() => {
@@ -561,7 +635,7 @@ export const PerformanceDashboard: React.FC = () => {
 
   const bizSales = useMemo(() => {
     const allowedNames = allowedProfiles.map(p => p.name.toLowerCase());
-    return sales.filter(s => {
+    return displaySales.filter(s => {
       const matchesBusiness = s.businessId === activeBusiness?.id || (s as any).business_id === activeBusiness?.id;
       if (!matchesBusiness) return false;
 
@@ -575,11 +649,11 @@ export const PerformanceDashboard: React.FC = () => {
       }
       return true;
     });
-  }, [sales, activeBusiness, selectedBranch, allowedProfiles]);
+  }, [displaySales, activeBusiness, selectedBranch, allowedProfiles]);
 
   const bizTimelogs = useMemo(() => {
     const allowedIds = allowedProfiles.map(p => p.id);
-    return timelogs.filter(log => {
+    return displayTimelogs.filter(log => {
       const matchesBusiness = log.businessId === activeBusiness?.id || (log as any).business_id === activeBusiness?.id;
       if (!matchesBusiness) return false;
 
@@ -592,11 +666,11 @@ export const PerformanceDashboard: React.FC = () => {
       }
       return true;
     });
-  }, [timelogs, activeBusiness, selectedBranch, allowedProfiles]);
+  }, [displayTimelogs, activeBusiness, selectedBranch, allowedProfiles]);
 
   const bizTasks = useMemo(() => {
     const allowedIds = allowedProfiles.map(p => p.id);
-    return tasks.filter(t => {
+    return displayTasks.filter(t => {
       const matchesBusiness = t.businessId === activeBusiness?.id || (t as any).business_id === activeBusiness?.id;
       if (!matchesBusiness) return false;
 
@@ -609,7 +683,7 @@ export const PerformanceDashboard: React.FC = () => {
       }
       return true;
     });
-  }, [tasks, activeBusiness, selectedBranch, allowedProfiles]);
+  }, [displayTasks, activeBusiness, selectedBranch, allowedProfiles]);
 
   // Employee standings Leaderboard Rankings with full dynamic KPIs
   const rankings = useMemo(() => {
@@ -739,7 +813,7 @@ export const PerformanceDashboard: React.FC = () => {
       return;
     }
 
-    const employee = profiles.find(p => p.id === newAwardEmployeeId);
+    const employee = displayEmployees.find(p => p.id === newAwardEmployeeId);
     if (!employee) return;
 
     // Fetch the current performance stats for this employee to record on the citation
@@ -1030,7 +1104,7 @@ export const PerformanceDashboard: React.FC = () => {
     const list: any[] = [];
     
     // Add sales events
-    sales.forEach(sale => {
+    displaySales.forEach(sale => {
       list.push({
         id: `sale-${sale.id}`,
         date: sale.date,
@@ -1038,13 +1112,13 @@ export const PerformanceDashboard: React.FC = () => {
         action: `Recorded Sale of ${formatKSh(sale.netAmount)} to client "${sale.customerName || 'Walk-in Customer'}"`,
         employeeName: sale.cashierName,
         device: 'Android App (POS)',
-        branch: profiles.find(p => p.name === sale.cashierName)?.branch || 'Main Branch',
+        branch: displayEmployees.find(p => p.name === sale.cashierName || p.full_name === sale.cashierName)?.branch || 'Main Branch',
         type: 'sale'
       });
     });
 
     // Add timelog events
-    timelogs.forEach(log => {
+    displayTimelogs.forEach(log => {
       list.push({
         id: `clockin-${log.id}`,
         date: log.date,
@@ -1052,7 +1126,7 @@ export const PerformanceDashboard: React.FC = () => {
         action: `Clocked In (Shift Start Recorded)`,
         employeeName: log.userName,
         device: 'Android App',
-        branch: profiles.find(p => p.id === log.userId)?.branch || 'Main Branch',
+        branch: displayEmployees.find(p => p.id === log.userId)?.branch || 'Main Branch',
         type: 'attendance'
       });
 
@@ -1064,30 +1138,30 @@ export const PerformanceDashboard: React.FC = () => {
           action: `Clocked Out (Shift Completed - logged ${log.workHours?.toFixed(1) || 'N/A'} hrs)`,
           employeeName: log.userName,
           device: 'Android App',
-          branch: profiles.find(p => p.id === log.userId)?.branch || 'Main Branch',
+          branch: displayEmployees.find(p => p.id === log.userId)?.branch || 'Main Branch',
           type: 'attendance'
         });
       }
     });
 
     // Add task completion events
-    tasks.forEach(t => {
+    displayTasks.forEach(t => {
       if (t.status === 'Completed') {
         list.push({
           id: `task-${t.id}`,
-          date: t.dueDate,
+          date: t.dueDate || '2026-07-05',
           time: '17:00:00',
           action: `Successfully Completed Assigned Task: "${t.title}"`,
-          employeeName: t.assignedToName,
+          employeeName: t.assignedToName || t.assignedTo || '',
           device: 'Web Client Portal',
-          branch: profiles.find(p => p.id === t.assignedToId)?.branch || 'Main Branch',
+          branch: displayEmployees.find(p => p.id === t.assignedToId || p.badgeNumber === t.assignedToId)?.branch || 'Main Branch',
           type: 'task'
         });
       }
     });
 
     // Add expense logs
-    expenses.forEach(e => {
+    displayExpenses.forEach(e => {
       list.push({
         id: `exp-${e.id}`,
         date: e.date,
@@ -1095,7 +1169,7 @@ export const PerformanceDashboard: React.FC = () => {
         action: `Logged Expense Overhead of ${formatKSh(e.amount)} for "${e.category}"`,
         employeeName: e.recordedBy,
         device: 'Web Client Portal',
-        branch: profiles.find(p => p.name === e.recordedBy)?.branch || 'Main Branch',
+        branch: displayEmployees.find(p => p.name === e.recordedBy || p.full_name === e.recordedBy)?.branch || 'Main Branch',
         type: 'expense'
       });
     });
@@ -1122,7 +1196,7 @@ export const PerformanceDashboard: React.FC = () => {
         if (dateCompare !== 0) return dateCompare;
         return b.time.localeCompare(a.time);
       });
-  }, [sales, timelogs, tasks, expenses, allowedProfiles, isEmployee, activeUser, timeRange, customStartDate, customEndDate, selectedBranch, selectedEmployee]);
+  }, [displaySales, displayTimelogs, displayTasks, displayExpenses, displayEmployees, allowedProfiles, isEmployee, activeUser, timeRange, customStartDate, customEndDate, selectedBranch, selectedEmployee]);
 
   // Expand / collapse sub customer record feeds inside scorecard cards
   const toggleEmployeeFeed = (name: string) => {
