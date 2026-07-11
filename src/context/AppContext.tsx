@@ -104,7 +104,7 @@ interface AppContextType {
   isLoggedIn: boolean;
   login: (userId: string, email?: string, password?: string) => Promise<boolean>;
   loginWithEmployeeNumber: (employeeNumber: string) => Promise<boolean>;
-  logout: () => Promise<void>;
+  logout: (isTimeout?: boolean) => Promise<void>;
   theme: 'dark' | 'light';
   toggleTheme: () => void;
 }
@@ -402,8 +402,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       triggerRefresh();
       return success;
     },
-    logout: async () => {
-      await dbManager.logout();
+    logout: async (isTimeout = false) => {
+      await dbManager.logout(isTimeout);
       setActiveView('overview');
       triggerRefresh();
       window.location.replace('/');

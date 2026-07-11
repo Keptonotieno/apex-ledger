@@ -32,8 +32,53 @@ import { UserRole } from './types';
 import { motion, AnimatePresence } from 'motion/react';
 
 function DashboardLayout() {
-  const { activeView, isLoggedIn, activeUser } = useApp();
+  const { activeView, isLoggedIn, activeUser, logout, activeBusiness } = useApp();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Inactivity-based auto-locking/logout
+  React.useEffect(() => {
+    if (!isLoggedIn || !activeBusiness?.id) return;
+
+    // Load active business security policies
+    const securityKey = `apex_ledger_security_${activeBusiness.id}`;
+    let timeoutMs = 30 * 60 * 1000; // Default 30 mins
+
+    try {
+      const securityDataStr = localStorage.getItem(securityKey);
+      if (securityDataStr) {
+        const securityData = JSON.parse(securityDataStr);
+        const timeoutStr = securityData.timeout || '30 minutes';
+        if (timeoutStr === '15 minutes') timeoutMs = 15 * 60 * 1000;
+        else if (timeoutStr === '30 minutes') timeoutMs = 30 * 60 * 1000;
+        else if (timeoutStr === '1 hour') timeoutMs = 60 * 60 * 1000;
+        else if (timeoutStr === 'Never lock') return; // Do not auto-lock
+      }
+    } catch (e) {
+      console.error('Error parsing security policy:', e);
+    }
+
+    let activityTimer: any;
+
+    const resetTimer = () => {
+      clearTimeout(activityTimer);
+      activityTimer = setTimeout(() => {
+        console.log(`Inactivity limit reached. Auto-logging out.`);
+        logout(true);
+      }, timeoutMs);
+    };
+
+    // Listen to user activity events
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+    events.forEach(e => window.addEventListener(e, resetTimer));
+
+    // Initialize timer
+    resetTimer();
+
+    return () => {
+      clearTimeout(activityTimer);
+      events.forEach(e => window.removeEventListener(e, resetTimer));
+    };
+  }, [isLoggedIn, activeBusiness?.id, logout]);
 
   if (!isLoggedIn) {
     return <Login />;

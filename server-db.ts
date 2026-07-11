@@ -96,7 +96,8 @@ async function initPgDb(): Promise<void> {
       business_id TEXT NOT NULL,
       workspace_id TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'Active'
+      status TEXT NOT NULL DEFAULT 'Active',
+      phone_number TEXT
     )`,
     `CREATE TABLE IF NOT EXISTS workspaces (
       business_id TEXT PRIMARY KEY,
@@ -196,6 +197,12 @@ async function initPgDb(): Promise<void> {
     await pgQuery(q);
   }
 
+  try {
+    await pgQuery('ALTER TABLE users ADD COLUMN phone_number TEXT');
+  } catch (err) {
+    // Safe column migration fallback
+  }
+
   console.log('PostgreSQL database schema initialized successfully.');
   await runSeedAndMigration();
 }
@@ -231,9 +238,14 @@ export function initDb(): Promise<void> {
               business_id TEXT NOT NULL,
               workspace_id TEXT NOT NULL,
               created_at TEXT NOT NULL,
-              status TEXT NOT NULL DEFAULT 'Active'
+              status TEXT NOT NULL DEFAULT 'Active',
+              phone_number TEXT
             )
           `);
+
+          db.run('ALTER TABLE users ADD COLUMN phone_number TEXT', (err) => {
+            // Safe column migration fallback
+          });
 
           db.run(`
             CREATE TABLE IF NOT EXISTS workspaces (

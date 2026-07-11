@@ -35,6 +35,90 @@ async function getSession(req: express.Request): Promise<any | null> {
   }
 }
 
+function getClientIp(req: express.Request): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    const ips = typeof forwarded === 'string' ? forwarded.split(',') : forwarded;
+    return ips[0].trim();
+  }
+  return req.socket.remoteAddress || '127.0.0.1';
+}
+
+async function logServerAudit(businessId: string | null, action: string, oldValue: string, newValue: string, email: string, name: string, role: string, ipAddress: string) {
+  if (!businessId) return;
+  try {
+    const workspaceRow = await dbGet('SELECT workspace_data FROM workspaces WHERE business_id = ?', [businessId]);
+    if (!workspaceRow) return;
+
+    const workspace = JSON.parse(workspaceRow.workspace_data);
+    if (!workspace.audits) workspace.audits = [];
+
+    const now = new Date();
+    const newLog = {
+      id: 'aud_srv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
+      businessId,
+      userEmail: email || 'Unknown',
+      userName: name || 'System / Guest',
+      role: role || 'Employee',
+      action,
+      oldValue: oldValue || 'N/A',
+      newValue: newValue || 'N/A',
+      date: now.toISOString().split('T')[0],
+      time: now.toTimeString().split(' ')[0],
+      ipAddress: ipAddress || '127.0.0.1',
+      device: 'Server Service',
+      browser: 'API Router'
+    };
+
+    workspace.audits.push(newLog);
+    await dbRun('UPDATE workspaces SET workspace_data = ? WHERE business_id = ?', [JSON.stringify(workspace), businessId]);
+    console.log(`[Server Audit Logged] Action: ${action} | Business: ${businessId}`);
+  } catch (err) {
+    console.error('Error logging server audit:', err);
+  }
+}
+
+// In-memory rate limiting and account lockout
+interface LockoutInfo {
+  failedAttempts: number;
+  lockoutUntil: number | null;
+}
+
+const loginTracker = new Map<string, LockoutInfo>();
+
+function isLockedOut(key: string): { locked: boolean; timeLeftMinutes: number } {
+  const info = loginTracker.get(key);
+  if (!info || !info.lockoutUntil) return { locked: false, timeLeftMinutes: 0 };
+
+  if (Date.now() > info.lockoutUntil) {
+    // Lockout expired, reset attempts
+    loginTracker.delete(key);
+    return { locked: false, timeLeftMinutes: 0 };
+  }
+
+  const timeLeftMs = info.lockoutUntil - Date.now();
+  const timeLeftMinutes = Math.ceil(timeLeftMs / 1000 / 60);
+  return { locked: true, timeLeftMinutes };
+}
+
+function recordFailedAttempt(key: string) {
+  let info = loginTracker.get(key);
+  if (!info) {
+    info = { failedAttempts: 0, lockoutUntil: null };
+    loginTracker.set(key, info);
+  }
+
+  info.failedAttempts += 1;
+  if (info.failedAttempts >= 5) {
+    // Lock out for 15 minutes
+    info.lockoutUntil = Date.now() + 15 * 60 * 1000;
+  }
+}
+
+function resetFailedAttempts(key: string) {
+  loginTracker.delete(key);
+}
+
 // REST API ROUTES
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
@@ -150,6 +234,9 @@ app.post('/api/auth/register', async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
+    // Log Server Audit
+    await logServerAudit(businessId, 'Tenant Registered', 'N/A', `${businessName} registered by ${fullName}`, normalizedEmail, fullName, 'Owner / Admin', getClientIp(req));
+
     res.json({
       success: true,
       userId,
@@ -181,20 +268,34 @@ app.post('/api/auth/login', async (req, res) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   try {
+    // Rate limiting / Account Lockout check
+    const lockStatus = isLockedOut(normalizedEmail);
+    if (lockStatus.locked) {
+      return res.status(429).json({ 
+        success: false, 
+        error: `Too many failed login attempts. This account is locked. Please try again in ${lockStatus.timeLeftMinutes} minute(s).` 
+      });
+    }
+
     const user = await dbGet('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
     
     if (!user) {
+      recordFailedAttempt(normalizedEmail);
       return res.status(401).json({ success: false, error: 'Email not found.' });
     }
 
     if (user.status !== 'Active') {
+      recordFailedAttempt(normalizedEmail);
       const errorMsg = user.status === 'Suspended' ? 'Account suspended.' : 'Account inactive.';
+      await logServerAudit(user.business_id, 'Failed Login Attempt', 'N/A', `Suspended/inactive account: ${errorMsg}`, normalizedEmail, user.full_name, 'Owner / Admin', getClientIp(req));
       return res.status(403).json({ success: false, error: errorMsg });
     }
 
     // Verify Password
     const isPasswordValid = bcrypt.compareSync(password, user.password_hash);
     if (!isPasswordValid) {
+      recordFailedAttempt(normalizedEmail);
+      await logServerAudit(user.business_id, 'Failed Login Attempt', 'N/A', `Incorrect password for corporate login`, normalizedEmail, user.full_name, 'Owner / Admin', getClientIp(req));
       return res.status(401).json({ success: false, error: 'Incorrect password.' });
     }
 
@@ -211,6 +312,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     if (userRole === 'Employee') {
+      await logServerAudit(user.business_id, 'Failed Login Attempt', 'N/A', `Employee tried to login via corporate tab`, normalizedEmail, user.full_name, userRole, getClientIp(req));
       return res.status(403).json({ success: false, error: 'Employees must log in using their unique Employee ID on the Employee login tab.' });
     }
 
@@ -229,6 +331,10 @@ app.post('/api/auth/login', async (req, res) => {
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
+
+    resetFailedAttempts(normalizedEmail);
+
+    await logServerAudit(user.business_id, 'Logged In', 'N/A', `${user.full_name} logged in successfully`, normalizedEmail, user.full_name, userRole, getClientIp(req));
 
     res.json({
       success: true,
@@ -258,25 +364,41 @@ app.post('/api/auth/employee-login', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Employee ID is required.' });
   }
 
-  const empIdClean = employeeNumber.trim();
+  const empIdCleanUpper = employeeNumber.trim().toUpperCase();
 
   try {
+    // Rate limiting / Account Lockout check
+    const lockStatus = isLockedOut(empIdCleanUpper);
+    if (lockStatus.locked) {
+      return res.status(429).json({ 
+        success: false, 
+        error: `Too many failed login attempts. This employee ID is locked. Please try again in ${lockStatus.timeLeftMinutes} minute(s).` 
+      });
+    }
+
     // Authenticate using the emulated SQLite query!
-    const emp = await dbGet('SELECT * FROM employees WHERE employee_id = ?', [empIdClean]);
+    const emp = await dbGet('SELECT * FROM employees WHERE employee_id = ?', [employeeNumber.trim()]);
 
     if (!emp) {
+      recordFailedAttempt(empIdCleanUpper);
       return res.status(404).json({ success: false, error: 'Employee ID not found.' });
     }
 
     if (emp.status === 'Deleted' || emp.status === 'Archived') {
+      recordFailedAttempt(empIdCleanUpper);
+      await logServerAudit(emp.business_id, 'Failed Login Attempt', 'N/A', `Deleted employee account login attempt: ${employeeNumber.trim()}`, emp.email || 'N/A', emp.full_name, emp.role, getClientIp(req));
       return res.status(403).json({ success: false, error: 'This employee account has been deleted/decommissioned. Access is restricted.' });
     }
 
     if (emp.status === 'Suspended') {
+      recordFailedAttempt(empIdCleanUpper);
+      await logServerAudit(emp.business_id, 'Failed Login Attempt', 'N/A', `Suspended employee account login attempt: ${employeeNumber.trim()}`, emp.email || 'N/A', emp.full_name, emp.role, getClientIp(req));
       return res.status(403).json({ success: false, error: 'This employee account is suspended. Please contact your manager.' });
     }
 
     if (emp.status !== 'Active') {
+      recordFailedAttempt(empIdCleanUpper);
+      await logServerAudit(emp.business_id, 'Failed Login Attempt', 'N/A', `Inactive employee account login attempt: ${employeeNumber.trim()}`, emp.email || 'N/A', emp.full_name, emp.role, getClientIp(req));
       return res.status(403).json({ success: false, error: 'This employee account is inactive.' });
     }
 
@@ -302,6 +424,10 @@ app.post('/api/auth/employee-login', async (req, res) => {
       sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
+
+    resetFailedAttempts(empIdCleanUpper);
+
+    await logServerAudit(emp.business_id, 'Employee Logged In', 'N/A', `${emp.full_name} logged in successfully`, emp.email || 'N/A', emp.full_name, emp.role, getClientIp(req));
 
     res.json({
       success: true,
@@ -386,6 +512,68 @@ app.post('/api/auth/logout', async (req, res) => {
   }
   res.clearCookie('apex_session');
   res.json({ success: true, message: 'Successfully logged out.' });
+});
+
+// 4.5 Change Password Endpoint
+app.post('/api/auth/change-password', async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ success: false, error: 'Current password and new password are required.' });
+  }
+
+  try {
+    const session = await getSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, error: 'Unauthorized: Session expired or invalid.' });
+    }
+
+    // Retrieve user from database
+    const user = await dbGet('SELECT * FROM users WHERE id = ?', [session.user_id]);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found.' });
+    }
+
+    // Verify current password
+    const isPasswordValid = bcrypt.compareSync(currentPassword, user.password_hash);
+    if (!isPasswordValid) {
+      return res.status(400).json({ success: false, error: 'Incorrect current password.' });
+    }
+
+    // Validate new password complexity
+    if (newPassword.length < 8) {
+      return res.status(400).json({ success: false, error: 'New password must be at least 8 characters long.' });
+    }
+    if (!/[A-Za-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+      return res.status(400).json({ success: false, error: 'New password must contain at least one letter and one number.' });
+    }
+
+    // Hash the new password
+    const newPasswordHash = bcrypt.hashSync(newPassword, 10);
+
+    // Update users table
+    await dbRun('UPDATE users SET password_hash = ? WHERE id = ?', [newPasswordHash, session.user_id]);
+
+    // Also update workspace_data profiles if the user is a profile-based employee/manager
+    const workspaceRow = await dbGet('SELECT workspace_data FROM workspaces WHERE business_id = ?', [session.business_id]);
+    if (workspaceRow) {
+      const workspace = JSON.parse(workspaceRow.workspace_data);
+      if (Array.isArray(workspace.profiles)) {
+        const profileIndex = workspace.profiles.findIndex((p: any) => p.id === session.user_id);
+        if (profileIndex !== -1) {
+          workspace.profiles[profileIndex].password = newPassword; // Store plain/new password inside JSON workspace (matching original structure)
+          await dbRun('UPDATE workspaces SET workspace_data = ? WHERE business_id = ?', [JSON.stringify(workspace), session.business_id]);
+        }
+      }
+    }
+
+    await logServerAudit(session.business_id, 'Password Changed', 'N/A', `Successfully changed password for account: ${user.email}`, user.email, user.full_name, session.role, getClientIp(req));
+
+    res.json({ success: true, message: 'Password updated successfully.' });
+  } catch (err: any) {
+    console.error('Change password error:', err);
+    res.status(500).json({ success: false, error: err.message || 'Server error during password update.' });
+  }
 });
 
 // 5. Load complete workspace securely (isolated by session businessId)
@@ -475,6 +663,16 @@ app.post('/api/employee/register', async (req, res) => {
       const allProfiles = wsObj.profiles;
 
       if (badgeNumber) {
+        // Enforce strict character limits and validation on badge numbers (alphanumeric, 4–10 characters)
+        const isAlphanumeric4to10 = /^[a-zA-Z0-9]{4,10}$/.test(badgeNumber);
+        if (!isAlphanumeric4to10) {
+          await dbRun('ROLLBACK');
+          return res.status(400).json({
+            success: false,
+            error: 'Employee ID (Badge Number) must be alphanumeric and between 4 and 10 characters long.'
+          });
+        }
+
         const exists = allProfiles.some((p: any) => {
           if (p.status === 'Deleted') return false;
           const pNum = p.badgeNumber || p.employeeNumber;

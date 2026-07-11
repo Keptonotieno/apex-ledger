@@ -221,7 +221,16 @@ export const EmployeeModule: React.FC = () => {
       return;
     }
 
-    const employeeIdToSave = formEmployeeId.trim().toUpperCase();
+    const employeeIdToSave = formEmployeeId.trim();
+
+    // Strict character limit and alphanumeric validation
+    const isAlphanumeric4to10 = /^[a-zA-Z0-9]{4,10}$/.test(employeeIdToSave);
+    if (!isAlphanumeric4to10) {
+      alert('Validation Error: Employee ID must be alphanumeric (letters and numbers only) and between 4 and 10 characters long.');
+      return;
+    }
+
+    const employeeIdToSaveUpper = employeeIdToSave.toUpperCase();
 
     // Strict client-side uniqueness validation globally
     let allProfiles: any[] = [];
@@ -234,11 +243,11 @@ export const EmployeeModule: React.FC = () => {
       if (editingEmployee && p.id === editingEmployee.id) return false;
       if (p.status === 'Deleted') return false;
       const pNum = p.badgeNumber || (p as any).employeeNumber;
-      return pNum && typeof pNum === 'string' && pNum.trim().toUpperCase() === employeeIdToSave;
+      return pNum && typeof pNum === 'string' && pNum.trim().toUpperCase() === employeeIdToSaveUpper;
     });
 
     if (exists) {
-      alert(`Validation Error: Employee ID "${employeeIdToSave}" is already assigned to another profile in the system. Please enter a unique Employee ID.`);
+      alert(`Validation Error: Employee ID "${employeeIdToSaveUpper}" is already assigned to another profile in the system. Please enter a unique Employee ID.`);
       return;
     }
 
@@ -253,7 +262,7 @@ export const EmployeeModule: React.FC = () => {
           email: formEmail,
           role: formRole,
           branch: formBranch,
-          badgeNumber: employeeIdToSave,
+          badgeNumber: employeeIdToSaveUpper,
           avatarUrl: formAvatarUrl || undefined,
           allowExpenses: formAllowExpenses,
           password: formPassword || undefined
@@ -284,14 +293,14 @@ export const EmployeeModule: React.FC = () => {
           email: formEmail,
           role: formRole,
           branch: formBranch,
-          badgeNumber: employeeIdToSave,
+          badgeNumber: employeeIdToSaveUpper,
           avatarUrl: formAvatarUrl || undefined,
           allowExpenses: formAllowExpenses,
           password: formPassword || undefined
         } as any);
         setRegistrationSuccess({
           name: formName,
-          badgeNumber: created.badgeNumber || employeeIdToSave,
+          badgeNumber: created.badgeNumber || employeeIdToSaveUpper,
           role: created.role,
           branch: created.branch || formBranch
         });

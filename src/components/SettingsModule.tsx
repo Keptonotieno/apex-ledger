@@ -68,6 +68,13 @@ export const SettingsModule: React.FC = () => {
   const [ipWhitelist, setIpWhitelist] = useState('*');
   const [auditLogRetention, setAuditLogRetention] = useState('365 days');
 
+  // Change password states
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordStatus, setPasswordStatus] = useState<{ success: boolean; message: string } | null>(null);
+  const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+
   const isAdmin = activeUser?.role === UserRole.ADMIN;
   const isManager = activeUser?.role === UserRole.MANAGER;
   const isEmployee = activeUser?.role === UserRole.EMPLOYEE;
@@ -382,6 +389,39 @@ export const SettingsModule: React.FC = () => {
     addAudit('Updated Security Policies', 'Previous Security Policy', `MFA: ${mfaEnabled ? 'Enabled' : 'Disabled'}, Auto-Lock: ${sessionTimeout}, IP Whitelist: ${ipWhitelist}`);
     window.dispatchEvent(new Event('storage'));
     alert('Enterprise system security controls and access parameters applied successfully.');
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordStatus(null);
+
+    if (newPassword !== confirmPassword) {
+      setPasswordStatus({ success: false, message: 'New passwords do not match.' });
+      return;
+    }
+
+    setChangePasswordLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setPasswordStatus({ success: false, message: data.error || 'Failed to update password.' });
+      } else {
+        setPasswordStatus({ success: true, message: 'Your password has been changed successfully!' });
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      }
+    } catch (err: any) {
+      setPasswordStatus({ success: false, message: err.message || 'Network error updating password.' });
+    } finally {
+      setChangePasswordLoading(false);
+    }
   };
 
   return (
@@ -1290,6 +1330,66 @@ export const SettingsModule: React.FC = () => {
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* Change Password Panel */}
+            <div className="glass-panel p-5 rounded-xl border border-brand-border mt-4">
+              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-brand-border/60">
+                <Lock className="w-5 h-5 text-cyan-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-gray-200">Change Account Password</h3>
+                  <span className="text-[10px] text-gray-500 font-mono">Update your secure login credentials</span>
+                </div>
+              </div>
+
+              <form onSubmit={handleChangePassword} className="space-y-4">
+                <div>
+                  <label className="text-gray-400 block mb-1 font-sans text-xs">Current Password</label>
+                  <input
+                    type="password"
+                    required
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="w-full bg-[#0a0d16] border border-brand-border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/30 font-mono text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-gray-400 block mb-1 font-sans text-xs">New Password</label>
+                  <input
+                    type="password"
+                    required
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full bg-[#0a0d16] border border-brand-border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/30 font-mono text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-gray-400 block mb-1 font-sans text-xs">Confirm New Password</label>
+                  <input
+                    type="password"
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full bg-[#0a0d16] border border-brand-border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/30 font-mono text-xs"
+                  />
+                </div>
+
+                {passwordStatus && (
+                  <div className={`p-2.5 rounded-lg text-xs font-mono text-center ${
+                    passwordStatus.success ? 'bg-emerald-950/30 border border-emerald-500/30 text-emerald-400' : 'bg-rose-950/30 border border-rose-500/30 text-rose-400'
+                  }`}>
+                    {passwordStatus.message}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={changePasswordLoading}
+                  className="w-full py-2.5 bg-[#76dbdb] hover:bg-[#5bc8c8] disabled:opacity-50 text-gray-950 font-bold font-sans rounded-xl text-center shadow-lg transition text-xs cursor-pointer uppercase tracking-wider font-bold"
+                >
+                  {changePasswordLoading ? 'Updating Password...' : 'Update Password'}
+                </button>
+              </form>
             </div>
           </div>
         </div>

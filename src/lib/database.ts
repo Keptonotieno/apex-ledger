@@ -505,7 +505,7 @@ class ApexDatabaseManager {
     return false;
   }
 
-  async logout() {
+  async logout(isTimeout: boolean = false) {
     const user = this.getCurrentUser();
     
     try {
@@ -526,7 +526,9 @@ class ApexDatabaseManager {
     }
 
     if (user) {
-      this.addAudit('Logged Out', `${user.name} (${user.role})`, 'N/A', clientIp);
+      const actionStr = isTimeout ? 'Inactivity Session Timeout' : 'Logged Out';
+      const detailStr = isTimeout ? 'Session auto-locked due to inactivity' : 'N/A';
+      this.addAudit(actionStr, `${user.name} (${user.role})`, detailStr, clientIp);
     }
 
     // Clear local storage workspace securely so nothing is leaked, but SQL is intact!
