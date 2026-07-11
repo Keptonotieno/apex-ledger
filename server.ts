@@ -449,6 +449,10 @@ app.post('/api/employee/register', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Session expired or invalid.' });
     }
 
+    if (session.role === 'Employee') {
+      return res.status(403).json({ success: false, error: 'Forbidden: Employees are not authorized to register new profiles.' });
+    }
+
     const { employee } = req.body;
     if (!employee) {
       return res.status(400).json({ success: false, error: 'Employee payload is missing.' });
@@ -554,6 +558,10 @@ app.get('/api/performance/employees', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Unauthorized.' });
     }
 
+    if (session.role === 'Employee') {
+      return res.status(403).json({ success: false, error: 'Forbidden: Employees are not authorized to view corporate employee performance data.' });
+    }
+
     const { status, branch } = req.query;
     let query = 'SELECT * FROM employees WHERE business_id = ?';
     const params: any[] = [session.business_id];
@@ -602,7 +610,12 @@ app.get('/api/performance/timelogs', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Unauthorized.' });
     }
 
-    const { userId } = req.query;
+    let { userId } = req.query;
+    if (session.role === 'Employee') {
+      // Employees are strictly restricted to retrieving their own clock/timelog records
+      userId = session.user_id;
+    }
+
     let query = 'SELECT * FROM timelogs WHERE business_id = ?';
     const params: any[] = [session.business_id];
 
@@ -644,11 +657,24 @@ app.get('/api/performance/sales', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Unauthorized.' });
     }
 
-    const { cashierName } = req.query;
+    let { cashierName } = req.query;
     let query = 'SELECT * FROM sales WHERE business_id = ?';
     const params: any[] = [session.business_id];
 
-    if (cashierName && cashierName !== 'All') {
+    if (session.role === 'Employee') {
+      // Employees are strictly restricted to querying their own point-of-sale transactions
+      const workspaceRow = await dbGet('SELECT workspace_data FROM workspaces WHERE business_id = ?', [session.business_id]);
+      let fullName = '';
+      if (workspaceRow) {
+        const workspace = JSON.parse(workspaceRow.workspace_data);
+        const profile = workspace.profiles?.find((p: any) => p.id === session.user_id);
+        if (profile) {
+          fullName = profile.name;
+        }
+      }
+      query += ' AND (cashier_name = ? OR customer_name = ?)';
+      params.push(fullName || 'Unknown', fullName || 'Unknown');
+    } else if (cashierName && cashierName !== 'All') {
       query += ' AND cashier_name = ?';
       params.push(cashierName);
     }
@@ -692,11 +718,24 @@ app.get('/api/performance/tasks', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Unauthorized.' });
     }
 
-    const { assignedTo } = req.query;
+    let { assignedTo } = req.query;
     let query = 'SELECT * FROM tasks WHERE business_id = ?';
     const params: any[] = [session.business_id];
 
-    if (assignedTo && assignedTo !== 'All') {
+    if (session.role === 'Employee') {
+      // Employees are strictly restricted to querying their own task lists
+      const workspaceRow = await dbGet('SELECT workspace_data FROM workspaces WHERE business_id = ?', [session.business_id]);
+      let fullName = '';
+      if (workspaceRow) {
+        const workspace = JSON.parse(workspaceRow.workspace_data);
+        const profile = workspace.profiles?.find((p: any) => p.id === session.user_id);
+        if (profile) {
+          fullName = profile.name;
+        }
+      }
+      query += ' AND (assigned_to_id = ? OR assigned_to = ?)';
+      params.push(session.user_id, fullName || 'Unknown');
+    } else if (assignedTo && assignedTo !== 'All') {
       query += ' AND assigned_to = ?';
       params.push(assignedTo);
     }
@@ -728,6 +767,10 @@ app.get('/api/performance/expenses', async (req, res) => {
     const session = await getSession(req);
     if (!session) {
       return res.status(401).json({ success: false, error: 'Unauthorized.' });
+    }
+
+    if (session.role === 'Employee') {
+      return res.status(403).json({ success: false, error: 'Forbidden: Employees are not authorized to view general business expenses.' });
     }
 
     const query = 'SELECT * FROM expenses WHERE business_id = ?';

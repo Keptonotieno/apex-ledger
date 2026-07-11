@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { IndexedDBCache } from './indexedDbCache';
 import { 
   UserRole, UserProfile, Business, Product, Sale, SaleItem,
   Customer, DebtRecord, Expense, Procurement, 
@@ -96,11 +97,35 @@ class ApexDatabaseManager {
   constructor() {
     this.initDatabase();
     this.verifySessionOnStartup();
-    if (isSupabaseConfigured && supabase) {
-      this.syncFromSupabase().then(() => {
-        this.subscribeRealtime();
-      });
+    this.loadFromIndexedDBCache().then(() => {
+      if (isSupabaseConfigured && supabase) {
+        this.syncFromSupabase().then(() => {
+          this.subscribeRealtime();
+        });
+      }
+    });
+  }
+
+  async loadFromIndexedDBCache() {
+    console.log('[ApexDatabaseManager] Hydrating memory and localStorage from IndexedDB cache on startup...');
+    const keys = [
+      'businesses', 'branches', 'categories', 'profiles', 'products', 
+      'customers', 'debts', 'sales', 'expenses', 'procurements', 
+      'tasks', 'events', 'timelogs', 'notifications', 'audits',
+      'budgets', 'invoices', 'bank_transactions', 'reconciliations'
+    ];
+    for (const key of keys) {
+      try {
+        const cached = await IndexedDBCache.get(key);
+        if (cached && Array.isArray(cached) && cached.length > 0) {
+          localStorage.setItem(`apex_ledger_${key}`, JSON.stringify(cached));
+        }
+      } catch (e) {
+        console.error(`[ApexDatabaseManager] Failed to load ${key} from IndexedDB cache:`, e);
+      }
     }
+    window.dispatchEvent(new Event('storage'));
+    window.dispatchEvent(new Event('apex-db-update'));
   }
 
   async verifySessionOnStartup() {
@@ -130,17 +155,51 @@ class ApexDatabaseManager {
   async syncFromSupabase() {
     if (!isSupabaseConfigured || !supabase) return;
     try {
+      console.log('[ApexDatabaseManager] Syncing database from Supabase and updating IndexedDB cache...');
+      
       const { data: bData, error: bErr } = await supabase.from('businesses').select('*');
-      if (!bErr && bData && bData.length > 0) setLocalItem('businesses', keysToCamel(bData));
+      if (!bErr && bData && bData.length > 0) {
+        const camelBData = keysToCamel(bData);
+        setLocalItem('businesses', camelBData);
+        await IndexedDBCache.set('businesses', camelBData);
+      } else if (bErr) {
+        console.warn('[ApexDatabaseManager] Businesses query failed, falling back to cache:', bErr);
+        const cached = await IndexedDBCache.get('businesses');
+        if (cached) setLocalItem('businesses', cached);
+      }
 
       const { data: pData, error: pErr } = await supabase.from('profiles').select('*');
-      if (!pErr && pData && pData.length > 0) setLocalItem('profiles', keysToCamel(pData));
+      if (!pErr && pData && pData.length > 0) {
+        const camelPData = keysToCamel(pData);
+        setLocalItem('profiles', camelPData);
+        await IndexedDBCache.set('profiles', camelPData);
+      } else if (pErr) {
+        console.warn('[ApexDatabaseManager] Profiles query failed, falling back to cache:', pErr);
+        const cached = await IndexedDBCache.get('profiles');
+        if (cached) setLocalItem('profiles', cached);
+      }
 
       const { data: prodData, error: prodErr } = await supabase.from('products').select('*');
-      if (!prodErr && prodData && prodData.length > 0) setLocalItem('products', keysToCamel(prodData));
+      if (!prodErr && prodData && prodData.length > 0) {
+        const camelProdData = keysToCamel(prodData);
+        setLocalItem('products', camelProdData);
+        await IndexedDBCache.set('products', camelProdData);
+      } else if (prodErr) {
+        console.warn('[ApexDatabaseManager] Products query failed, falling back to cache:', prodErr);
+        const cached = await IndexedDBCache.get('products');
+        if (cached) setLocalItem('products', cached);
+      }
 
       const { data: sData, error: sErr } = await supabase.from('sales').select('*');
-      if (!sErr && sData && sData.length > 0) setLocalItem('sales', keysToCamel(sData));
+      if (!sErr && sData && sData.length > 0) {
+        const camelSData = keysToCamel(sData);
+        setLocalItem('sales', camelSData);
+        await IndexedDBCache.set('sales', camelSData);
+      } else if (sErr) {
+        console.warn('[ApexDatabaseManager] Sales query failed, falling back to cache:', sErr);
+        const cached = await IndexedDBCache.get('sales');
+        if (cached) setLocalItem('sales', cached);
+      }
 
       const tables = [
         { localKey: 'customers', dbName: 'customers' },
@@ -159,14 +218,39 @@ class ApexDatabaseManager {
         try {
           const { data, error } = await supabase.from(t.dbName).select('*');
           if (!error && data && data.length > 0) {
-            setLocalItem(t.localKey, keysToCamel(data));
+            const camelData = keysToCamel(data);
+            setLocalItem(t.localKey, camelData);
+            await IndexedDBCache.set(t.localKey, camelData);
+          } else if (error) {
+            console.warn(`[ApexDatabaseManager] Query for table ${t.dbName} failed, falling back to cache:`, error);
+            const cached = await IndexedDBCache.get(t.localKey);
+            if (cached) setLocalItem(t.localKey, cached);
           }
         } catch (e) {
-          // Gracefully catch missing tables or network errors
+          console.warn(`[ApexDatabaseManager] Exception fetching table ${t.dbName}, reading cache:`, e);
+          const cached = await IndexedDBCache.get(t.localKey);
+          if (cached) setLocalItem(t.localKey, cached);
         }
       }
     } catch (err) {
-      console.error('Error in syncFromSupabase:', err);
+      console.error('[ApexDatabaseManager] Error in syncFromSupabase, resorting to IndexedDB caches:', err);
+      // Fallback to IndexedDB cache entirely if offline/broken
+      const keys = [
+        'businesses', 'branches', 'categories', 'profiles', 'products', 
+        'customers', 'debts', 'sales', 'expenses', 'procurements', 
+        'tasks', 'events', 'timelogs', 'notifications', 'audits',
+        'budgets', 'invoices', 'bank_transactions', 'reconciliations'
+      ];
+      for (const key of keys) {
+        try {
+          const cached = await IndexedDBCache.get(key);
+          if (cached) {
+            setLocalItem(key, cached);
+          }
+        } catch (e) {
+          console.error(`[ApexDatabaseManager] Cache fallback failure for ${key}:`, e);
+        }
+      }
     }
   }
 
@@ -253,6 +337,36 @@ class ApexDatabaseManager {
   async syncRowToSupabase(dbName: string, row: any, action: 'upsert' | 'delete') {
     // Auto-save any local state mutation atomically to SQLite
     this.saveWorkspaceToServer();
+
+    // Map database table name to local key
+    const dbNameToLocalKeyMap: Record<string, string> = {
+      'businesses': 'businesses',
+      'profiles': 'profiles',
+      'products': 'products',
+      'sales': 'sales',
+      'customers': 'customers',
+      'debts': 'debts',
+      'expenses': 'expenses',
+      'procurements': 'procurements',
+      'tasks': 'tasks',
+      'events': 'events',
+      'timelogs': 'timelogs',
+      'notifications': 'notifications',
+      'audits': 'audits',
+      'branches': 'branches',
+      'budgets': 'budgets',
+      'invoices': 'invoices',
+      'bank_transactions': 'bank_transactions',
+      'reconciliations': 'reconciliations'
+    };
+
+    const localKey = dbNameToLocalKeyMap[dbName] || dbName;
+    try {
+      const currentLocalData = getLocalItem(localKey, []);
+      await IndexedDBCache.set(localKey, currentLocalData);
+    } catch (cacheErr) {
+      console.error('[ApexDatabaseManager] Failed to cache row write to IndexedDB:', cacheErr);
+    }
 
     if (!isSupabaseConfigured || !supabase) return;
     try {
