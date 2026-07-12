@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { apiFetch } from '../utils/api';
 import { UserRole, UserProfile } from '../types';
 import { Users, Plus, UserPlus, Clock, Trash2, Shield, X, Lock, Edit, Ban, Check, Camera } from 'lucide-react';
 
@@ -114,7 +115,7 @@ export const EmployeeModule: React.FC = () => {
   const fetchEmployees = async () => {
     setIsLoadingEmployees(true);
     try {
-      const res = await fetch('/api/performance/employees');
+      const res = await apiFetch('/api/performance/employees');
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.employees)) {

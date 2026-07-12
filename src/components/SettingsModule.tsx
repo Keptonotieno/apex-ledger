@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { apiFetch } from '../utils/api';
 import { UserRole, Business, Branch } from '../types';
 import { SQL_SCHEMA, isSupabaseConfigured } from '../lib/database';
 import { 
@@ -403,7 +404,7 @@ export const SettingsModule: React.FC = () => {
     setChangePasswordLoading(true);
 
     try {
-      const res = await fetch('/api/auth/change-password', {
+      const res = await apiFetch('/api/auth/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ currentPassword, newPassword })

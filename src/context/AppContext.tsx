@@ -8,6 +8,7 @@ import {
 import { dbManager } from '../lib/database';
 import { DataService } from '../lib/DataService';
 import { SessionManager } from '../utils/SessionManager';
+import { apiFetch } from '../utils/api';
 
 interface AppContextType {
   activeView: string;
@@ -134,7 +135,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       try {
-        const res = await fetch('/api/auth/me');
+        const res = await apiFetch('/api/auth/me');
         if (res.ok) {
           const data = await res.json();
           if (data.success && data.user) {
@@ -143,7 +144,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             dbManager.setActiveBusiness(data.businessId);
             
             // Load fresh workspace from SQLite backend
-            const workspaceRes = await fetch('/api/workspace/load');
+            const workspaceRes = await apiFetch('/api/workspace/load');
             if (workspaceRes.ok) {
               const wsData = await workspaceRes.json();
               if (wsData.success && wsData.workspace) {

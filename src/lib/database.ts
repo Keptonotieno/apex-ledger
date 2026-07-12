@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { IndexedDBCache } from './indexedDbCache';
 import { SessionManager } from '../utils/SessionManager';
+import { apiFetch } from '../utils/api';
 import { 
   UserRole, UserProfile, Business, Product, Sale, SaleItem,
   Customer, DebtRecord, Expense, Procurement, 
@@ -136,7 +137,7 @@ class ApexDatabaseManager {
     const token = SessionManager.getToken();
     if (token || this.activeUserId) {
       try {
-        const res = await fetch('/api/auth/me');
+        const res = await apiFetch('/api/auth/me');
         if (!res.ok) {
           this.clearLocalWorkspace();
           window.dispatchEvent(new Event('storage'));
@@ -153,7 +154,7 @@ class ApexDatabaseManager {
             }
 
             // Load fresh workspace state from persistent SQLite database
-            const workspaceRes = await fetch('/api/workspace/load');
+            const workspaceRes = await apiFetch('/api/workspace/load');
             if (workspaceRes.ok) {
               const wsData = await workspaceRes.json();
               if (wsData.success && wsData.workspace) {
@@ -343,7 +344,7 @@ class ApexDatabaseManager {
         workspace[key] = getLocalItem(key, []);
       });
 
-      await fetch('/api/workspace/save', {
+      await apiFetch('/api/workspace/save', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -448,7 +449,7 @@ class ApexDatabaseManager {
     }
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -485,7 +486,7 @@ class ApexDatabaseManager {
 
   async loginWithEmployeeNumber(employeeNumber: string): Promise<boolean> {
     try {
-      const res = await fetch('/api/auth/employee-login', {
+      const res = await apiFetch('/api/auth/employee-login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -536,7 +537,7 @@ class ApexDatabaseManager {
     const user = this.getCurrentUser();
     
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await apiFetch('/api/auth/logout', { method: 'POST' });
     } catch (err) {
       console.error('Logout API error:', err);
     }
@@ -2258,7 +2259,7 @@ class ApexDatabaseManager {
 
   async registerTenant(ownerName: string, businessName: string, email: string, password: string): Promise<boolean> {
     try {
-      const res = await fetch('/api/auth/register', {
+      const res = await apiFetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fullName: ownerName, businessName, email, password })
@@ -2300,7 +2301,7 @@ class ApexDatabaseManager {
   }
 
   async addEmployee(profile: Omit<UserProfile, 'id' | 'businessId' | 'onlineStatus'>): Promise<UserProfile> {
-    const res = await fetch('/api/employee/register', {
+    const res = await apiFetch('/api/employee/register', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

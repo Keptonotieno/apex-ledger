@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { apiFetch } from '../utils/api';
 import { UserRole } from '../types';
 import { formatKSh } from '../lib/utils';
 import { 
@@ -81,11 +82,11 @@ export const PerformanceDashboard: React.FC = () => {
       setIsLoadingIndexed(true);
       try {
         const [empRes, salesRes, logsRes, tasksRes, expRes] = await Promise.all([
-          fetch('/api/performance/employees'),
-          fetch('/api/performance/sales'),
-          fetch('/api/performance/timelogs'),
-          fetch('/api/performance/tasks'),
-          fetch('/api/performance/expenses')
+          apiFetch('/api/performance/employees'),
+          apiFetch('/api/performance/sales'),
+          apiFetch('/api/performance/timelogs'),
+          apiFetch('/api/performance/tasks'),
+          apiFetch('/api/performance/expenses')
         ]);
 
         if (empRes.ok && salesRes.ok && logsRes.ok && tasksRes.ok && expRes.ok) {
