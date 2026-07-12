@@ -8,8 +8,12 @@ export class IndexedDBCache {
   private static DB_NAME = 'apex_supabase_cache';
   private static STORE_NAME = 'query_cache';
   private static DB_VERSION = 1;
+  private static dbInstance: IDBDatabase | null = null;
 
   private static openDatabase(): Promise<IDBDatabase> {
+    if (this.dbInstance) {
+      return Promise.resolve(this.dbInstance);
+    }
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
 
@@ -21,7 +25,8 @@ export class IndexedDBCache {
       };
 
       request.onsuccess = (event) => {
-        resolve((event.target as IDBOpenDBRequest).result);
+        this.dbInstance = (event.target as IDBOpenDBRequest).result;
+        resolve(this.dbInstance);
       };
 
       request.onerror = (event) => {

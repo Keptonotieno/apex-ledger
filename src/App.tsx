@@ -30,14 +30,25 @@ import { PurchasesModule } from './components/PurchasesModule';
 import { AccountingModule } from './components/AccountingModule';
 import { UserRole } from './types';
 import { motion, AnimatePresence } from 'motion/react';
+import { SessionManager } from './utils/SessionManager';
+import { dbManager } from './lib/database';
+import { AlertTriangle, Clock, LogOut } from 'lucide-react';
+import { LockScreen } from './components/LockScreen';
 
 function DashboardLayout() {
-  const { activeView, isLoggedIn, activeUser, logout, activeBusiness } = useApp();
+  const { activeView, isLoggedIn, activeUser, logout, activeBusiness, isRestoringSession } = useApp();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showWarning, setShowWarning] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(60);
+  const [isLocked, setIsLocked] = useState<boolean>(() => {
+    return localStorage.getItem('apex_ledger_locked') === 'true';
+  });
 
   // Inactivity-based auto-locking/logout
   React.useEffect(() => {
     if (!isLoggedIn || !activeBusiness?.id) return;
+    if (showWarning) return; // Freeze inactivity reset when warning is showing
+    if (isLocked) return; // Freeze inactivity reset when locked
 
     // Load active business security policies
     const securityKey = `apex_ledger_security_${activeBusiness.id}`;
@@ -57,31 +68,85 @@ function DashboardLayout() {
       console.error('Error parsing security policy:', e);
     }
 
-    let activityTimer: any;
+    let warningTimer: any;
 
     const resetTimer = () => {
-      clearTimeout(activityTimer);
-      activityTimer = setTimeout(() => {
-        console.log(`Inactivity limit reached. Auto-logging out.`);
-        logout(true);
-      }, timeoutMs);
+      clearTimeout(warningTimer);
+
+      const warningDelay = Math.max(0, timeoutMs - 60000);
+
+      warningTimer = setTimeout(() => {
+        setShowWarning(true);
+        setSecondsLeft(60);
+      }, warningDelay);
     };
 
     // Listen to user activity events
     const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
-    events.forEach(e => window.addEventListener(e, resetTimer));
+    const registerListeners = () => {
+      events.forEach(e => window.addEventListener(e, resetTimer));
+    };
+    const unregisterListeners = () => {
+      events.forEach(e => window.removeEventListener(e, resetTimer));
+    };
 
-    // Initialize timer
+    registerListeners();
     resetTimer();
 
     return () => {
-      clearTimeout(activityTimer);
-      events.forEach(e => window.removeEventListener(e, resetTimer));
+      clearTimeout(warningTimer);
+      unregisterListeners();
     };
-  }, [isLoggedIn, activeBusiness?.id, logout]);
+  }, [isLoggedIn, activeBusiness?.id, showWarning, isLocked]);
+
+  // Countdown timer for warning modal
+  React.useEffect(() => {
+    if (!showWarning) return;
+
+    const interval = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          setShowWarning(false);
+          setIsLocked(true);
+          localStorage.setItem('apex_ledger_locked', 'true');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [showWarning]);
+
+  if (isRestoringSession) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-brand-dark text-gray-100 font-sans">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="w-10 h-10 border-4 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin"></div>
+          <p className="text-xs font-mono text-cyan-400/80 tracking-widest uppercase">Restoring Premium Session</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isLoggedIn) {
     return <Login />;
+  }
+
+  if (isLocked) {
+    return (
+      <LockScreen
+        activeUser={activeUser}
+        logout={logout}
+        onUnlock={() => {
+          setIsLocked(false);
+          localStorage.removeItem('apex_ledger_locked');
+        }}
+      />
+    );
   }
 
   // Active view renderer helper
@@ -213,6 +278,73 @@ function DashboardLayout() {
       </div>
 
       <DevConsole />
+
+      {/* Inactivity Warning Modal Overlay */}
+      <AnimatePresence>
+        {showWarning && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-brand-dark/80 backdrop-blur-md"
+            id="inactivity-warning-overlay"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.95, y: 10, opacity: 0 }}
+              transition={{ type: 'spring', duration: 0.4 }}
+              className="bg-[#131722]/95 border border-amber-500/30 rounded-2xl p-6 max-w-md w-full shadow-2xl relative overflow-hidden"
+              id="inactivity-warning-modal"
+            >
+              {/* Top Countdown Visual Progress Bar */}
+              <div className="absolute top-0 left-0 w-full h-1 bg-brand-border">
+                <div 
+                  className="h-full bg-gradient-to-r from-amber-500 to-red-500 transition-all duration-1000 ease-linear" 
+                  style={{ width: `${(secondsLeft / 60) * 100}%` }}
+                />
+              </div>
+
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/10 text-amber-400 mb-4 animate-bounce">
+                <AlertTriangle className="h-6 w-6" id="warning-icon" />
+              </div>
+
+              <h3 className="text-lg font-semibold text-center text-white mb-2 tracking-tight" id="warning-heading">
+                Inactivity Warning
+              </h3>
+
+              <p className="text-sm text-gray-400 text-center mb-6 leading-relaxed">
+                You have been inactive. To protect your financial data and ledger integrity, your session will automatically log out in:
+                <span className="block font-mono text-amber-400 font-bold text-3xl mt-2 tracking-wider" id="seconds-countdown">
+                  {secondsLeft}s
+                </span>
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  id="logout-btn"
+                  onClick={() => {
+                    setShowWarning(false);
+                    logout(true);
+                  }}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-gray-800 bg-gray-900/40 text-xs font-semibold uppercase tracking-wider text-gray-400 hover:bg-gray-800/80 hover:text-white transition-all duration-200"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Log Out
+                </button>
+                <button
+                  id="extend-btn"
+                  onClick={() => setShowWarning(false)}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 text-xs font-semibold uppercase tracking-wider text-white hover:from-cyan-400 hover:to-blue-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 shadow-lg shadow-cyan-500/20 transition-all duration-200"
+                >
+                  <Clock className="h-4 w-4" />
+                  Extend Session
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -12,7 +12,8 @@ export const Login: React.FC = () => {
   const { login, loginWithEmployeeNumber, registerTenant, profiles } = useApp();
   
   // Start on the Register Tenant screen by default as requested
-  const [isRegistering, setIsRegistering] = useState(true);
+  const [view, setView] = useState<'register' | 'login' | 'forgot' | 'reset'>('register');
+  const isRegistering = view === 'register';
   
   // Login modes: employee-only or corporate email/password
   const [loginMode, setLoginMode] = useState<'employee' | 'corporate'>('employee');
@@ -28,6 +29,13 @@ export const Login: React.FC = () => {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // Forgot / Reset Password States
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [resetTokenFromForgot, setResetTokenFromForgot] = useState<string | null>(null);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -108,6 +116,86 @@ export const Login: React.FC = () => {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail) {
+      setErrorMessage('Please enter your business email address.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    setResetTokenFromForgot(null);
+
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail.trim() })
+      });
+
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned an unexpected non-JSON response.');
+      }
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to request password reset.');
+      }
+
+      setResetTokenFromForgot(data.token);
+      setSuccessMessage('Password Reset Token Generated successfully!');
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to request password reset.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetToken || !newPassword) {
+      setErrorMessage('Please fill in both the token and the new password.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken.trim(), newPassword })
+      });
+
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned an unexpected non-JSON response.');
+      }
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to reset password.');
+      }
+
+      setSuccessMessage('Password reset complete! Please log in.');
+      setTimeout(() => {
+        setSuccessMessage(null);
+        setView('login');
+        setLoginEmail(forgotEmail);
+        setResetToken('');
+        setNewPassword('');
+        setResetTokenFromForgot(null);
+      }, 3000);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Failed to reset password.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
 
 
   return (
@@ -158,7 +246,7 @@ export const Login: React.FC = () => {
         <div className="w-full bg-[#111622]/90 border border-gray-800/80 rounded-[2.2rem] p-8 sm:p-10 shadow-2xl relative">
           
           <AnimatePresence mode="wait">
-            {successMessage ? (
+            {successMessage && (view === 'register' || view === 'login') ? (
               <motion.div 
                 key="success"
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -305,7 +393,7 @@ export const Login: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      setIsRegistering(false);
+                      setView('login');
                       setErrorMessage(null);
                     }}
                     className="font-mono text-xs text-gray-300 hover:text-cyan-400 transition cursor-pointer uppercase tracking-wider"
@@ -315,7 +403,7 @@ export const Login: React.FC = () => {
                 </div>
 
               </motion.div>
-            ) : (
+            ) : view === 'login' ? (
               
               /* 2. SIGN IN / LOGIN WORKSPACE */
               <motion.div 
@@ -434,9 +522,22 @@ export const Login: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider mb-1.5">
-                        Password Credentials
-                      </label>
+                      <div className="flex justify-between items-center mb-1.5">
+                        <label className="block text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider">
+                          Password Credentials
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setView('forgot');
+                            setErrorMessage(null);
+                            setSuccessMessage(null);
+                          }}
+                          className="text-[10px] font-mono text-cyan-400 hover:underline cursor-pointer uppercase tracking-wider"
+                        >
+                          Forgot Password?
+                        </button>
+                      </div>
                       <div className="relative flex items-center bg-gray-950/50 border border-gray-800 rounded-xl px-3 py-3 text-xs text-gray-200 focus-within:border-cyan-500/50 transition">
                         <Lock className="w-4 h-4 text-gray-500 mr-2.5 shrink-0" />
                         <input 
@@ -483,7 +584,7 @@ export const Login: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      setIsRegistering(true);
+                      setView('register');
                       setErrorMessage(null);
                     }}
                     className="font-mono text-xs text-gray-300 hover:text-cyan-400 transition cursor-pointer uppercase tracking-wider"
@@ -492,8 +593,222 @@ export const Login: React.FC = () => {
                   </button>
                 </div>
 
+              </motion.div>
+            ) : view === 'forgot' ? (
+              
+              /* 3. FORGOT PASSWORD FORM */
+              <motion.div 
+                key="forgot"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="space-y-6"
+              >
+                <div className="flex justify-between items-center pb-2 border-b border-gray-800/40">
+                  <span className="text-[10px] font-mono text-cyan-400 font-bold uppercase tracking-wider">
+                    Password Reset Request
+                  </span>
+                  <span className="font-mono text-[10px] text-gray-400 uppercase tracking-wider">
+                    Security Key Delivery
+                  </span>
+                </div>
 
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                      Registered Business Email
+                    </label>
+                    <div className="relative flex items-center bg-gray-950/50 border border-gray-800 rounded-xl px-3 py-3 text-xs text-gray-200 focus-within:border-cyan-500/50 transition">
+                      <Mail className="w-4 h-4 text-gray-500 mr-2.5 shrink-0" />
+                      <input 
+                        type="email"
+                        required
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        placeholder="e.g. owner@company.com"
+                        className="bg-transparent text-gray-100 outline-none w-full font-sans"
+                      />
+                    </div>
+                    <p className="text-[9px] text-gray-500 mt-1 font-mono">
+                      Enter the email address used during business tenant registration.
+                    </p>
+                  </div>
 
+                  {errorMessage && (
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs text-center font-mono"
+                    >
+                      {errorMessage}
+                    </motion.div>
+                  )}
+
+                  {resetTokenFromForgot && (
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="p-4 rounded-xl bg-cyan-950/40 border border-cyan-500/20 text-cyan-300 space-y-3 font-mono text-xs"
+                    >
+                      <p className="font-bold text-center">🔑 SECURITY TOKEN GENERATED</p>
+                      <div className="bg-gray-950 p-2.5 rounded-lg border border-cyan-500/10 flex items-center justify-between">
+                        <span className="select-all font-bold text-cyan-400">{resetTokenFromForgot}</span>
+                        <span className="text-[9px] text-gray-500">Copy Token</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setResetToken(resetTokenFromForgot);
+                          setErrorMessage(null);
+                          setSuccessMessage(null);
+                          setView('reset');
+                        }}
+                        className="w-full bg-cyan-400 text-gray-950 font-sans font-bold text-[10px] uppercase tracking-wider py-2 rounded-lg hover:bg-cyan-300 transition"
+                      >
+                        Proceed to Reset Form
+                      </button>
+                    </motion.div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full flex items-center justify-center gap-2 bg-[#76dbdb] hover:bg-[#5bc8c8] text-gray-950 font-sans font-bold text-xs uppercase tracking-wider py-4 rounded-xl shadow-[0_4px_20px_rgba(118,219,219,0.25)] transition duration-200 disabled:opacity-50 cursor-pointer"
+                  >
+                    <span>{isSubmitting ? 'Generating Reset Link...' : 'Generate Reset Security Key'}</span>
+                    <ChevronRight className="w-4 h-4 text-gray-950" />
+                  </button>
+                </form>
+
+                <div className="flex justify-between font-mono text-xs uppercase tracking-wider pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setView('login');
+                      setErrorMessage(null);
+                      setSuccessMessage(null);
+                    }}
+                    className="text-gray-400 hover:text-cyan-400 transition"
+                  >
+                    ← Back to Login
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setView('reset');
+                      setErrorMessage(null);
+                      setSuccessMessage(null);
+                    }}
+                    className="text-cyan-400 hover:underline"
+                  >
+                    Enter Reset Token →
+                  </button>
+                </div>
+              </motion.div>
+            ) : (
+              
+              /* 4. RESET PASSWORD FORM */
+              <motion.div 
+                key="reset"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="space-y-6"
+              >
+                <div className="flex justify-between items-center pb-2 border-b border-gray-800/40">
+                  <span className="text-[10px] font-mono text-cyan-400 font-bold uppercase tracking-wider">
+                    Confirm Password Reset
+                  </span>
+                  <span className="font-mono text-[10px] text-gray-400 uppercase tracking-wider">
+                    Credential Recovery
+                  </span>
+                </div>
+
+                <form onSubmit={handleResetPassword} className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                      Reset Security Token
+                    </label>
+                    <div className="relative flex items-center bg-gray-950/50 border border-gray-800 rounded-xl px-3 py-3 text-xs text-gray-200 focus-within:border-cyan-500/50 transition">
+                      <Shield className="w-4 h-4 text-cyan-400 mr-2.5 shrink-0" />
+                      <input 
+                        type="text"
+                        required
+                        value={resetToken}
+                        onChange={(e) => setResetToken(e.target.value)}
+                        placeholder="Paste reset token here"
+                        className="bg-transparent text-gray-100 outline-none w-full font-mono font-bold tracking-wider"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-mono font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                      New Password
+                    </label>
+                    <div className="relative flex items-center bg-gray-950/50 border border-gray-800 rounded-xl px-3 py-3 text-xs text-gray-200 focus-within:border-cyan-500/50 transition">
+                      <Lock className="w-4 h-4 text-gray-500 mr-2.5 shrink-0" />
+                      <input 
+                        type={showNewPassword ? 'text' : 'password'}
+                        required
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="Enter new secure password"
+                        className="bg-transparent text-gray-100 outline-none w-full font-sans"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="text-gray-500 hover:text-cyan-400 transition"
+                      >
+                        {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {errorMessage && (
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs text-center font-mono"
+                    >
+                      {errorMessage}
+                    </motion.div>
+                  )}
+
+                  {successMessage && (
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs text-center font-mono"
+                    >
+                      {successMessage}
+                    </motion.div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full flex items-center justify-center gap-2 bg-[#76dbdb] hover:bg-[#5bc8c8] text-gray-950 font-sans font-bold text-xs uppercase tracking-wider py-4 rounded-xl shadow-[0_4px_20px_rgba(118,219,219,0.25)] transition duration-200 disabled:opacity-50 cursor-pointer"
+                  >
+                    <span>{isSubmitting ? 'Updating Credentials...' : 'Update Secure Password'}</span>
+                    <ShieldCheck className="w-4 h-4 text-gray-950 shrink-0" />
+                  </button>
+                </form>
+
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setView('login');
+                      setErrorMessage(null);
+                      setSuccessMessage(null);
+                    }}
+                    className="font-mono text-xs text-gray-300 hover:text-cyan-400 transition cursor-pointer uppercase tracking-wider"
+                  >
+                    ← Back to Sign-In
+                  </button>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>

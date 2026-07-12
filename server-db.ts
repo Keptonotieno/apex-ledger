@@ -203,6 +203,18 @@ async function initPgDb(): Promise<void> {
     // Safe column migration fallback
   }
 
+  try {
+    await pgQuery('ALTER TABLE users ADD COLUMN reset_token TEXT');
+  } catch (err) {
+    // Safe column migration fallback
+  }
+
+  try {
+    await pgQuery('ALTER TABLE users ADD COLUMN reset_token_expires BIGINT');
+  } catch (err) {
+    // Safe column migration fallback
+  }
+
   console.log('PostgreSQL database schema initialized successfully.');
   await runSeedAndMigration();
 }
@@ -244,6 +256,14 @@ export function initDb(): Promise<void> {
           `);
 
           db.run('ALTER TABLE users ADD COLUMN phone_number TEXT', (err) => {
+            // Safe column migration fallback
+          });
+
+          db.run('ALTER TABLE users ADD COLUMN reset_token TEXT', (err) => {
+            // Safe column migration fallback
+          });
+
+          db.run('ALTER TABLE users ADD COLUMN reset_token_expires INTEGER', (err) => {
             // Safe column migration fallback
           });
 

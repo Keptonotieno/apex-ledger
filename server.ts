@@ -14,9 +14,17 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
 
-// Helper to authenticate request and get session
+// Helper to authenticate request and get session (supports cookies and Authorization headers)
 async function getSession(req: express.Request): Promise<any | null> {
-  const token = req.cookies?.apex_session;
+  let token = req.cookies?.apex_session;
+
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+  }
+
   if (!token) return null;
 
   try {
@@ -152,105 +160,121 @@ app.post('/api/auth/register', async (req, res) => {
     // Hash password securely
     const passwordHash = bcrypt.hashSync(password, 10);
 
-    // Save owner record
-    await dbRun(
-      'INSERT INTO users (id, full_name, business_name, email, password_hash, business_id, workspace_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [userId, fullName, businessName, normalizedEmail, passwordHash, businessId, workspaceId, 'Active']
-    );
+    // Wrap registration in a database transaction to ensure atomicity
+    await dbRun('SAVEPOINT register_tenant');
 
-    // Build the initial, default production-ready workspace structure
-    const initialWorkspace = {
-      businesses: [{
-        id: businessId,
-        name: businessName,
-        type: 'Retail',
-        currency: 'KSh',
-        status: 'Active',
-        createdAt: new Date().toISOString()
-      }],
-      branches: [{
-        id: 'br_default',
-        businessId: businessId,
-        name: 'Main Branch',
-        location: 'HQ',
-        status: 'Active',
-        isHeadquarters: true,
-        createdAt: new Date().toISOString()
-      }],
-      categories: [],
-      profiles: [{
-        id: userId,
-        name: fullName,
-        email: normalizedEmail,
-        role: 'Owner / Admin',
-        businessId: businessId,
-        onlineStatus: 'online',
-        status: 'Active'
-      }],
-      products: [],
-      customers: [],
-      debts: [],
-      sales: [],
-      expenses: [],
-      procurements: [],
-      tasks: [],
-      events: [],
-      timelogs: [],
-      notifications: [],
-      audits: [{
-        id: 'audit_' + Date.now(),
-        businessId: businessId,
-        userId: userId,
-        action: 'Created Business & Tenant',
-        target: businessName,
-        details: `${fullName} registered new system tenant on SQLite`,
-        timestamp: new Date().toISOString()
-      }],
-      budgets: [],
-      invoices: [],
-      bank_transactions: [],
-      reconciliations: []
-    };
+    try {
+      // Save owner record
+      await dbRun(
+        'INSERT INTO users (id, full_name, business_name, email, password_hash, business_id, workspace_id, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [userId, fullName, businessName, normalizedEmail, passwordHash, businessId, workspaceId, new Date().toISOString(), 'Active']
+      );
 
-    // Save initial workspace
-    await dbRun(
-      'INSERT INTO workspaces (business_id, workspace_id, workspace_data) VALUES (?, ?, ?)',
-      [businessId, workspaceId, JSON.stringify(initialWorkspace)]
-    );
+      // Build the initial, default production-ready workspace structure
+      const initialWorkspace = {
+        businesses: [{
+          id: businessId,
+          name: businessName,
+          type: 'Retail',
+          currency: 'KSh',
+          status: 'Active',
+          createdAt: new Date().toISOString()
+        }],
+        branches: [{
+          id: 'br_default',
+          businessId: businessId,
+          name: 'Main Branch',
+          location: 'HQ',
+          status: 'Active',
+          isHeadquarters: true,
+          createdAt: new Date().toISOString()
+        }],
+        categories: [],
+        profiles: [{
+          id: userId,
+          name: fullName,
+          email: normalizedEmail,
+          role: 'Owner / Admin',
+          businessId: businessId,
+          onlineStatus: 'online',
+          status: 'Active'
+        }],
+        products: [],
+        customers: [],
+        debts: [],
+        sales: [],
+        expenses: [],
+        procurements: [],
+        tasks: [],
+        events: [],
+        timelogs: [],
+        notifications: [],
+        audits: [{
+          id: 'audit_' + Date.now(),
+          businessId: businessId,
+          userId: userId,
+          action: 'Created Business & Tenant',
+          target: businessName,
+          details: `${fullName} registered new system tenant on SQLite`,
+          timestamp: new Date().toISOString()
+        }],
+        budgets: [],
+        invoices: [],
+        bank_transactions: [],
+        reconciliations: []
+      };
 
-    // Create session
-    const token = crypto.randomBytes(24).toString('hex');
-    const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
+      // Save initial workspace
+      await dbRun(
+        'INSERT INTO workspaces (business_id, workspace_id, workspace_data) VALUES (?, ?, ?)',
+        [businessId, workspaceId, JSON.stringify(initialWorkspace)]
+      );
 
-    await dbRun(
-      'INSERT INTO sessions (token, user_id, business_id, workspace_id, role, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
-      [token, userId, businessId, workspaceId, 'Owner / Admin', expiresAt]
-    );
+      // Create session
+      const token = crypto.randomBytes(24).toString('hex');
+      const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
 
-    res.cookie('apex_session', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-    });
+      await dbRun(
+        'INSERT INTO sessions (token, user_id, business_id, workspace_id, role, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+        [token, userId, businessId, workspaceId, 'Owner / Admin', expiresAt]
+      );
 
-    // Log Server Audit
-    await logServerAudit(businessId, 'Tenant Registered', 'N/A', `${businessName} registered by ${fullName}`, normalizedEmail, fullName, 'Owner / Admin', getClientIp(req));
+      res.cookie('apex_session', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      });
 
-    res.json({
-      success: true,
-      userId,
-      businessId,
-      workspaceId,
-      user: {
-        id: userId,
-        name: fullName,
-        email: normalizedEmail,
-        role: 'Owner / Admin',
-        businessId
-      },
-      workspace: initialWorkspace
-    });
+      // Log Server Audit
+      await logServerAudit(businessId, 'Tenant Registered', 'N/A', `${businessName} registered by ${fullName}`, normalizedEmail, fullName, 'Owner / Admin', getClientIp(req));
+
+      await dbRun('RELEASE register_tenant');
+
+      res.json({
+        success: true,
+        token,
+        userId,
+        businessId,
+        workspaceId,
+        user: {
+          id: userId,
+          name: fullName,
+          email: normalizedEmail,
+          role: 'Owner / Admin',
+          businessId
+        },
+        workspace: initialWorkspace
+      });
+    } catch (dbErr) {
+      try {
+        await dbRun('ROLLBACK TO register_tenant');
+        await dbRun('RELEASE register_tenant');
+      } catch (rollbackErr) {
+        // ignore rollback errors
+      }
+      throw dbErr;
+    }
   } catch (err: any) {
     console.error('Registration API error:', err);
     res.status(500).json({ success: false, error: err.message || 'Server error during registration.' });
@@ -338,6 +362,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     res.json({
       success: true,
+      token,
       userId: user.id,
       businessId: user.business_id,
       workspaceId: user.workspace_id,
@@ -431,6 +456,7 @@ app.post('/api/auth/employee-login', async (req, res) => {
 
     res.json({
       success: true,
+      token,
       userId: emp.id,
       businessId: emp.business_id,
       workspaceId: emp.workspace_id,
@@ -445,6 +471,146 @@ app.post('/api/auth/employee-login', async (req, res) => {
   } catch (err: any) {
     console.error('Employee login API error:', err);
     res.status(500).json({ success: false, error: err.message || 'Server error during employee login.' });
+  }
+});
+
+// Forgot Password Request Handler
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const { email } = req.body;
+
+  if (!email || typeof email !== 'string') {
+    return res.status(400).json({ success: false, error: 'Email address is required.' });
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+
+  try {
+    const user = await dbGet('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
+    if (!user) {
+      return res.status(444).json({ success: false, error: 'No account registered with this email address.' });
+    }
+
+    // Generate secure, time-limited reset token
+    const resetToken = crypto.randomBytes(24).toString('hex');
+    const resetTokenExpires = Date.now() + 60 * 60 * 1000; // 1 hour validity
+
+    // Persist token in the SQL database
+    await dbRun(
+      'UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?',
+      [resetToken, resetTokenExpires, user.id]
+    );
+
+    // Track a Server Audit log entry
+    await logServerAudit(
+      user.business_id,
+      'Forgot Password Requested',
+      'N/A',
+      `Secure reset token generated for ${normalizedEmail}`,
+      normalizedEmail,
+      user.full_name,
+      'Owner / Admin',
+      getClientIp(req)
+    );
+
+    // Append alert notification to the user's workspace
+    const workspaceRow = await dbGet('SELECT workspace_data FROM workspaces WHERE business_id = ?', [user.business_id]);
+    if (workspaceRow) {
+      const workspace = JSON.parse(workspaceRow.workspace_data);
+      if (!workspace.notifications) workspace.notifications = [];
+
+      const notificationId = 'not_reset_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+      const newNotification = {
+        id: notificationId,
+        businessId: user.business_id,
+        title: '🔑 Password Reset Requested',
+        message: `A password reset token was generated for ${user.full_name} (${normalizedEmail}). Token: ${resetToken}. This token expires in 1 hour.`,
+        type: 'alert',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      };
+
+      workspace.notifications.unshift(newNotification);
+      await dbRun('UPDATE workspaces SET workspace_data = ? WHERE business_id = ?', [JSON.stringify(workspace), user.business_id]);
+    }
+
+    res.json({
+      success: true,
+      message: 'Password reset token has been successfully generated and delivered to your workspace alert stream.',
+      token: resetToken
+    });
+  } catch (err: any) {
+    console.error('Forgot password API error:', err);
+    res.status(500).json({ success: false, error: err.message || 'Server error while generating password reset token.' });
+  }
+});
+
+// Reset Password Completion Handler
+app.post('/api/auth/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body;
+
+  if (!token || !newPassword) {
+    return res.status(400).json({ success: false, error: 'Token and new password are required.' });
+  }
+
+  try {
+    const user = await dbGet('SELECT * FROM users WHERE reset_token = ?', [token]);
+    if (!user) {
+      return res.status(400).json({ success: false, error: 'Invalid or expired password reset token.' });
+    }
+
+    const expiryTime = Number(user.reset_token_expires);
+    if (Date.now() > expiryTime) {
+      return res.status(400).json({ success: false, error: 'Password reset token has expired. Please request a new one.' });
+    }
+
+    // Hash the new password and clear the reset token
+    const passwordHash = bcrypt.hashSync(newPassword, 10);
+    await dbRun(
+      'UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?',
+      [passwordHash, user.id]
+    );
+
+    // Reset lockout tracker if any
+    resetFailedAttempts(user.email.toLowerCase().trim());
+
+    // Audit logs
+    await logServerAudit(
+      user.business_id,
+      'Password Reset Completed',
+      'N/A',
+      `Successfully updated password for ${user.email}`,
+      user.email,
+      user.full_name,
+      'Owner / Admin',
+      getClientIp(req)
+    );
+
+    // Notify user in workspace
+    const workspaceRow = await dbGet('SELECT workspace_data FROM workspaces WHERE business_id = ?', [user.business_id]);
+    if (workspaceRow) {
+      const workspace = JSON.parse(workspaceRow.workspace_data);
+      if (!workspace.notifications) workspace.notifications = [];
+
+      workspace.notifications.unshift({
+        id: 'not_reset_success_' + Date.now(),
+        businessId: user.business_id,
+        title: '🔒 Password Updated Successfully',
+        message: 'Your account password has been successfully reset. Any previous lockout limits have been lifted.',
+        type: 'success',
+        date: new Date().toISOString().split('T')[0],
+        read: false
+      });
+
+      await dbRun('UPDATE workspaces SET workspace_data = ? WHERE business_id = ?', [JSON.stringify(workspace), user.business_id]);
+    }
+
+    res.json({
+      success: true,
+      message: 'Password updated successfully. You can now log in with your new credentials.'
+    });
+  } catch (err: any) {
+    console.error('Reset password API error:', err);
+    res.status(500).json({ success: false, error: err.message || 'Server error while resetting password.' });
   }
 });
 
@@ -995,6 +1161,11 @@ app.get('/api/performance/expenses', async (req, res) => {
     console.error('Error querying expenses index:', err);
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// Fallback 404 handler for unmatched API routes to prevent returning HTML pages
+app.all('/api/*', (req, res) => {
+  res.status(404).json({ success: false, error: `API route not found: ${req.method} ${req.url}` });
 });
 
 

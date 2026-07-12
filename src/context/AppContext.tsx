@@ -7,6 +7,7 @@ import {
 } from '../types';
 import { dbManager } from '../lib/database';
 import { DataService } from '../lib/DataService';
+import { SessionManager } from '../utils/SessionManager';
 
 interface AppContextType {
   activeView: string;
@@ -102,6 +103,7 @@ interface AppContextType {
   markNotificationsRead: () => void;
   connectionStatus: 'Connected' | 'Local Syncing';
   isLoggedIn: boolean;
+  isRestoringSession: boolean;
   login: (userId: string, email?: string, password?: string) => Promise<boolean>;
   loginWithEmployeeNumber: (employeeNumber: string) => Promise<boolean>;
   logout: (isTimeout?: boolean) => Promise<void>;
@@ -118,6 +120,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     return (localStorage.getItem('theme') as 'dark' | 'light') || 'dark';
   });
+  const [isRestoringSession, setIsRestoringSession] = useState<boolean>(() => {
+    return SessionManager.hasToken();
+  });
+
+  // Automatically restore session on application mount
+  useEffect(() => {
+    const restoreSession = async () => {
+      const token = SessionManager.getToken();
+      if (!token) {
+        setIsRestoringSession(false);
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.user) {
+            // Restore identifiers on local database manager
+            dbManager.setActiveUser(data.user.id);
+            dbManager.setActiveBusiness(data.businessId);
+            
+            // Load fresh workspace from SQLite backend
+            const workspaceRes = await fetch('/api/workspace/load');
+            if (workspaceRes.ok) {
+              const wsData = await workspaceRes.json();
+              if (wsData.success && wsData.workspace) {
+                dbManager.writeWorkspaceToLocalStorage(wsData.workspace);
+              }
+            }
+          } else {
+            // Token is invalid/expired
+            dbManager.clearLocalWorkspace();
+          }
+        } else {
+          // Server rejected session
+          dbManager.clearLocalWorkspace();
+        }
+      } catch (err) {
+        console.error('Session restoration failed:', err);
+      } finally {
+        setIsRestoringSession(false);
+        triggerRefresh();
+      }
+    };
+
+    restoreSession();
+  }, []);
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -445,6 +495,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dbManager.syncBankTransactions();
       triggerRefresh();
     },
+    isRestoringSession,
     theme,
     toggleTheme
   };

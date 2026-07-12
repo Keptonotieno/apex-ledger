@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { IndexedDBCache } from './indexedDbCache';
+import { SessionManager } from '../utils/SessionManager';
 import { 
   UserRole, UserProfile, Business, Product, Sale, SaleItem,
   Customer, DebtRecord, Expense, Procurement, 
@@ -96,7 +97,6 @@ class ApexDatabaseManager {
 
   constructor() {
     this.initDatabase();
-    this.verifySessionOnStartup();
     this.loadFromIndexedDBCache().then(() => {
       if (isSupabaseConfigured && supabase) {
         this.syncFromSupabase().then(() => {
@@ -114,36 +114,56 @@ class ApexDatabaseManager {
       'tasks', 'events', 'timelogs', 'notifications', 'audits',
       'budgets', 'invoices', 'bank_transactions', 'reconciliations'
     ];
-    for (const key of keys) {
-      try {
-        const cached = await IndexedDBCache.get(key);
-        if (cached && Array.isArray(cached) && cached.length > 0) {
-          localStorage.setItem(`apex_ledger_${key}`, JSON.stringify(cached));
+    try {
+      await Promise.all(keys.map(async (key) => {
+        try {
+          const cached = await IndexedDBCache.get(key);
+          if (cached && Array.isArray(cached) && cached.length > 0) {
+            localStorage.setItem(`apex_ledger_${key}`, JSON.stringify(cached));
+          }
+        } catch (e) {
+          console.error(`[ApexDatabaseManager] Failed to load ${key} from IndexedDB cache:`, e);
         }
-      } catch (e) {
-        console.error(`[ApexDatabaseManager] Failed to load ${key} from IndexedDB cache:`, e);
-      }
+      }));
+    } catch (err) {
+      console.error('[ApexDatabaseManager] Failed to load IndexedDB cache in parallel:', err);
     }
     window.dispatchEvent(new Event('storage'));
     window.dispatchEvent(new Event('apex-db-update'));
   }
 
   async verifySessionOnStartup() {
-    if (this.activeUserId) {
+    const token = SessionManager.getToken();
+    if (token || this.activeUserId) {
       try {
         const res = await fetch('/api/auth/me');
         if (!res.ok) {
           this.clearLocalWorkspace();
           window.dispatchEvent(new Event('storage'));
         } else {
-          // Load fresh workspace state from persistent SQLite database
-          const workspaceRes = await fetch('/api/workspace/load');
-          if (workspaceRes.ok) {
-            const data = await workspaceRes.json();
-            if (data.success && data.workspace) {
-              this.writeWorkspaceToLocalStorage(data.workspace);
-              window.dispatchEvent(new Event('storage'));
+          const data = await res.json();
+          if (data.success && data.user) {
+            this.activeUserId = data.user.id;
+            this.activeBusinessId = data.businessId;
+            localStorage.setItem('apex_ledger_active_user_id', data.user.id);
+            localStorage.setItem('apex_ledger_active_business_id', data.businessId);
+
+            if (data.token) {
+              SessionManager.setToken(data.token);
             }
+
+            // Load fresh workspace state from persistent SQLite database
+            const workspaceRes = await fetch('/api/workspace/load');
+            if (workspaceRes.ok) {
+              const wsData = await workspaceRes.json();
+              if (wsData.success && wsData.workspace) {
+                this.writeWorkspaceToLocalStorage(wsData.workspace);
+                window.dispatchEvent(new Event('storage'));
+              }
+            }
+          } else {
+            this.clearLocalWorkspace();
+            window.dispatchEvent(new Event('storage'));
           }
         }
       } catch (err) {
@@ -268,6 +288,7 @@ class ApexDatabaseManager {
     });
     localStorage.removeItem('apex_ledger_active_business_id');
     localStorage.removeItem('apex_ledger_active_user_id');
+    SessionManager.clearToken();
   }
 
   writeWorkspaceToLocalStorage(workspace: any) {
@@ -448,6 +469,9 @@ class ApexDatabaseManager {
       this.activeBusinessId = data.businessId;
       localStorage.setItem('apex_ledger_active_user_id', data.userId);
       localStorage.setItem('apex_ledger_active_business_id', data.businessId);
+      if (data.token) {
+        SessionManager.setToken(data.token);
+      }
 
       this.addAudit('Logged In', `${data.user.name} (Owner)`, 'N/A', '127.0.0.1');
 
@@ -493,6 +517,9 @@ class ApexDatabaseManager {
         localStorage.setItem('apex_ledger_active_user_id', data.userId);
         localStorage.setItem('apex_ledger_active_business_id', data.businessId);
         localStorage.setItem('apex_ledger_active_branch_id', this.activeBranchId);
+        if (data.token) {
+          SessionManager.setToken(data.token);
+        }
 
         this.addAudit('Employee Logged In', 'N/A', `${found?.name || 'Employee'} (${found?.role || 'Staff'})`);
         window.dispatchEvent(new Event('storage'));
@@ -671,10 +698,13 @@ class ApexDatabaseManager {
       const allProfiles = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
       const idx = allProfiles.findIndex(p => p.id === this.activeUserId);
       if (idx !== -1) {
-        allProfiles[idx].businessId = id;
-        allProfiles[idx].branch = ''; // Reset branch when switching business
-        setLocalItem('profiles', allProfiles);
-        this.syncRowToSupabase('profiles', allProfiles[idx], 'upsert');
+        const profile = allProfiles[idx];
+        if (profile.businessId !== id || profile.branch !== '') {
+          profile.businessId = id;
+          profile.branch = ''; // Reset branch when switching business
+          setLocalItem('profiles', allProfiles);
+          this.syncRowToSupabase('profiles', profile, 'upsert');
+        }
       }
     }
 
@@ -2233,6 +2263,14 @@ class ApexDatabaseManager {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fullName: ownerName, businessName, email, password })
       });
+
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await res.text();
+        console.error('Server returned non-JSON response:', text);
+        throw new Error(`Server returned non-JSON response (${res.status}). Please check server logs.`);
+      }
+
       const data = await res.json();
       if (!res.ok || !data.success) {
         throw new Error(data.error || 'Registration failed');
@@ -2246,6 +2284,9 @@ class ApexDatabaseManager {
       this.activeBusinessId = data.businessId;
       localStorage.setItem('apex_ledger_active_user_id', data.userId);
       localStorage.setItem('apex_ledger_active_business_id', data.businessId);
+      if (data.token) {
+        SessionManager.setToken(data.token);
+      }
 
       this.addAudit('Created User Profile', 'N/A', `${ownerName} (Owner / Admin)`);
       this.addAudit('Logged In (New Tenant)', 'N/A', `${ownerName} (Owner / Admin)`);
