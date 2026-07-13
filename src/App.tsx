@@ -35,6 +35,7 @@ import { SessionManager } from './utils/SessionManager';
 import { dbManager } from './lib/database';
 import { AlertTriangle, Clock, LogOut } from 'lucide-react';
 import { LockScreen } from './components/LockScreen';
+import { SnackbarNotification } from './components/SnackbarNotification';
 
 function DashboardLayout() {
   const { activeView, isLoggedIn, activeUser, logout, activeBusiness, isRestoringSession } = useApp();
@@ -356,6 +357,7 @@ export default function App() {
   return (
     <AppProvider>
       <DashboardLayout />
+      <SnackbarNotification />
     </AppProvider>
   );
 }

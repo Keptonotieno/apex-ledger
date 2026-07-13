@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Terminal, User, Layout, ChevronDown, ChevronUp, Database, Shield, RefreshCw } from 'lucide-react';
+import { Terminal, User, Layout, ChevronDown, ChevronUp, Database, Shield, RefreshCw, AlertOctagon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { apiFetch } from '../utils/api';
 
 export function DevConsole() {
   const { activeView, activeUser, setActiveView, isLoggedIn } = useApp();
@@ -198,6 +199,19 @@ export function DevConsole() {
                           Dump to Console
                         </button>
                       </div>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await apiFetch('/api/debug/trigger-db-error');
+                          } catch (err) {
+                            console.log('Centralized handler caught and displayed the error.');
+                          }
+                        }}
+                        className="w-full flex items-center justify-center gap-1.5 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 py-2 rounded transition-colors border border-rose-500/20 font-bold uppercase tracking-wider text-[10px]"
+                      >
+                        <AlertOctagon size={12} />
+                        Simulate Database Error
+                      </button>
                     </div>
                   </div>
                 )}

@@ -795,6 +795,18 @@ app.post('/api/workspace/save', async (req, res) => {
   }
 });
 
+// Test endpoint to trigger a database exception for verification
+app.get('/api/debug/trigger-db-error', async (req, res) => {
+  try {
+    // Intentionally bad query on non-existent table to trigger SQLite constraint/error
+    await dbAll('SELECT * FROM non_existent_test_table_abc');
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Triggered Debug DB Error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Transaction-safe single employee registration
 app.post('/api/employee/register', async (req, res) => {
   try {
@@ -839,12 +851,17 @@ app.post('/api/employee/register', async (req, res) => {
           });
         }
 
-        const exists = allProfiles.some((p: any) => {
+        // Check for duplicate badge numbers in workspace data profiles
+        const existsInProfiles = allProfiles.some((p: any) => {
           if (p.status === 'Deleted') return false;
           const pNum = p.badgeNumber || p.employeeNumber;
           return pNum && typeof pNum === 'string' && pNum.trim().toUpperCase() === badgeNumber.toUpperCase();
         });
-        if (exists) {
+
+        // AND check for duplicate badge numbers in the SQLite employees index table
+        const existsInDb = await dbGet('SELECT id FROM employees WHERE employee_id = ? AND business_id = ? AND status != "Deleted"', [badgeNumber, session.business_id]);
+
+        if (existsInProfiles || existsInDb) {
           await dbRun('ROLLBACK');
           return res.status(400).json({ 
             success: false, 
@@ -868,14 +885,17 @@ app.post('/api/employee/register', async (req, res) => {
         badgeNumber = `EMP-${String(nextNum).padStart(3, '0')}`;
       }
 
-      // Check for duplicate email in the same business
+      // Check for duplicate email in both the profiles list and the SQLite employees index table
       const formEmailClean = employee.email?.trim().toLowerCase();
       if (formEmailClean) {
-        const emailExists = allProfiles.some((p: any) => {
+        const emailExistsInProfiles = allProfiles.some((p: any) => {
           if (p.status === 'Deleted') return false;
           return p.email && typeof p.email === 'string' && p.email.trim().toLowerCase() === formEmailClean;
         });
-        if (emailExists) {
+
+        const emailExistsInDb = await dbGet('SELECT id FROM employees WHERE email = ? AND business_id = ? AND status != "Deleted"', [formEmailClean, session.business_id]);
+
+        if (emailExistsInProfiles || emailExistsInDb) {
           await dbRun('ROLLBACK');
           return res.status(400).json({
             success: false,
@@ -888,13 +908,15 @@ app.post('/api/employee/register', async (req, res) => {
         ...employee,
         id: 'u_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
         businessId: session.business_id,
+        workspaceId: session.workspace_id || wsObj.id || 'w_work_emulated',
+        branch: employee.branch || 'Main HQ',
         onlineStatus: 'offline',
         status: 'Active',
         badgeNumber,
         employeeNumber: badgeNumber,
         dateJoined: new Date().toISOString().split('T')[0],
         registrationDate: new Date().toISOString(),
-        createdBy: 'Admin/Manager'
+        createdBy: session.role || 'Admin/Manager'
       };
 
       wsObj.profiles.push(newProfile);

@@ -151,6 +151,14 @@ export const EmployeeModule: React.FC = () => {
   const [formBranch, setFormBranch] = useState('Main HQ');
   const [formAvatarUrl, setFormAvatarUrl] = useState<string | null>(null);
   const [formAllowExpenses, setFormAllowExpenses] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [formErrors, setFormErrors] = useState<{
+    name?: string;
+    email?: string;
+    employeeId?: string;
+    password?: string;
+    general?: string;
+  }>({});
 
   // Custom high-fidelity delete confirmation state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -192,6 +200,8 @@ export const EmployeeModule: React.FC = () => {
     setFormAvatarUrl(null);
     setFormAllowExpenses(false);
     setFormEmployeeId(getNextEmployeeId());
+    setFormErrors({});
+    setIsSaving(false);
     setShowAddModal(true);
   };
 
@@ -210,37 +220,65 @@ export const EmployeeModule: React.FC = () => {
     setFormAvatarUrl(p.avatarUrl || null);
     setFormAllowExpenses(p.allowExpenses || false);
     setFormEmployeeId(p.badgeNumber || (p as any).employeeNumber || '');
+    setFormErrors({});
+    setIsSaving(false);
     setShowAddModal(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formName || !formEmail || !formEmployeeId) return;
+    setFormErrors({});
+    setIsSaving(true);
 
-    if (activeUser.role === UserRole.MANAGER && formRole !== UserRole.EMPLOYEE) {
-      alert('Access Denied: Managers can only register or assign Employee roles.');
-      return;
+    const errors: { name?: string; email?: string; employeeId?: string; password?: string; general?: string } = {};
+
+    // 1. Name validation
+    if (!formName.trim()) {
+      errors.name = 'Full name is required.';
+    } else if (formName.trim().length < 2) {
+      errors.name = 'Name must be at least 2 characters long.';
     }
 
-    const employeeIdToSave = formEmployeeId.trim();
+    // 2. Email validation
+    const emailTrimmed = formEmail.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailTrimmed) {
+      errors.email = 'Business email address is required.';
+    } else if (!emailRegex.test(emailTrimmed)) {
+      errors.email = 'Please enter a valid business email address.';
+    }
 
-    // Strict character limit and alphanumeric with hyphens validation
+    // 3. Employee ID validation
+    const employeeIdToSave = formEmployeeId.trim();
     const isAlphanumeric4to10 = /^[a-zA-Z0-9-]{4,10}$/.test(employeeIdToSave);
-    if (!isAlphanumeric4to10) {
-      alert('Validation Error: Employee ID must be alphanumeric (letters, numbers, or dashes) and between 4 and 10 characters long.');
+    if (!employeeIdToSave) {
+      errors.employeeId = 'Employee ID is required.';
+    } else if (!isAlphanumeric4to10) {
+      errors.employeeId = 'Employee ID must be alphanumeric (letters, numbers, or dashes) and between 4 and 10 characters long.';
+    }
+
+    // 4. Password validation (only for Manager or Admin)
+    const isPrivilegedRole = formRole === UserRole.MANAGER || formRole === UserRole.ADMIN;
+    if (isPrivilegedRole && !editingEmployee && (!formPassword || formPassword.length < 6)) {
+      errors.password = 'Secure password is required for corporate login and must be at least 6 characters.';
+    } else if (isPrivilegedRole && editingEmployee && formPassword && formPassword.length < 6) {
+      errors.password = 'Password must be at least 6 characters if specified.';
+    }
+
+    if (activeUser.role === UserRole.MANAGER && formRole !== UserRole.EMPLOYEE) {
+      errors.general = 'Access Denied: Managers can only register or assign Employee roles.';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      setIsSaving(false);
       return;
     }
 
     const employeeIdToSaveUpper = employeeIdToSave.toUpperCase();
 
-    // Strict client-side uniqueness validation globally
-    let allProfiles: any[] = [];
-    try {
-      allProfiles = JSON.parse(localStorage.getItem('apex_ledger_profiles') || '[]');
-    } catch (e) {
-      allProfiles = profiles;
-    }
-    const exists = allProfiles.some(p => {
+    // Check duplicate email & badge ID against all current profiles
+    const exists = profiles.some(p => {
       if (editingEmployee && p.id === editingEmployee.id) return false;
       if (p.status === 'Deleted') return false;
       const pNum = p.badgeNumber || (p as any).employeeNumber;
@@ -248,30 +286,33 @@ export const EmployeeModule: React.FC = () => {
     });
 
     if (exists) {
-      alert(`Validation Error: Employee ID "${employeeIdToSaveUpper}" is already assigned to another profile in the system. Please enter a unique Employee ID.`);
+      setFormErrors({ employeeId: `Employee ID "${employeeIdToSaveUpper}" is already assigned to another profile.` });
+      setIsSaving(false);
       return;
     }
 
-    const emailExists = allProfiles.some(p => {
+    const emailExists = profiles.some(p => {
       if (editingEmployee && p.id === editingEmployee.id) return false;
       if (p.status === 'Deleted') return false;
-      return p.email && typeof p.email === 'string' && p.email.trim().toLowerCase() === formEmail.trim().toLowerCase();
+      return p.email && typeof p.email === 'string' && p.email.trim().toLowerCase() === emailTrimmed.toLowerCase();
     });
 
     if (emailExists) {
-      alert(`Validation Error: Email address "${formEmail}" is already in use by another profile. Please enter a unique business email.`);
+      setFormErrors({ email: `Email address "${emailTrimmed}" is already in use by another profile.` });
+      setIsSaving(false);
       return;
     }
 
     try {
       if (editingEmployee) {
         if (!canModify(editingEmployee)) {
-          alert('Access Denied: You are not authorized to edit this profile.');
+          setFormErrors({ general: 'Access Denied: You are not authorized to edit this profile.' });
+          setIsSaving(false);
           return;
         }
         await updateEmployee(editingEmployee.id, {
-          name: formName,
-          email: formEmail,
+          name: formName.trim(),
+          email: emailTrimmed,
           role: formRole,
           branch: formBranch,
           badgeNumber: employeeIdToSaveUpper,
@@ -279,7 +320,7 @@ export const EmployeeModule: React.FC = () => {
           allowExpenses: formAllowExpenses,
           password: formPassword || undefined
         } as any);
-        alert(`Employee profile: "${formName}" successfully updated!`);
+        
         setShowAddModal(false);
         setEditingEmployee(null);
       } else {
@@ -296,13 +337,14 @@ export const EmployeeModule: React.FC = () => {
         );
 
         if (!fKeyValidation.isValid) {
-          alert(fKeyValidation.error);
+          setFormErrors({ general: fKeyValidation.error });
+          setIsSaving(false);
           return;
         }
 
         const created = await addEmployee({
-          name: formName,
-          email: formEmail,
+          name: formName.trim(),
+          email: emailTrimmed,
           role: formRole,
           branch: formBranch,
           badgeNumber: employeeIdToSaveUpper,
@@ -310,27 +352,34 @@ export const EmployeeModule: React.FC = () => {
           allowExpenses: formAllowExpenses,
           password: formPassword || undefined
         } as any);
+
         setRegistrationSuccess({
-          name: formName,
+          name: formName.trim(),
           badgeNumber: created.badgeNumber || employeeIdToSaveUpper,
           role: created.role,
           branch: created.branch || formBranch
         });
+        
+        setShowAddModal(false);
+        setEditingEmployee(null);
+        setFormName('');
+        setFormEmail('');
+        setFormPassword('');
+        setFormAvatarUrl(null);
+        setFormEmployeeId('');
       }
 
-      setShowAddModal(false);
-      setEditingEmployee(null);
-      setFormName('');
-      setFormEmail('');
-      setFormPassword('');
-      setFormAvatarUrl(null);
-      setFormEmployeeId('');
+      // Automatically refresh the employee registry list instantly in the UI
+      await fetchEmployees();
+      setFormErrors({});
     } catch (err: any) {
-      alert(err.message || 'An error occurred while saving the profile.');
+      setFormErrors({ general: err.message || 'An error occurred while saving the profile.' });
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleToggleSuspend = (p: UserProfile) => {
+  const handleToggleSuspend = async (p: UserProfile) => {
     if (p.id === activeUser.id) {
       alert('You cannot suspend your own active session profile.');
       return;
@@ -342,7 +391,12 @@ export const EmployeeModule: React.FC = () => {
     const isCurrentlySuspended = p.status === 'Suspended';
     const nextStatus = isCurrentlySuspended ? 'Active' : 'Suspended';
     if (confirm(`Are you sure you want to ${isCurrentlySuspended ? 'unsuspend / restore' : 'suspend'} employee ${p.name}?`)) {
-      updateEmployee(p.id, { status: nextStatus });
+      try {
+        await updateEmployee(p.id, { status: nextStatus });
+        await fetchEmployees();
+      } catch (err: any) {
+        alert(err.message || 'Failed to update suspension status.');
+      }
     }
   };
 
@@ -638,6 +692,13 @@ export const EmployeeModule: React.FC = () => {
             </h3>
 
             <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono">
+              {formErrors.general && (
+                <div className="p-3 bg-rose-950/40 border border-rose-500/30 rounded-xl text-rose-400 text-xs font-sans flex items-start gap-2 animate-pulse">
+                  <span className="mt-0.5">⚠</span>
+                  <p>{formErrors.general}</p>
+                </div>
+              )}
+
               {/* Optional Photo Upload */}
               <div className="flex flex-col items-center justify-center p-3.5 bg-gray-950/40 rounded-xl border border-brand-border/60 space-y-2">
                 <div className="relative">
@@ -697,39 +758,73 @@ export const EmployeeModule: React.FC = () => {
                 <label className="text-gray-400 block mb-1 font-sans">Staff Full Name</label>
                 <input
                   type="text"
-                  required
                   placeholder="e.g. John Doe"
                   value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  className="w-full bg-gray-950/60 border border-brand-border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/30 font-sans"
+                  onChange={(e) => {
+                    setFormName(e.target.value);
+                    if (formErrors.name) {
+                      setFormErrors(prev => ({ ...prev, name: undefined }));
+                    }
+                  }}
+                  className={`w-full bg-gray-950/60 border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/30 font-sans transition-all duration-200 ${
+                    formErrors.name ? 'border-rose-500 focus:border-rose-500 bg-rose-950/10' : 'border-brand-border'
+                  }`}
                 />
+                {formErrors.name && (
+                  <p className="text-[10px] text-rose-400 font-sans mt-1.5 flex items-center gap-1.5 animate-in fade-in slide-in-from-top-1">
+                    <span>⚠</span> {formErrors.name}
+                  </p>
+                )}
               </div>
 
               <div>
                 <label className="text-gray-400 block mb-1 font-sans">Employee ID / Number</label>
                 <input
                   type="text"
-                  required
                   placeholder="e.g. EMP-001"
                   value={formEmployeeId}
-                  onChange={(e) => setFormEmployeeId(e.target.value.toUpperCase())}
-                  className="w-full bg-gray-950/60 border border-brand-border rounded-lg p-2.5 text-cyan-400 font-mono font-bold outline-none focus:border-cyan-500/30 uppercase"
+                  onChange={(e) => {
+                    setFormEmployeeId(e.target.value.toUpperCase());
+                    if (formErrors.employeeId) {
+                      setFormErrors(prev => ({ ...prev, employeeId: undefined }));
+                    }
+                  }}
+                  className={`w-full bg-gray-950/60 border rounded-lg p-2.5 text-cyan-400 font-mono font-bold outline-none focus:border-cyan-500/30 uppercase transition-all duration-200 ${
+                    formErrors.employeeId ? 'border-rose-500 focus:border-rose-500 bg-rose-950/10' : 'border-brand-border'
+                  }`}
                 />
-                <p className="text-[10px] text-gray-500 font-sans mt-1">
-                  Must be unique across all corporate profiles. Prefilled with the next available ID.
-                </p>
+                {formErrors.employeeId ? (
+                  <p className="text-[10px] text-rose-400 font-sans mt-1.5 flex items-center gap-1.5 animate-in fade-in slide-in-from-top-1">
+                    <span>⚠</span> {formErrors.employeeId}
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-gray-500 font-sans mt-1">
+                    Must be unique across all corporate profiles. Prefilled with the next available ID.
+                  </p>
+                )}
               </div>
 
               <div>
                 <label className="text-gray-400 block mb-1 font-sans">Business Email Address</label>
                 <input
                   type="email"
-                  required
                   placeholder="john@company.com"
                   value={formEmail}
-                  onChange={(e) => setFormEmail(e.target.value)}
-                  className="w-full bg-gray-950/60 border border-brand-border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/30 font-mono"
+                  onChange={(e) => {
+                    setFormEmail(e.target.value);
+                    if (formErrors.email) {
+                      setFormErrors(prev => ({ ...prev, email: undefined }));
+                    }
+                  }}
+                  className={`w-full bg-gray-950/60 border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/30 font-mono transition-all duration-200 ${
+                    formErrors.email ? 'border-rose-500 focus:border-rose-500 bg-rose-950/10' : 'border-brand-border'
+                  }`}
                 />
+                {formErrors.email && (
+                  <p className="text-[10px] text-rose-400 font-sans mt-1.5 flex items-center gap-1.5 animate-in fade-in slide-in-from-top-1">
+                    <span>⚠</span> {formErrors.email}
+                  </p>
+                )}
               </div>
 
               {(formRole === UserRole.MANAGER || formRole === UserRole.ADMIN) && (
@@ -739,12 +834,23 @@ export const EmployeeModule: React.FC = () => {
                   </label>
                   <input
                     type="password"
-                    required={!editingEmployee}
                     placeholder="••••••••"
                     value={formPassword}
-                    onChange={(e) => setFormPassword(e.target.value)}
-                    className="w-full bg-gray-950/60 border border-brand-border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/30 font-mono"
+                    onChange={(e) => {
+                      setFormPassword(e.target.value);
+                      if (formErrors.password) {
+                        setFormErrors(prev => ({ ...prev, password: undefined }));
+                      }
+                    }}
+                    className={`w-full bg-gray-950/60 border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/30 font-mono transition-all duration-200 ${
+                      formErrors.password ? 'border-rose-500 focus:border-rose-500 bg-rose-950/10' : 'border-brand-border'
+                    }`}
                   />
+                  {formErrors.password && (
+                    <p className="text-[10px] text-rose-400 font-sans mt-1.5 flex items-center gap-1.5 animate-in fade-in slide-in-from-top-1">
+                      <span>⚠</span> {formErrors.password}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -798,9 +904,17 @@ export const EmployeeModule: React.FC = () => {
 
               <button
                 type="submit"
-                className="w-full py-2.5 bg-cyan-500 hover:bg-cyan-400 text-gray-950 font-bold font-sans rounded-xl text-center shadow-lg transition"
+                disabled={isSaving}
+                className="w-full py-2.5 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed text-gray-950 font-bold font-sans rounded-xl text-center shadow-lg transition flex items-center justify-center gap-2 cursor-pointer"
               >
-                {editingEmployee ? 'Apply Profile Updates' : 'Register & Issue Permissions'}
+                {isSaving ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-gray-950 border-t-transparent rounded-full animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <span>{editingEmployee ? 'Apply Profile Updates' : 'Register & Issue Permissions'}</span>
+                )}
               </button>
             </form>
           </div>

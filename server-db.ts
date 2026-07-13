@@ -83,6 +83,14 @@ function pgQuery(sql: string, params: any[] = []): Promise<any> {
 async function initPgDb(): Promise<void> {
   console.log('Initializing PostgreSQL database schema...');
   const tables = [
+    `CREATE TABLE IF NOT EXISTS system_errors (
+      id TEXT PRIMARY KEY,
+      timestamp TEXT NOT NULL,
+      error_message TEXT NOT NULL,
+      error_stack TEXT,
+      sql_statement TEXT,
+      sql_params TEXT
+    )`,
     `CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       full_name TEXT NOT NULL,
@@ -236,6 +244,17 @@ export function initDb(): Promise<void> {
         db.run('PRAGMA temp_store = MEMORY;');
         
         // Create tables
+          db.run(`
+            CREATE TABLE IF NOT EXISTS system_errors (
+              id TEXT PRIMARY KEY,
+              timestamp TEXT NOT NULL,
+              error_message TEXT NOT NULL,
+              error_stack TEXT,
+              sql_statement TEXT,
+              sql_params TEXT
+            )
+          `);
+
           db.run(`
             CREATE TABLE IF NOT EXISTS users (
               id TEXT PRIMARY KEY,
@@ -709,16 +728,83 @@ export async function syncEmployeesFromWorkspace(businessId: string, workspaceDa
   }
 }
 
+// Centralized SQLite/Postgres Exception Logger and Translator
+export async function logSystemError(errorMessage: string, errorStack?: string, sqlStatement?: string, sqlParams?: any[]): Promise<void> {
+  const id = 'err_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+  const timestamp = new Date().toISOString();
+  const paramsStr = sqlParams ? JSON.stringify(sqlParams) : null;
+  
+  if (pgPool) {
+    try {
+      await pgPool.query(
+        'INSERT INTO system_errors (id, timestamp, error_message, error_stack, sql_statement, sql_params) VALUES ($1, $2, $3, $4, $5, $6)',
+        [id, timestamp, errorMessage, errorStack || null, sqlStatement || null, paramsStr]
+      );
+    } catch (err) {
+      console.error('Failed to write to system_errors table in PG:', err);
+    }
+    return;
+  }
+
+  if (db) {
+    db.run(
+      'INSERT INTO system_errors (id, timestamp, error_message, error_stack, sql_statement, sql_params) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, timestamp, errorMessage, errorStack || null, sqlStatement || null, paramsStr],
+      (err) => {
+        if (err) {
+          console.error('Failed to write to system_errors table in SQLite:', err);
+        }
+      }
+    );
+  }
+}
+
+export function translateToUserFriendlyError(err: any): Error {
+  if (!err) return new Error('An unexpected database error occurred. Please try again.');
+  
+  const originalMessage = String(err.message || err);
+  let friendlyMessage = 'An error occurred while processing your database request. The system administrator has been notified.';
+  
+  if (originalMessage.includes('UNIQUE constraint failed')) {
+    if (originalMessage.includes('users.email') || originalMessage.includes('employees.email')) {
+      friendlyMessage = 'This email address is already registered. Please use a different email.';
+    } else if (originalMessage.includes('employees.employee_id')) {
+      friendlyMessage = 'This Employee ID is already assigned. Please use a unique Employee ID.';
+    } else {
+      friendlyMessage = 'A record with this unique identifier already exists.';
+    }
+  } else if (originalMessage.includes('FOREIGN KEY constraint failed')) {
+    friendlyMessage = 'A relationship validation failed. Please ensure all linked records exist.';
+  } else if (originalMessage.includes('NOT NULL constraint failed')) {
+    friendlyMessage = 'Some required fields are missing. Please fill out all required information.';
+  } else if (originalMessage.includes('locked') || originalMessage.includes('busy')) {
+    friendlyMessage = 'The database is currently busy. Please try your request again in a moment.';
+  } else if (originalMessage.includes('no such table')) {
+    friendlyMessage = 'A requested database table was not found. Please contact support.';
+  } else if (originalMessage.includes('no such column')) {
+    friendlyMessage = 'A requested database column was not found. Please contact support.';
+  }
+  
+  const friendlyErr = new Error(friendlyMessage);
+  (friendlyErr as any).originalError = err;
+  return friendlyErr;
+}
+
 // Promisified query wrappers
 export function dbGet(sql: string, params: any[] = []): Promise<any> {
   if (pgPool) {
-    return pgQuery(sql, params).then(res => res.rows[0] || null);
+    return pgQuery(sql, params).then(res => res.rows[0] || null).catch(async (err) => {
+      console.error('PostgreSQL dbGet error:', err, 'SQL:', sql);
+      await logSystemError(err.message, err.stack, sql, params);
+      throw translateToUserFriendlyError(err);
+    });
   }
   return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
+    db.get(sql, params, async (err, row) => {
       if (err) {
         console.error('SQLite dbGet error:', err, 'SQL:', sql);
-        reject(err);
+        await logSystemError(err.message, err.stack, sql, params);
+        reject(translateToUserFriendlyError(err));
       } else {
         resolve(row || null);
       }
@@ -728,13 +814,18 @@ export function dbGet(sql: string, params: any[] = []): Promise<any> {
 
 export function dbAll(sql: string, params: any[] = []): Promise<any[]> {
   if (pgPool) {
-    return pgQuery(sql, params).then(res => res.rows || []);
+    return pgQuery(sql, params).then(res => res.rows || []).catch(async (err) => {
+      console.error('PostgreSQL dbAll error:', err, 'SQL:', sql);
+      await logSystemError(err.message, err.stack, sql, params);
+      throw translateToUserFriendlyError(err);
+    });
   }
   return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
+    db.all(sql, params, async (err, rows) => {
       if (err) {
         console.error('SQLite dbAll error:', err, 'SQL:', sql);
-        reject(err);
+        await logSystemError(err.message, err.stack, sql, params);
+        reject(translateToUserFriendlyError(err));
       } else {
         resolve(rows || []);
       }
@@ -770,17 +861,19 @@ export async function dbRun(sql: string, params: any[] = []): Promise<{ id: numb
         }
       }
       return { id: 0, changes: res.rowCount || 0 };
-    } catch (err) {
+    } catch (err: any) {
       console.error('PostgreSQL dbRun error:', err, 'SQL:', sql);
-      throw err;
+      await logSystemError(err.message, err.stack, sql, params);
+      throw translateToUserFriendlyError(err);
     }
   }
 
   return new Promise((resolve, reject) => {
-    db.run(sql, params, function (err) {
+    db.run(sql, params, async function (err) {
       if (err) {
         console.error('SQLite dbRun error:', err, 'SQL:', sql);
-        reject(err);
+        await logSystemError(err.message, err.stack, sql, params);
+        reject(translateToUserFriendlyError(err));
       } else {
         const cleanSql = sql.replace(/\s+/g, ' ').trim().toLowerCase();
         const isWorkspaceWrite = cleanSql.includes('workspaces') && (cleanSql.includes('insert') || cleanSql.includes('update'));
@@ -800,12 +893,13 @@ export async function dbRun(sql: string, params: any[] = []): Promise<{ id: numb
           }
 
           if (businessId && workspaceData) {
-            syncAllWorkspaceTables(businessId, workspaceData)
-              .then(() => resolve({ id: this.lastID, changes: this.changes }))
-              .catch((syncErr) => {
-                console.error('Auto-sync workspace tables error:', syncErr);
-                resolve({ id: this.lastID, changes: this.changes });
-              });
+            try {
+              await syncAllWorkspaceTables(businessId, workspaceData);
+            } catch (syncErr: any) {
+              console.error('Auto-sync workspace tables error:', syncErr);
+              await logSystemError(syncErr.message, syncErr.stack, 'syncAllWorkspaceTables', [businessId]);
+            }
+            resolve({ id: this.lastID, changes: this.changes });
             return;
           }
         }
