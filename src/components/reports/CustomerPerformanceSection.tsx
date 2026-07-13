@@ -147,8 +147,8 @@ export const CustomerPerformanceSection: React.FC<CustomerPerformanceProps> = ({
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
-                  <XAxis dataKey="name" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                  <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
+                  <XAxis dataKey="name" stroke="#6b7280" fontSize={10} className="font-mono" />
+                  <YAxis stroke="#6b7280" fontSize={10} className="font-mono" />
                   <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }} />
                   <Bar name="Total Spend" dataKey="Spent" fill="#06b6d4" radius={[4, 4, 0, 0]} />
                 </BarChart>

@@ -500,13 +500,25 @@ export const DashboardOverview: React.FC = () => {
     if (auditActivity !== 'All Activities') {
       const act = auditActivity.toLowerCase();
       if (act === 'insert') {
-        result = result.filter(a => a.action.toLowerCase().includes('create') || a.action.toLowerCase().includes('add'));
+        result = result.filter(a => {
+          const actionStr = String(a.action || '').toLowerCase();
+          return actionStr.includes('create') || actionStr.includes('add');
+        });
       } else if (act === 'update') {
-        result = result.filter(a => a.action.toLowerCase().includes('update') || a.action.toLowerCase().includes('edit'));
+        result = result.filter(a => {
+          const actionStr = String(a.action || '').toLowerCase();
+          return actionStr.includes('update') || actionStr.includes('edit');
+        });
       } else if (act === 'delete') {
-        result = result.filter(a => a.action.toLowerCase().includes('delete') || a.action.toLowerCase().includes('shut') || a.action.toLowerCase().includes('remove'));
+        result = result.filter(a => {
+          const actionStr = String(a.action || '').toLowerCase();
+          return actionStr.includes('delete') || actionStr.includes('shut') || actionStr.includes('remove');
+        });
       } else {
-        result = result.filter(a => a.action.toLowerCase().includes(act));
+        result = result.filter(a => {
+          const actionStr = String(a.action || '').toLowerCase();
+          return actionStr.includes(act);
+        });
       }
     }
 
@@ -660,7 +672,7 @@ export const DashboardOverview: React.FC = () => {
     const activeLog = userLogsToday.find(log => log.status === 'Present');
     const isClockedIn = !!activeLog;
 
-    const mySales = sales.filter(s => s.cashierName.toLowerCase() === activeUser.name.toLowerCase() || s.cashierId === activeUser.id);
+    const mySales = sales.filter(s => String(s.cashierName || '').toLowerCase() === String(activeUser.name || '').toLowerCase());
     const mySalesVolume = mySales.reduce((acc, s) => acc + s.netAmount, 0);
     const mySalesCount = mySales.length;
 
@@ -669,7 +681,7 @@ export const DashboardOverview: React.FC = () => {
       .reduce((sum, log) => sum + (log.workHours || 0), 0);
 
     // Dynamic employee recorded expenses
-    const myExpenses = expenses.filter(e => e.recordedBy.toLowerCase() === activeUser.name.toLowerCase());
+    const myExpenses = expenses.filter(e => String(e.recordedBy || '').toLowerCase() === String(activeUser.name || '').toLowerCase());
     const myExpensesVolume = myExpenses.reduce((acc, e) => acc + e.amount, 0);
 
     // Dynamic employee generated net profit (revenue minus Cost of Goods Sold)
@@ -740,7 +752,7 @@ export const DashboardOverview: React.FC = () => {
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-400 font-sans">Employee ID:</span>
                 <span className="text-slate-100 font-mono font-semibold bg-slate-900/60 px-2 py-0.5 rounded border border-slate-800/80 text-cyan-400">
-                  {activeUser.employeeNumber || activeUser.badgeNumber || 'EMP-001'}
+                  {(activeUser as any).employeeNumber || activeUser.badgeNumber || 'EMP-001'}
                 </span>
               </div>
               <div className="flex items-center justify-between text-xs">
@@ -1534,14 +1546,15 @@ export const DashboardOverview: React.FC = () => {
                 </div>
               ) : (
                 filteredAudits.map((log, index) => {
+                  const actionStr = String(log.action || '').toLowerCase();
                   const isRevertible = 
-                    (log.action.toLowerCase().includes('delete') || log.action.toLowerCase().includes('update')) &&
-                    !log.action.toLowerCase().includes('reverted');
+                    (actionStr.includes('delete') || actionStr.includes('update')) &&
+                    !actionStr.includes('reverted');
 
                   const isHighRisk = 
-                    log.action.toLowerCase().includes('delete') || 
-                    log.action.toLowerCase().includes('permanently') ||
-                    log.action.toLowerCase().includes('shut down');
+                    actionStr.includes('delete') || 
+                    actionStr.includes('permanently') ||
+                    actionStr.includes('shut down');
 
                   return (
                     <div 

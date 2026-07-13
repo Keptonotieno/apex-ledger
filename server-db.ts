@@ -11,12 +11,8 @@ const DB_PATH = path.join(process.cwd(), 'apex_ledger.db');
 
 let db: sqlite3.Database;
 
-// Check if PostgreSQL (Cloud SQL / Supabase) environment variables are present
-const isPgConfigured = !!(
-  process.env.DATABASE_URL ||
-  process.env.SQL_CONNECTION_STRING ||
-  (process.env.SQL_HOST && process.env.SQL_USER && process.env.SQL_DB_NAME)
-);
+// Forced SQLite exclusively as per user and prompt guidelines
+const isPgConfigured = false;
 
 let pgPool: pg.Pool | null = null;
 

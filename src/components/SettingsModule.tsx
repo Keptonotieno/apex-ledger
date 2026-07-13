@@ -297,32 +297,25 @@ export const SettingsModule: React.FC = () => {
       return;
     }
     setBackupLoading(true);
-    setTimeout(() => {
-      setBackupLoading(false);
-      
-      // Simulate download
-      const backupData = {
-        businessId: activeBusiness.id,
-        businessName: activeBusiness.name,
-        timestamp: new Date().toISOString(),
-        plan: activePlan,
-        branches: branches,
-        targets: { revenue: targetRevenue, hours: targetHours },
-        productsCount: 12,
-        salesCount: 45
-      };
-
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
+    
+    try {
+      // Trigger download of the real SQLite SQL dump from our secure backend API
       const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `apex_ledger_backup_${activeBusiness.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.json`);
+      downloadAnchor.setAttribute("href", "/api/database/export");
+      downloadAnchor.setAttribute("download", `apex_ledger_backup_${activeBusiness.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.sql`);
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
-
-      addAudit('Created Corporate Database Backup', 'N/A', `Auto-export backup downloaded successfully`);
-      alert('Corporate Backup downloaded successfully as JSON. Keep this file in a secure vault.');
-    }, 1000);
+      
+      addAudit('Created Corporate Database Backup', 'N/A', `SQLite SQL database dump exported successfully`);
+      setTimeout(() => {
+        setBackupLoading(false);
+        alert('SQLite SQL Database Backup exported successfully! Keep this backup file in a secure place.');
+      }, 1000);
+    } catch (err: any) {
+      setBackupLoading(false);
+      alert('Failed to export SQLite database backup: ' + err.message);
+    }
   };
 
   const handleRestoreCheckpoint = (checkpointName: string) => {
@@ -1191,7 +1184,7 @@ export const SettingsModule: React.FC = () => {
                   className="px-3.5 py-1.5 bg-cyan-950 text-cyan-400 hover:bg-cyan-900 border border-cyan-500/30 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 transition disabled:opacity-40 cursor-pointer"
                 >
                   <FileDown className="w-4 h-4" />
-                  <span>{backupLoading ? 'Backing up...' : 'Backup Database'}</span>
+                  <span>{backupLoading ? 'Exporting...' : 'Export SQLite Dump'}</span>
                 </button>
               </div>
 

@@ -476,7 +476,7 @@ export const AdminAnalytics: React.FC = () => {
   });
 
   const uniqueCashiersActive = Array.from(new Set(filteredSales.map(s => s.cashierName))).length;
-  const attendanceRate = timelogs.length > 0 ? (timelogs.filter(t => t.clockInTime).length / (employeesRegistered || 1)) * 100 : 0;
+  const attendanceRate = timelogs.length > 0 ? (timelogs.filter(t => t.clockIn).length / (employeesRegistered || 1)) * 100 : 0;
 
   // --- CHART DATA GENERATION ---
   
@@ -1048,8 +1048,8 @@ export const AdminAnalytics: React.FC = () => {
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
-                        <XAxis dataKey="date" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                        <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
+                        <XAxis dataKey="date" stroke="#6b7280" fontSize={10} className="font-mono" />
+                        <YAxis stroke="#6b7280" fontSize={10} className="font-mono" />
                         <Tooltip 
                           contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '8px' }}
                           labelStyle={{ color: '#9ca3af', fontFamily: 'monospace' }}
@@ -1169,8 +1169,8 @@ export const AdminAnalytics: React.FC = () => {
                   <ResponsiveContainer width="100%" height="90%">
                     <LineChart data={chartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
-                      <XAxis dataKey="date" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                      <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
+                      <XAxis dataKey="date" stroke="#6b7280" fontSize={10} className="font-mono" />
+                      <YAxis stroke="#6b7280" fontSize={10} className="font-mono" />
                       <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b' }} />
                       <Line type="monotone" dataKey="Revenue" stroke="#06b6d4" strokeWidth={3} dot={{ fill: '#06b6d4', r: 3 }} />
                     </LineChart>
@@ -1535,7 +1535,7 @@ export const AdminAnalytics: React.FC = () => {
                   {profiles.map(p => {
                     const volume = topSalesEmployeeObj[p.name] || 0;
                     const orders = filteredSales.filter(s => s.cashierName === p.name).length;
-                    const clockLog = timelogs.find(t => t.employeeName.toLowerCase() === p.name.toLowerCase());
+                    const clockLog = timelogs.find(t => t.userName.toLowerCase() === p.name.toLowerCase());
                     
                     return (
                       <div key={p.id} className="p-4 bg-gray-950/45 border border-brand-border/60 rounded-xl space-y-3.5 flex flex-col justify-between">
@@ -1573,7 +1573,7 @@ export const AdminAnalytics: React.FC = () => {
                           <span>Security ID: {p.id.substring(0,8)}</span>
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3 text-cyan-500" />
-                            Status: {clockLog?.clockInTime ? `Clocked In @ ${clockLog.clockInTime}` : 'Clocked Out'}
+                            Status: {clockLog?.clockIn ? `Clocked In @ ${clockLog.clockIn.split('T')[1]?.slice(0,5) || clockLog.clockIn}` : 'Clocked Out'}
                           </span>
                         </div>
                       </div>

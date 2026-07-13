@@ -376,7 +376,7 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
 
         {/* Standalone Header Logout Button */}
         <button
-          onClick={logout}
+          onClick={() => logout()}
           className="p-2.5 rounded-xl border border-rose-500/20 bg-rose-500/5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 hover:border-rose-500/35 transition flex items-center gap-2 text-xs font-semibold cursor-pointer shrink-0"
           title="Secure Logout"
         >

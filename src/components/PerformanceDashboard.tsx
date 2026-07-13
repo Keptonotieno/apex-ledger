@@ -29,6 +29,15 @@ export interface PerformanceAward {
   reason: string;
   dateAwarded: string;
   awardedBy: string;
+  branchId?: string;
+  salesVolume?: number;
+  completedTasks?: number;
+  hoursWorked?: number;
+  customerRating?: string | number;
+  productivity?: number;
+  inventoryAccuracy?: number;
+  approvedBy?: string;
+  approvedRole?: string;
 }
 
 export const PerformanceDashboard: React.FC = () => {
@@ -827,7 +836,7 @@ export const PerformanceDashboard: React.FC = () => {
       salesCount?: number;
       hoursWorked?: number;
       completedTasks?: number;
-      customerRating?: number;
+      customerRating?: string | number;
       productivity?: number;
       taskCompletionRate?: number;
       inventoryAccuracy?: number;
@@ -838,7 +847,7 @@ export const PerformanceDashboard: React.FC = () => {
       id: `aw-${Date.now()}`,
       businessId: activeBusiness?.id || 'default',
       branchId: employee.branch || 'N Nairobi HQ',
-      workspaceId: activeUser?.workspace_id || (activeUser as any).workspaceId || 'default',
+      workspaceId: (activeUser as any)?.workspace_id || (activeUser as any)?.workspaceId || 'default',
       employeeId: employee.id,
       employeeName: employee.name,
       awardName: newAwardName,
@@ -1861,8 +1870,8 @@ export const PerformanceDashboard: React.FC = () => {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={categoryShareData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
-                    <XAxis dataKey="name" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                    <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
+                    <XAxis dataKey="name" stroke="#6b7280" fontSize={10} className="font-mono" />
+                    <YAxis stroke="#6b7280" fontSize={10} className="font-mono" />
                     <Tooltip 
                       formatter={(value: any) => formatKSh(value)}
                       contentStyle={{ backgroundColor: '#090d16', borderColor: '#1f293d', borderRadius: '12px' }}
@@ -1896,8 +1905,8 @@ export const PerformanceDashboard: React.FC = () => {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
-                  <XAxis dataKey="date" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                  <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
+                  <XAxis dataKey="date" stroke="#6b7280" fontSize={10} className="font-mono" />
+                  <YAxis stroke="#6b7280" fontSize={10} className="font-mono" />
                   <Tooltip 
                     formatter={(value: any) => formatKSh(value)}
                     contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b', borderRadius: '12px' }}

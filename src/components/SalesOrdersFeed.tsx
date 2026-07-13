@@ -20,7 +20,7 @@ export const SalesOrdersFeed: React.FC = () => {
 
   // Edit fields
   const [editCustomerName, setEditCustomerName] = useState('');
-  const [editPaymentMethod, setEditPaymentMethod] = useState('');
+  const [editPaymentMethod, setEditPaymentMethod] = useState<any>('');
 
   const handleOpenEditSale = (sale: any) => {
     setEditingSale(sale);

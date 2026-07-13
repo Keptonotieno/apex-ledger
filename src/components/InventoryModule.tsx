@@ -83,7 +83,7 @@ export const InventoryModule: React.FC = () => {
   const [procNotes, setProcNotes] = useState('');
   const [procMaterialCosts, setProcMaterialCosts] = useState(0);
   const [procPayStatus, setProcPayStatus] = useState<'Unpaid' | 'Paid' | 'Partially Paid'>('Paid');
-  const [procDelStatus, setProcDelStatus] = useState<'Pending' | 'Shipped' | 'Delivered'>('Delivered');
+  const [procDelStatus, setProcDelStatus] = useState<Procurement['deliveryStatus']>('Delivered');
   const [procItems, setProcItems] = useState<{ name: string; quantity: number; unitPrice: number }[]>([]);
   
   const [newItemName, setNewItemName] = useState('');
@@ -100,7 +100,7 @@ export const InventoryModule: React.FC = () => {
   const [editProcNotes, setEditProcNotes] = useState('');
   const [editProcMaterialCosts, setEditProcMaterialCosts] = useState(0);
   const [editProcPayStatus, setEditProcPayStatus] = useState<'Unpaid' | 'Paid' | 'Partially Paid'>('Paid');
-  const [editProcDelStatus, setEditProcDelStatus] = useState<'Pending' | 'Shipped' | 'Delivered'>('Delivered');
+  const [editProcDelStatus, setEditProcDelStatus] = useState<Procurement['deliveryStatus']>('Delivered');
 
   // Retrieve category objects from AppContext
   const { 
@@ -444,12 +444,12 @@ export const InventoryModule: React.FC = () => {
 
     const payload = {
       supplierName: procSupplier.trim(),
+      orderNumber: 'PO-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
       notes: procNotes.trim(),
       materialCosts: Number(procMaterialCosts) || procItems.reduce((acc, curr) => acc + (curr.quantity * curr.unitPrice), 0),
       paymentStatus: procPayStatus,
       deliveryStatus: procDelStatus,
-      items: procItems,
-      date: new Date().toISOString().split('T')[0]
+      items: procItems
     };
 
     addProcurement(payload);

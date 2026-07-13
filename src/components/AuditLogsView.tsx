@@ -8,17 +8,56 @@ export const AuditLogsView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
 
-  const filteredAudits = audits.filter(a => {
-    const matchesSearch = a.userName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          a.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (a.newValue && a.newValue.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesRole = roleFilter === 'All' || a.role === roleFilter;
+  const filteredAudits = (audits || []).filter((a: any) => {
+    if (!a) return false;
+    const userName = String(a.userName || a.userId || 'System');
+    const action = String(a.action || '');
+    const details = String(a.details || a.oldValue || '');
+    const newValue = String(a.newValue || '');
+    
+    const term = String(searchTerm || '').toLowerCase();
+    
+    const matchesSearch = 
+      userName.toLowerCase().includes(term) || 
+      action.toLowerCase().includes(term) ||
+      details.toLowerCase().includes(term) ||
+      newValue.toLowerCase().includes(term);
+      
+    const role = String(a.role || 'Owner / Admin');
+    const matchesRole = roleFilter === 'All' || role === roleFilter;
     return matchesSearch && matchesRole;
   });
 
   const handleExportCSV = () => {
-    // Simulated CSV download triggers
-    alert('Cryptographic Immutable Audit Log compiled. Initiating Secure CSV download...');
+    // Generate simple CSV from local audits data safely
+    try {
+      const headers = ['Date', 'Time', 'User', 'Email', 'Role', 'Action', 'Old Value', 'New Value', 'Device', 'Browser'];
+      const rows = filteredAudits.map((aud: any) => [
+        aud.date || (aud.timestamp ? aud.timestamp.split('T')[0] : ''),
+        aud.time || (aud.timestamp ? aud.timestamp.split('T')[1]?.split('.')[0] : ''),
+        aud.userName || aud.userId || 'System',
+        aud.userEmail || '',
+        aud.role || 'Owner / Admin',
+        aud.action || '',
+        aud.oldValue || 'N/A',
+        aud.newValue || 'N/A',
+        aud.device || 'Cloud Server',
+        aud.browser || 'System Client'
+      ]);
+      
+      const csvContent = "data:text/csv;charset=utf-8," 
+        + [headers.join(','), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(','))].join('\n');
+        
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `apex_ledger_audit_trail_${Date.now()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err: any) {
+      alert('Failed to export CSV: ' + err.message);
+    }
   };
 
   return (
@@ -77,47 +116,57 @@ export const AuditLogsView: React.FC = () => {
               No audit records matching criteria.
             </div>
           ) : (
-            filteredAudits.map((aud, idx) => (
-              <div key={`${aud.id}-${idx}`} className="p-4 hover:bg-gray-900/10 transition space-y-2 text-gray-300">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-                  
-                  {/* Timestamp & User */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-500">[{aud.date} {aud.time}]</span>
-                    <span className="text-cyan-400 font-bold capitalize">{aud.userName}</span>
-                    <span className="text-[10px] text-gray-600">({aud.userEmail})</span>
-                  </div>
+            filteredAudits.map((aud, idx) => {
+              const dateStr = aud.date || ((aud as any).timestamp ? (aud as any).timestamp.split('T')[0] : '');
+              const timeStr = aud.time || ((aud as any).timestamp ? (aud as any).timestamp.split('T')[1]?.split('.')[0] : '');
+              const roleStr = aud.role || 'Owner / Admin';
+              const browserStr = aud.browser || 'System Client';
+              const deviceStr = aud.device || 'Cloud Server';
+              const userEmailStr = aud.userEmail || '';
+              const userNameStr = aud.userName || (aud as any).userId || 'System';
 
-                  {/* Role and terminal tags */}
-                  <div className="flex items-center gap-2 text-[10px]">
-                    <span className="px-1.5 py-0.5 bg-gray-950 border border-brand-border text-gray-400 rounded">
-                      {aud.role.split(' ')[0]}
-                    </span>
-                    <span className="text-gray-600 font-sans">|</span>
-                    <div className="flex items-center gap-1 text-gray-500 font-sans">
-                      <Monitor className="w-3 h-3 text-gray-600" />
-                      <span>{aud.device} ({aud.browser.split(' ')[0]})</span>
+              return (
+                <div key={`${aud.id}-${idx}`} className="p-4 hover:bg-gray-900/10 transition space-y-2 text-gray-300">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                    
+                    {/* Timestamp & User */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500">[{dateStr} {timeStr}]</span>
+                      <span className="text-cyan-400 font-bold capitalize">{userNameStr}</span>
+                      {userEmailStr && <span className="text-[10px] text-gray-600">({userEmailStr})</span>}
                     </div>
+
+                    {/* Role and terminal tags */}
+                    <div className="flex items-center gap-2 text-[10px]">
+                      <span className="px-1.5 py-0.5 bg-gray-950 border border-brand-border text-gray-400 rounded">
+                        {(roleStr || '').split(' ')[0]}
+                      </span>
+                      <span className="text-gray-600 font-sans">|</span>
+                      <div className="flex items-center gap-1 text-gray-500 font-sans">
+                        <Monitor className="w-3 h-3 text-gray-600" />
+                        <span>{deviceStr} ({(browserStr || '').split(' ')[0]})</span>
+                      </div>
+                    </div>
+
                   </div>
 
-                </div>
-
-                {/* Audit Actions Description */}
-                <div className="pl-0 sm:pl-4 text-gray-200">
-                  <span className="text-gray-500">Action logged:</span>{' '}
-                  <span className="font-semibold text-gray-100">{aud.action}</span>
-                </div>
-
-                {/* Metadata differences */}
-                {(aud.oldValue !== 'N/A' || aud.newValue !== 'N/A') && (
-                  <div className="pl-0 sm:pl-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] text-gray-500 bg-gray-950/20 p-2 rounded-lg border border-brand-border/30">
-                    <div className="truncate"><span className="text-gray-600 font-sans">Old context:</span> {aud.oldValue || 'N/A'}</div>
-                    <div className="truncate text-cyan-400/80"><span className="text-gray-600 font-sans">New state:</span> {aud.newValue || 'N/A'}</div>
+                  {/* Audit Actions Description */}
+                  <div className="pl-0 sm:pl-4 text-gray-200">
+                    <span className="text-gray-500">Action logged:</span>{' '}
+                    <span className="font-semibold text-gray-100">{aud.action}</span>
                   </div>
-                )}
 
-              </div>
-            ))
+                  {/* Metadata differences */}
+                  {(aud.oldValue && aud.oldValue !== 'N/A' || aud.newValue && aud.newValue !== 'N/A') && (
+                    <div className="pl-0 sm:pl-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px] text-gray-500 bg-gray-950/20 p-2 rounded-lg border border-brand-border/30">
+                      <div className="truncate"><span className="text-gray-600 font-sans">Old context:</span> {aud.oldValue || 'N/A'}</div>
+                      <div className="truncate text-cyan-400/80"><span className="text-gray-600 font-sans">New state:</span> {aud.newValue || 'N/A'}</div>
+                    </div>
+                  )}
+
+                </div>
+              );
+            })
           )}
         </div>
 

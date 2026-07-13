@@ -102,6 +102,7 @@ interface AppContextType {
   deleteBranch: (branchId: string, cascade?: boolean) => Promise<boolean>;
   revertAction: (auditId: string) => boolean;
   markNotificationsRead: () => void;
+  addNotification: (title: string, message: string, type: Notification['type']) => void;
   connectionStatus: 'Connected' | 'Local Syncing';
   isLoggedIn: boolean;
   isRestoringSession: boolean;
@@ -440,6 +441,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
     markNotificationsRead: () => {
       dbManager.markNotificationsRead();
+      triggerRefresh();
+    },
+    addNotification: (title, message, type) => {
+      dbManager.addNotification(title, message, type);
       triggerRefresh();
     },
     isLoggedIn: dbManager.isLoggedIn(),

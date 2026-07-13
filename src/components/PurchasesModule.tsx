@@ -388,7 +388,7 @@ export function PurchasesModule() {
 
   const handleArchiveSupplier = (sup: Supplier) => {
     if (!isManagerOrOwner) return;
-    const updatedStatus = sup.status === 'Archived' ? 'Active' : 'Archived';
+    const updatedStatus: Supplier['status'] = sup.status === 'Archived' ? 'Active' : 'Archived';
     const updated = suppliers.map(s => s.id === sup.id ? { ...s, status: updatedStatus } : s);
     saveSuppliers(updated);
     addAudit(updatedStatus === 'Archived' ? 'Archived Supplier' : 'Restored Supplier', sup.name, updatedStatus);

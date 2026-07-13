@@ -152,7 +152,7 @@ export const ReportsView: React.FC = () => {
       if (filterEmployeeId !== 'all') {
         const cashierId = (s as any).cashierId || (s as any).cashier_id;
         if (cashierId && cashierId !== filterEmployeeId) return false;
-        if (s.cashierName !== filterEmployeeId && s.cashierEmail !== filterEmployeeId) return false;
+        if (s.cashierName !== filterEmployeeId && (s as any).cashierEmail !== filterEmployeeId) return false;
       }
 
       // Customer Isolation
@@ -225,7 +225,7 @@ export const ReportsView: React.FC = () => {
 
       // Employee
       if (filterEmployeeId !== 'all') {
-        if (a.userName !== filterEmployeeId && a.userId !== filterEmployeeId) return false;
+        if (a.userName !== filterEmployeeId && (a as any).userId !== filterEmployeeId) return false;
       }
 
       return true;
@@ -907,8 +907,8 @@ export const ReportsView: React.FC = () => {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
-                    <XAxis dataKey="name" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                    <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
+                    <XAxis dataKey="name" stroke="#6b7280" fontSize={10} className="font-mono" />
+                    <YAxis stroke="#6b7280" fontSize={10} className="font-mono" />
                     <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }} />
                     <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace' }} />
                     <Area type="monotone" name="Inflow Revenue" dataKey="Revenue" stroke="#06b6d4" strokeWidth={2} fill="url(#colorRev)" />
@@ -1070,8 +1070,8 @@ export const ReportsView: React.FC = () => {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
-                    <XAxis dataKey="name" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                    <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
+                    <XAxis dataKey="name" stroke="#6b7280" fontSize={10} className="font-mono" />
+                    <YAxis stroke="#6b7280" fontSize={10} className="font-mono" />
                     <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }} />
                     <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace' }} />
                     <Bar name="VAT Accrued Collected" dataKey="VAT" fill="#06b6d4" stackId="a" radius={[4, 4, 0, 0]} />
@@ -1120,8 +1120,8 @@ export const ReportsView: React.FC = () => {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
-                    <XAxis dataKey="name" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                    <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
+                    <XAxis dataKey="name" stroke="#6b7280" fontSize={10} className="font-mono" />
+                    <YAxis stroke="#6b7280" fontSize={10} className="font-mono" />
                     <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }} />
                     <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace' }} />
                     <Bar name="Total Drawer Inflow" dataKey="Inflow" fill="#10b981" radius={[4, 4, 0, 0]} />
@@ -1170,8 +1170,8 @@ export const ReportsView: React.FC = () => {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
-                    <XAxis dataKey="name" stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
-                    <YAxis stroke="#6b7280" fontSize={10} fontClassName="font-mono" />
+                    <XAxis dataKey="name" stroke="#6b7280" fontSize={10} className="font-mono" />
+                    <YAxis stroke="#6b7280" fontSize={10} className="font-mono" />
                     <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px' }} />
                     <Line type="monotone" name="Logged System Events" dataKey="Actions" stroke="#0ea5e9" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
                   </LineChart>

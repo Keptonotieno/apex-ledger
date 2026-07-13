@@ -93,6 +93,7 @@ export interface Sale {
   cashierName: string;
   cashierRole: UserRole;
   paymentMethod: 'Cash' | 'Card' | 'Mobile Money' | 'Credit';
+  notes?: string;
 }
 
 export interface Customer {

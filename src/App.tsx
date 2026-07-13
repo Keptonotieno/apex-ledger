@@ -17,6 +17,7 @@ import { CalendarModule } from './components/CalendarModule';
 import { TaskModule } from './components/TaskModule';
 import { EmployeeModule } from './components/EmployeeModule';
 import { AuditLogsView } from './components/AuditLogsView';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { ReportsView } from './components/ReportsView';
 import { SettingsModule } from './components/SettingsModule';
 import { PerformanceDashboard } from './components/PerformanceDashboard';
@@ -260,7 +261,9 @@ function DashboardLayout() {
               transition={{ duration: 0.15 }}
               className="w-full"
             >
-              {renderView()}
+              <ErrorBoundary moduleName={getViewTitle()}>
+                {renderView()}
+              </ErrorBoundary>
             </motion.div>
           </AnimatePresence>
 

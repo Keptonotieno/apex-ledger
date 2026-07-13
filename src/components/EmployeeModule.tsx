@@ -274,7 +274,7 @@ export const EmployeeModule: React.FC = () => {
       } else {
         // Validate multi-tenant foreign key constraints (business_id, workspace_id, branch_id)
         const bId = activeBusiness?.id || '';
-        const wId = activeUser?.workspace_id || (activeUser as any).workspaceId || activeBusiness?.id || 'w_work_demo';
+        const wId = (activeUser as any)?.workspace_id || (activeUser as any)?.workspaceId || activeBusiness?.id || 'w_work_demo';
         
         const fKeyValidation = validateForeignKeyConstraints(
           bId,

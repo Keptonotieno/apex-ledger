@@ -1163,6 +1163,76 @@ app.get('/api/performance/expenses', async (req, res) => {
   }
 });
 
+app.get('/api/database/export', async (req, res) => {
+  try {
+    const session = await getSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, error: 'Unauthorized.' });
+    }
+
+    if (session.role !== 'Owner / Admin') {
+      return res.status(403).json({ success: false, error: 'Forbidden: Only Business Owners can export database backups.' });
+    }
+
+    const businessId = session.business_id;
+
+    // Fetch all related tables filtered by business_id for isolated tenant backup
+    const workspaces = await dbAll('SELECT * FROM workspaces WHERE business_id = ?', [businessId]);
+    const users = await dbAll('SELECT * FROM users WHERE business_id = ?', [businessId]);
+    const employees = await dbAll('SELECT * FROM employees WHERE business_id = ?', [businessId]);
+    const timelogs = await dbAll('SELECT * FROM timelogs WHERE business_id = ?', [businessId]);
+    const sales = await dbAll('SELECT * FROM sales WHERE business_id = ?', [businessId]);
+    const tasks = await dbAll('SELECT * FROM tasks WHERE business_id = ?', [businessId]);
+    const expenses = await dbAll('SELECT * FROM expenses WHERE business_id = ?', [businessId]);
+
+    let dump = `-- APEX LEDGER SYSTEM SECURE SQLITE DUMP\n`;
+    dump += `-- Business ID: ${businessId}\n`;
+    dump += `-- Export Timestamp: ${new Date().toISOString()}\n`;
+    dump += `-- Backup Role: ${session.role}\n`;
+    dump += `-- Strictly Isolated Workspace Data Backup\n\n`;
+    dump += `PRAGMA foreign_keys = OFF;\n`;
+    dump += `BEGIN TRANSACTION;\n\n`;
+
+    const generateInserts = (tableName: string, rows: any[]) => {
+      if (!rows || rows.length === 0) return `-- No records for table ${tableName}\n\n`;
+      let sql = `-- Table: ${tableName}\n`;
+      const cols = Object.keys(rows[0]);
+      
+      rows.forEach(row => {
+        const values = cols.map(col => {
+          const val = row[col];
+          if (val === null || val === undefined) return 'NULL';
+          if (typeof val === 'number') return String(val);
+          if (typeof val === 'boolean') return val ? '1' : '0';
+          return `'${String(val).replace(/'/g, "''")}'`;
+        });
+        sql += `INSERT OR REPLACE INTO ${tableName} (${cols.join(', ')}) VALUES (${values.join(', ')});\n`;
+      });
+      sql += '\n';
+      return sql;
+    };
+
+    dump += generateInserts('workspaces', workspaces);
+    dump += generateInserts('users', users);
+    dump += generateInserts('employees', employees);
+    dump += generateInserts('timelogs', timelogs);
+    dump += generateInserts('sales', sales);
+    dump += generateInserts('tasks', tasks);
+    dump += generateInserts('expenses', expenses);
+
+    dump += `COMMIT;\n`;
+    dump += `PRAGMA foreign_keys = ON;\n`;
+    dump += `-- End of Backup Dump\n`;
+
+    res.setHeader('Content-Type', 'text/plain');
+    res.setHeader('Content-Disposition', `attachment; filename="apex_ledger_backup_${businessId}_${Date.now()}.sql"`);
+    res.send(dump);
+  } catch (err: any) {
+    console.error('Error generating SQLite database export:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Fallback 404 handler for unmatched API routes to prevent returning HTML pages
 app.all('/api/*', (req, res) => {
   res.status(404).json({ success: false, error: `API route not found: ${req.method} ${req.url}` });
