@@ -72,9 +72,9 @@ export const AccountingModule: React.FC = () => {
 
   // Invoice calculations
   const filteredInvoices = invoices.filter(inv => {
-    const matchesSearch = inv.customerName.toLowerCase().includes(invoiceSearch.toLowerCase()) || 
-                          inv.invoiceNumber.toLowerCase().includes(invoiceSearch.toLowerCase()) ||
-                          inv.lineItemDescription.toLowerCase().includes(invoiceSearch.toLowerCase());
+    const matchesSearch = String(inv.customerName || '').toLowerCase().includes(invoiceSearch.toLowerCase()) || 
+                          String(inv.invoiceNumber || '').toLowerCase().includes(invoiceSearch.toLowerCase()) ||
+                          String(inv.lineItemDescription || '').toLowerCase().includes(invoiceSearch.toLowerCase());
     const matchesStatus = invoiceStatusFilter === 'All' || inv.status === invoiceStatusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -142,7 +142,7 @@ export const AccountingModule: React.FC = () => {
       // Find matching invoice by billing amount or description keywords
       const matchInv = invoices.find(inv => 
         inv.status !== 'Paid' && 
-        (inv.billingAmount === txn.amount || txn.description.toLowerCase().includes(inv.customerName.toLowerCase()))
+        (inv.billingAmount === txn.amount || String(txn.description || '').toLowerCase().includes(String(inv.customerName || '').toLowerCase()))
       );
       if (matchInv) {
         updateInvoice(matchInv.id, { status: 'Paid' });

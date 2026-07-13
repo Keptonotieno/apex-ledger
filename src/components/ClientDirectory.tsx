@@ -182,9 +182,9 @@ export const ClientDirectory: React.FC = () => {
   };
 
   const filteredCustomers = customers.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.phone.includes(searchQuery) ||
-      c.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = String(c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      String(c.phone || '').includes(searchQuery) ||
+      String(c.email || '').toLowerCase().includes(searchQuery.toLowerCase());
     
     if (showArchived) {
       return matchesSearch && c.archived === true;

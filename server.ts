@@ -829,13 +829,13 @@ app.post('/api/employee/register', async (req, res) => {
       const allProfiles = wsObj.profiles;
 
       if (badgeNumber) {
-        // Enforce strict character limits and validation on badge numbers (alphanumeric, 4–10 characters)
-        const isAlphanumeric4to10 = /^[a-zA-Z0-9]{4,10}$/.test(badgeNumber);
+        // Enforce strict character limits and validation on badge numbers (alphanumeric with hyphens, 4–10 characters)
+        const isAlphanumeric4to10 = /^[a-zA-Z0-9-]{4,10}$/.test(badgeNumber);
         if (!isAlphanumeric4to10) {
           await dbRun('ROLLBACK');
           return res.status(400).json({
             success: false,
-            error: 'Employee ID (Badge Number) must be alphanumeric and between 4 and 10 characters long.'
+            error: 'Employee ID (Badge Number) must be alphanumeric (letters, numbers, or dashes) and between 4 and 10 characters long.'
           });
         }
 
@@ -866,6 +866,22 @@ app.post('/api/employee/register', async (req, res) => {
           }
         });
         badgeNumber = `EMP-${String(nextNum).padStart(3, '0')}`;
+      }
+
+      // Check for duplicate email in the same business
+      const formEmailClean = employee.email?.trim().toLowerCase();
+      if (formEmailClean) {
+        const emailExists = allProfiles.some((p: any) => {
+          if (p.status === 'Deleted') return false;
+          return p.email && typeof p.email === 'string' && p.email.trim().toLowerCase() === formEmailClean;
+        });
+        if (emailExists) {
+          await dbRun('ROLLBACK');
+          return res.status(400).json({
+            success: false,
+            error: `Email address "${employee.email}" is already in use by another profile in this business.`
+          });
+        }
       }
 
       const newProfile = {

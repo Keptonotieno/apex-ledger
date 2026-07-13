@@ -224,10 +224,10 @@ export const EmployeeModule: React.FC = () => {
 
     const employeeIdToSave = formEmployeeId.trim();
 
-    // Strict character limit and alphanumeric validation
-    const isAlphanumeric4to10 = /^[a-zA-Z0-9]{4,10}$/.test(employeeIdToSave);
+    // Strict character limit and alphanumeric with hyphens validation
+    const isAlphanumeric4to10 = /^[a-zA-Z0-9-]{4,10}$/.test(employeeIdToSave);
     if (!isAlphanumeric4to10) {
-      alert('Validation Error: Employee ID must be alphanumeric (letters and numbers only) and between 4 and 10 characters long.');
+      alert('Validation Error: Employee ID must be alphanumeric (letters, numbers, or dashes) and between 4 and 10 characters long.');
       return;
     }
 
@@ -249,6 +249,17 @@ export const EmployeeModule: React.FC = () => {
 
     if (exists) {
       alert(`Validation Error: Employee ID "${employeeIdToSaveUpper}" is already assigned to another profile in the system. Please enter a unique Employee ID.`);
+      return;
+    }
+
+    const emailExists = allProfiles.some(p => {
+      if (editingEmployee && p.id === editingEmployee.id) return false;
+      if (p.status === 'Deleted') return false;
+      return p.email && typeof p.email === 'string' && p.email.trim().toLowerCase() === formEmail.trim().toLowerCase();
+    });
+
+    if (emailExists) {
+      alert(`Validation Error: Email address "${formEmail}" is already in use by another profile. Please enter a unique business email.`);
       return;
     }
 

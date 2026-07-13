@@ -344,7 +344,10 @@ export const ReportsView: React.FC = () => {
   const auditLogsSummary = useMemo(() => {
     const totalLogs = filteredAudits.length;
     const adminActionCount = filteredAudits.filter(a => a.role === UserRole.ADMIN).length;
-    const criticalAdjustments = filteredAudits.filter(a => a.action.toLowerCase().includes('delete') || a.action.toLowerCase().includes('reject') || a.action.toLowerCase().includes('adjusted')).length;
+    const criticalAdjustments = filteredAudits.filter(a => {
+      const act = String(a?.action || '').toLowerCase();
+      return act.includes('delete') || act.includes('reject') || act.includes('adjusted');
+    }).length;
     const uniqueStaff = new Set(filteredAudits.map(a => a.userName));
 
     return {

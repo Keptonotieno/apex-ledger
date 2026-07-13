@@ -694,7 +694,7 @@ export const DashboardOverview: React.FC = () => {
     // Company financial target progress
     const companyProgressPct = Math.min(100, Math.round((netProfit / (yearlyGoal || 1)) * 100));
 
-    const myTasksList = tasks.filter(t => t.assignedToId === activeUser.id || t.assignedToName.toLowerCase() === activeUser.name.toLowerCase());
+    const myTasksList = tasks.filter(t => t.assignedToId === activeUser.id || String(t.assignedToName || '').toLowerCase() === String(activeUser.name || '').toLowerCase());
     const pendingMyTasks = myTasksList.filter(t => t.status === 'Pending').length;
     const inProgressMyTasks = myTasksList.filter(t => t.status === 'In Progress').length;
 
