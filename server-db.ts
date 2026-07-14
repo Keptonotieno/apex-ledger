@@ -11,8 +11,8 @@ const DB_PATH = path.join(process.cwd(), 'apex_ledger.db');
 
 let db: sqlite3.Database;
 
-// Forced SQLite exclusively as per user and prompt guidelines
-const isPgConfigured = false;
+// Forced SQLite exclusively as per user and prompt guidelines unless PostgreSQL/Supabase is configured in environment
+const isPgConfigured = !!(process.env.DATABASE_URL || process.env.SQL_CONNECTION_STRING);
 
 let pgPool: pg.Pool | null = null;
 
@@ -223,9 +223,18 @@ async function initPgDb(): Promise<void> {
   await runSeedAndMigration();
 }
 
-export function initDb(): Promise<void> {
+export async function initDb(): Promise<void> {
   if (pgPool) {
-    return initPgDb();
+    try {
+      await initPgDb();
+      return;
+    } catch (err) {
+      console.error('CRITICAL: Failed to initialize PostgreSQL database (e.g. auth failure). Falling back to SQLite:', err);
+      try {
+        await pgPool.end();
+      } catch (e) {}
+      pgPool = null;
+    }
   }
 
   return new Promise((resolve, reject) => {

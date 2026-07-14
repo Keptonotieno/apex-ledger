@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { IndexedDBCache } from './indexedDbCache';
+import { verifySupabaseConnection as runSupabaseConnectionCheck } from './supabase-checker';
 import { SessionManager } from '../utils/SessionManager';
 import { apiFetch } from '../utils/api';
 import { 
@@ -10,8 +11,9 @@ import {
 } from '../types';
 
 // Supabase client lazy initialization
-const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '';
+const rawSupabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || '';
+const supabaseUrl = rawSupabaseUrl.replace(/\/rest\/v1\/?$/, '').trim();
+const supabaseAnonKey = ((import.meta as any).env.VITE_SUPABASE_ANON_KEY || '').trim();
 
 export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
 
@@ -95,16 +97,63 @@ class ApexDatabaseManager {
   private activeUserId: string = localStorage.getItem('apex_ledger_active_user_id') || '';
   private activeBranchId: string = localStorage.getItem('apex_ledger_active_branch_id') || 'all';
   private realtimeChannel: any = null;
+  private supabaseSchemaInitialized: boolean = true;
+  private verificationRetryTimer: any = null;
 
   constructor() {
     this.initDatabase();
     this.loadFromIndexedDBCache().then(() => {
       if (isSupabaseConfigured && supabase) {
-        this.syncFromSupabase().then(() => {
-          this.subscribeRealtime();
-        });
+        this.verifyAndSyncWithRetry();
       }
     });
+  }
+
+  /**
+   * Periodically checks database connectivity and schema provisioning.
+   * Triggers initial sync and cache refreshing immediately when successful.
+   */
+  async verifyAndSyncWithRetry() {
+    if (this.verificationRetryTimer) {
+      clearTimeout(this.verificationRetryTimer);
+      this.verificationRetryTimer = null;
+    }
+
+    try {
+      const check = await this.verifySupabaseConnection();
+      
+      if (check.success) {
+        console.log('[ApexDatabaseManager] Supabase connection verified successfully. Initializing sync and refreshing local caches...');
+        this.supabaseSchemaInitialized = true;
+        await this.syncFromSupabase();
+        this.subscribeRealtime();
+      } else {
+        this.supabaseSchemaInitialized = false;
+        console.warn(
+          `[ApexDatabaseManager] Supabase verification returned failure: ${check.error || 'Unknown error'}. ` +
+          `Graceful fallback to offline-first local/IndexedDB storage active. Retrying check in 10 seconds...`
+        );
+        this.verificationRetryTimer = setTimeout(() => {
+          this.verifyAndSyncWithRetry();
+        }, 10000);
+      }
+    } catch (err) {
+      console.error('[ApexDatabaseManager] Error in verifyAndSyncWithRetry:', err);
+      this.supabaseSchemaInitialized = false;
+      this.verificationRetryTimer = setTimeout(() => {
+        this.verifyAndSyncWithRetry();
+      }, 10000);
+    }
+  }
+
+  /**
+   * Robust function to check connection stability and verify if the Supabase client
+   * can correctly reach the database.
+   */
+  async verifySupabaseConnection(): Promise<{ success: boolean; error?: string; code?: string }> {
+    const check = await runSupabaseConnectionCheck(supabase, isSupabaseConfigured);
+    this.supabaseSchemaInitialized = check.success;
+    return check;
   }
 
   async loadFromIndexedDBCache() {
@@ -174,7 +223,7 @@ class ApexDatabaseManager {
   }
 
   async syncFromSupabase() {
-    if (!isSupabaseConfigured || !supabase) return;
+    if (!isSupabaseConfigured || !supabase || !this.supabaseSchemaInitialized) return;
     try {
       console.log('[ApexDatabaseManager] Syncing database from Supabase and updating IndexedDB cache...');
       
@@ -184,7 +233,11 @@ class ApexDatabaseManager {
         setLocalItem('businesses', camelBData);
         await IndexedDBCache.set('businesses', camelBData);
       } else if (bErr) {
-        console.warn('[ApexDatabaseManager] Businesses query failed, falling back to cache:', bErr);
+        if (bErr.code === 'PGRST205') {
+          console.log("[ApexDatabaseManager] Table 'businesses' is not yet present in Supabase's schema cache (PGRST205). The offline-first local/cached fallback storage is active and functioning correctly.");
+        } else {
+          console.warn('[ApexDatabaseManager] Businesses query failed, falling back to cache:', bErr);
+        }
         const cached = await IndexedDBCache.get('businesses');
         if (cached) setLocalItem('businesses', cached);
       }
@@ -195,7 +248,11 @@ class ApexDatabaseManager {
         setLocalItem('profiles', camelPData);
         await IndexedDBCache.set('profiles', camelPData);
       } else if (pErr) {
-        console.warn('[ApexDatabaseManager] Profiles query failed, falling back to cache:', pErr);
+        if (pErr.code === 'PGRST205') {
+          console.log("[ApexDatabaseManager] Table 'profiles' is not yet present in Supabase's schema cache (PGRST205). The offline-first local/cached fallback storage is active and functioning correctly.");
+        } else {
+          console.warn('[ApexDatabaseManager] Profiles query failed, falling back to cache:', pErr);
+        }
         const cached = await IndexedDBCache.get('profiles');
         if (cached) setLocalItem('profiles', cached);
       }
@@ -206,7 +263,11 @@ class ApexDatabaseManager {
         setLocalItem('products', camelProdData);
         await IndexedDBCache.set('products', camelProdData);
       } else if (prodErr) {
-        console.warn('[ApexDatabaseManager] Products query failed, falling back to cache:', prodErr);
+        if (prodErr.code === 'PGRST205') {
+          console.log("[ApexDatabaseManager] Table 'products' is not yet present in Supabase's schema cache (PGRST205). The offline-first local/cached fallback storage is active and functioning correctly.");
+        } else {
+          console.warn('[ApexDatabaseManager] Products query failed, falling back to cache:', prodErr);
+        }
         const cached = await IndexedDBCache.get('products');
         if (cached) setLocalItem('products', cached);
       }
@@ -217,7 +278,11 @@ class ApexDatabaseManager {
         setLocalItem('sales', camelSData);
         await IndexedDBCache.set('sales', camelSData);
       } else if (sErr) {
-        console.warn('[ApexDatabaseManager] Sales query failed, falling back to cache:', sErr);
+        if (sErr.code === 'PGRST205') {
+          console.log("[ApexDatabaseManager] Table 'sales' is not yet present in Supabase's schema cache (PGRST205). The offline-first local/cached fallback storage is active and functioning correctly.");
+        } else {
+          console.warn('[ApexDatabaseManager] Sales query failed, falling back to cache:', sErr);
+        }
         const cached = await IndexedDBCache.get('sales');
         if (cached) setLocalItem('sales', cached);
       }
@@ -243,7 +308,11 @@ class ApexDatabaseManager {
             setLocalItem(t.localKey, camelData);
             await IndexedDBCache.set(t.localKey, camelData);
           } else if (error) {
-            console.warn(`[ApexDatabaseManager] Query for table ${t.dbName} failed, falling back to cache:`, error);
+            if (error.code === 'PGRST205') {
+              console.log(`[ApexDatabaseManager] Table '${t.dbName}' is not yet present in Supabase's schema cache (PGRST205). The offline-first local/cached fallback storage is active and functioning correctly.`);
+            } else {
+              console.warn(`[ApexDatabaseManager] Query for table ${t.dbName} failed, falling back to cache:`, error);
+            }
             const cached = await IndexedDBCache.get(t.localKey);
             if (cached) setLocalItem(t.localKey, cached);
           }
@@ -390,7 +459,7 @@ class ApexDatabaseManager {
       console.error('[ApexDatabaseManager] Failed to cache row write to IndexedDB:', cacheErr);
     }
 
-    if (!isSupabaseConfigured || !supabase) return;
+    if (!isSupabaseConfigured || !supabase || !this.supabaseSchemaInitialized) return;
     try {
       // Create schema table map overrides if needed, or defaults to the same name
       const snakeRow = keysToSnake(row);
@@ -405,7 +474,7 @@ class ApexDatabaseManager {
   }
 
   subscribeRealtime() {
-    if (!isSupabaseConfigured || !supabase) return;
+    if (!isSupabaseConfigured || !supabase || !this.supabaseSchemaInitialized) return;
     if (this.realtimeChannel) {
       try {
         supabase.removeChannel(this.realtimeChannel);
@@ -2830,6 +2899,313 @@ CREATE TABLE branches (
 ALTER TABLE branches ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tenant_isolation_branches ON branches
+  FOR ALL USING (business_id IN (
+    SELECT business_id FROM profiles WHERE id = auth.uid()
+  ));
+
+-- 11. Notifications Table
+CREATE TABLE notifications (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+  title VARCHAR(255) NOT NULL,
+  message TEXT NOT NULL,
+  type VARCHAR(50) NOT NULL DEFAULT 'info',
+  date DATE DEFAULT CURRENT_DATE,
+  read BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation_notifications ON notifications
+  FOR ALL USING (business_id IN (
+    SELECT business_id FROM profiles WHERE id = auth.uid()
+  ));
+
+-- 12. Customers Table
+CREATE TABLE customers (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+  name VARCHAR(255) NOT NULL,
+  phone VARCHAR(50),
+  email VARCHAR(255),
+  address TEXT,
+  notes TEXT,
+  purchase_history_count INTEGER DEFAULT 0,
+  total_spent NUMERIC(15,2) DEFAULT 0.00,
+  debt_amount NUMERIC(15,2) DEFAULT 0.00,
+  branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
+  archived BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation_customers ON customers
+  FOR ALL USING (business_id IN (
+    SELECT business_id FROM profiles WHERE id = auth.uid()
+  ));
+
+-- 13. Debts Table
+CREATE TABLE debts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+  customer_id UUID REFERENCES customers(id) ON DELETE CASCADE,
+  customer_name VARCHAR(255) NOT NULL,
+  type VARCHAR(100) NOT NULL,
+  outstanding_amount NUMERIC(15,2) NOT NULL DEFAULT 0.00,
+  paid_amount NUMERIC(15,2) NOT NULL DEFAULT 0.00,
+  remaining_balance NUMERIC(15,2) NOT NULL DEFAULT 0.00,
+  due_date DATE,
+  status VARCHAR(50) NOT NULL DEFAULT 'Unpaid',
+  payment_history JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE debts ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation_debts ON debts
+  FOR ALL USING (business_id IN (
+    SELECT business_id FROM profiles WHERE id = auth.uid()
+  ));
+
+-- 14. Expenses Table
+CREATE TABLE expenses (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+  category VARCHAR(100) NOT NULL,
+  description TEXT,
+  amount NUMERIC(15,2) NOT NULL,
+  date DATE DEFAULT CURRENT_DATE,
+  recorded_by VARCHAR(255) NOT NULL,
+  role VARCHAR(100) NOT NULL,
+  vendor_name VARCHAR(255),
+  department VARCHAR(100),
+  payment_method VARCHAR(100),
+  receipt_number VARCHAR(100),
+  invoice_number VARCHAR(100),
+  tax_amount NUMERIC(15,2) DEFAULT 0.00,
+  tax_inclusive BOOLEAN DEFAULT false,
+  project VARCHAR(255),
+  employee_responsible VARCHAR(255),
+  approval_required BOOLEAN DEFAULT false,
+  status VARCHAR(50) DEFAULT 'Approved',
+  approval_history JSONB DEFAULT '[]'::jsonb,
+  receipt_url TEXT,
+  branch VARCHAR(255),
+  notes TEXT,
+  attachments JSONB DEFAULT '[]'::jsonb,
+  recurring JSONB DEFAULT '{"isRecurring": false}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation_expenses ON expenses
+  FOR ALL USING (business_id IN (
+    SELECT business_id FROM profiles WHERE id = auth.uid()
+  ));
+
+-- 15. Procurements Table
+CREATE TABLE procurements (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+  supplier_name VARCHAR(255) NOT NULL,
+  order_number VARCHAR(100) NOT NULL,
+  material_costs NUMERIC(15,2) NOT NULL DEFAULT 0.00,
+  notes TEXT,
+  delivery_status VARCHAR(50) DEFAULT 'Pending',
+  payment_status VARCHAR(50) DEFAULT 'Unpaid',
+  date DATE DEFAULT CURRENT_DATE,
+  items JSONB DEFAULT '[]'::jsonb,
+  status VARCHAR(50) DEFAULT 'Submitted',
+  expected_delivery_date DATE,
+  employee_name VARCHAR(255),
+  employee_id VARCHAR(100),
+  internal_notes TEXT,
+  supplier_contact_name VARCHAR(255),
+  supplier_email VARCHAR(255),
+  supplier_phone VARCHAR(50),
+  payment_terms VARCHAR(255),
+  priority_level VARCHAR(50) DEFAULT 'Medium',
+  product_id UUID REFERENCES products(id) ON DELETE SET NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE procurements ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation_procurements ON procurements
+  FOR ALL USING (business_id IN (
+    SELECT business_id FROM profiles WHERE id = auth.uid()
+  ));
+
+-- 16. Tasks Table
+CREATE TABLE tasks (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+  due_date DATE,
+  assigned_to_name VARCHAR(255),
+  assigned_to_id VARCHAR(100),
+  status VARCHAR(50) NOT NULL DEFAULT 'Pending',
+  created_by VARCHAR(255),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation_tasks ON tasks
+  FOR ALL USING (business_id IN (
+    SELECT business_id FROM profiles WHERE id = auth.uid()
+  ));
+
+-- 17. Calendar Events Table
+CREATE TABLE events (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+  title VARCHAR(255) NOT NULL,
+  type VARCHAR(100) NOT NULL,
+  date DATE DEFAULT CURRENT_DATE,
+  description TEXT,
+  created_by VARCHAR(255),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation_events ON events
+  FOR ALL USING (business_id IN (
+    SELECT business_id FROM profiles WHERE id = auth.uid()
+  ));
+
+-- 18. Timelogs Table
+CREATE TABLE timelogs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+  user_id VARCHAR(100) NOT NULL,
+  user_name VARCHAR(255) NOT NULL,
+  role VARCHAR(100) NOT NULL,
+  clock_in TIMESTAMP WITH TIME ZONE NOT NULL,
+  clock_out TIMESTAMP WITH TIME ZONE,
+  work_hours NUMERIC(10,2),
+  date DATE DEFAULT CURRENT_DATE,
+  status VARCHAR(50) NOT NULL DEFAULT 'Present',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE timelogs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation_timelogs ON timelogs
+  FOR ALL USING (business_id IN (
+    SELECT business_id FROM profiles WHERE id = auth.uid()
+  ));
+
+-- 19. Audits Table
+CREATE TABLE audits (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+  user_id VARCHAR(100),
+  email VARCHAR(255),
+  name VARCHAR(255),
+  role VARCHAR(100),
+  action VARCHAR(255) NOT NULL,
+  old_value TEXT,
+  new_value TEXT,
+  date DATE DEFAULT CURRENT_DATE,
+  time TIME DEFAULT CURRENT_TIME,
+  ip_address VARCHAR(50),
+  device VARCHAR(255),
+  browser VARCHAR(255),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE audits ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation_audits ON audits
+  FOR ALL USING (business_id IN (
+    SELECT business_id FROM profiles WHERE id = auth.uid()
+  ));
+
+-- 20. Budgets Table
+CREATE TABLE budgets (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+  category VARCHAR(100) NOT NULL,
+  spending_limit NUMERIC(15,2) NOT NULL DEFAULT 0.00,
+  amount_spent NUMERIC(15,2) NOT NULL DEFAULT 0.00,
+  remaining_balance NUMERIC(15,2) NOT NULL DEFAULT 0.00,
+  percentage_used NUMERIC(5,2) NOT NULL DEFAULT 0.00,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE budgets ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation_budgets ON budgets
+  FOR ALL USING (business_id IN (
+    SELECT business_id FROM profiles WHERE id = auth.uid()
+  ));
+
+-- 21. Invoices Table
+CREATE TABLE invoices (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+  invoice_number VARCHAR(100) NOT NULL,
+  customer_name VARCHAR(255) NOT NULL,
+  billing_amount NUMERIC(15,2) NOT NULL DEFAULT 0.00,
+  line_item_description TEXT NOT NULL,
+  due_date_offset INTEGER DEFAULT 0,
+  due_date DATE NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'Draft',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation_invoices ON invoices
+  FOR ALL USING (business_id IN (
+    SELECT business_id FROM profiles WHERE id = auth.uid()
+  ));
+
+-- 22. Bank Transactions Table
+CREATE TABLE bank_transactions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+  amount NUMERIC(15,2) NOT NULL,
+  date DATE NOT NULL,
+  reference VARCHAR(255) NOT NULL,
+  source VARCHAR(255) NOT NULL,
+  description TEXT,
+  category_suggestion VARCHAR(100),
+  status VARCHAR(50) NOT NULL DEFAULT 'Pending',
+  reconciliation_id UUID,
+  reconciled_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE bank_transactions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation_bank_transactions ON bank_transactions
+  FOR ALL USING (business_id IN (
+    SELECT business_id FROM profiles WHERE id = auth.uid()
+  ));
+
+-- 23. Reconciliations Table
+CREATE TABLE reconciliations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+  amount NUMERIC(15,2) NOT NULL,
+  payment_reference VARCHAR(255) NOT NULL,
+  category VARCHAR(100) NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'Reconciled',
+  timestamp TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE reconciliations ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation_reconciliations ON reconciliations
   FOR ALL USING (business_id IN (
     SELECT business_id FROM profiles WHERE id = auth.uid()
   ));

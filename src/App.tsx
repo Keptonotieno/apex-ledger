@@ -39,7 +39,23 @@ import { SnackbarNotification } from './components/SnackbarNotification';
 
 function DashboardLayout() {
   const { activeView, isLoggedIn, activeUser, logout, activeBusiness, isRestoringSession } = useApp();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 1024;
+    }
+    return true;
+  });
+
+  React.useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1024) {
+        setSidebarCollapsed(true);
+      }
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [showWarning, setShowWarning] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(60);
   const [isLocked, setIsLocked] = useState<boolean>(() => {

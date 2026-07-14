@@ -947,7 +947,7 @@ export function PurchasesModule() {
                 <span className="text-[11px] text-cyan-400 font-mono font-bold bg-cyan-950/50 border border-cyan-500/30 px-2.5 py-1 rounded-lg">KSh</span>
               </div>
               <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <BarChart data={monthlySpendingData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" opacity={0.5} />
                     <XAxis dataKey="month" stroke="#9ca3af" fontSize={10} tickLine={false} />
@@ -973,7 +973,7 @@ export function PurchasesModule() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 items-center gap-4">
                 <div className="h-56">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <PieChart>
                       <Pie
                         data={spendingBySupplierData.length > 0 ? spendingBySupplierData : [{ name: 'No spending', value: 1 }]}
@@ -1020,7 +1020,7 @@ export function PurchasesModule() {
                 </div>
               </div>
               <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <AreaChart data={purchaseTrendData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorOrders" x1="0" y1="0" x2="0" y2="1">
@@ -1050,7 +1050,7 @@ export function PurchasesModule() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 items-center gap-4">
                 <div className="h-56">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <PieChart>
                       <Pie
                         data={spendingByCategoryData.length > 0 ? spendingByCategoryData : [{ name: 'No categories', value: 1 }]}

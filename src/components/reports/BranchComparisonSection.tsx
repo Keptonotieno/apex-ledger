@@ -155,7 +155,7 @@ export const BranchComparisonSection: React.FC<BranchComparisonProps> = ({
           </div>
 
           <div className="h-[280px] w-full bg-gray-950/20 p-2 rounded-xl border border-brand-border/40">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <BarChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
                 <XAxis dataKey="name" stroke="#6b7280" fontSize={10} className="font-mono" />
@@ -212,7 +212,7 @@ export const BranchComparisonSection: React.FC<BranchComparisonProps> = ({
 
       {/* Comparison table breakdown */}
       <div className="p-6 pt-0 font-mono text-[11px]">
-        <div className="border border-brand-border rounded-xl overflow-hidden">
+        <div className="border border-brand-border rounded-xl overflow-hidden overflow-x-auto">
           <table className="w-full text-left border-collapse text-gray-300">
             <thead>
               <tr className="bg-gray-950 text-gray-400 border-b border-brand-border text-[9px] uppercase tracking-wider">

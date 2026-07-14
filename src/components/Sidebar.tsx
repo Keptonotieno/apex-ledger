@@ -98,11 +98,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
   };
 
   return (
-    <aside 
-      className={`glass-panel h-screen border-r border-brand-border flex flex-col transition-all duration-300 z-30 sticky top-0 print:hidden ${
-        collapsed ? 'w-20' : 'w-72'
-      }`}
-    >
+    <>
+      {/* Backdrop overlay for narrow viewports when sidebar is open */}
+      {!collapsed && (
+        <div 
+          className="fixed inset-0 bg-brand-dark/80 backdrop-blur-sm z-[40] md:hidden transition-all duration-300"
+          onClick={() => setCollapsed(true)}
+          id="sidebar-mobile-backdrop"
+        />
+      )}
+      
+      <aside 
+        className={`glass-panel h-screen border-r border-brand-border flex flex-col transition-all duration-300 z-[45] fixed md:sticky top-0 left-0 print:hidden ${
+          collapsed 
+            ? 'w-0 -translate-x-full md:w-20 md:translate-x-0' 
+            : 'w-72 translate-x-0'
+        }`}
+      >
       {/* Brand Logo & Name */}
       <div className="p-5 flex items-center justify-between border-b border-brand-border">
         {!collapsed && (
@@ -350,5 +362,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
         )}
       </div>
     </aside>
+  </>
   );
 };

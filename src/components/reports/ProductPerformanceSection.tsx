@@ -190,7 +190,7 @@ export const ProductPerformanceSection: React.FC<ProductPerformanceProps> = ({
           <div className="lg:col-span-2 space-y-4">
             <div className="h-[260px] w-full bg-gray-950/20 p-2 rounded-xl border border-brand-border/40">
               {topChartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <BarChart data={topChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
                     <XAxis dataKey="name" stroke="#6b7280" fontSize={10} className="font-mono" />

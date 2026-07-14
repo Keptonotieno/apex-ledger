@@ -1830,7 +1830,7 @@ export const PerformanceDashboard: React.FC = () => {
                 ) : teamContributionData.every(c => c.value === 0) ? (
                   <p className="text-xs text-gray-500">Zero active sales contribution recorded.</p>
                 ) : (
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <PieChart>
                       <Pie
                         data={teamContributionData}
@@ -1867,7 +1867,7 @@ export const PerformanceDashboard: React.FC = () => {
               </div>
 
               <div className="flex-1 w-full min-h-0 flex items-center justify-center my-4">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <BarChart data={categoryShareData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
                     <XAxis dataKey="name" stroke="#6b7280" fontSize={10} className="font-mono" />
@@ -1896,7 +1896,7 @@ export const PerformanceDashboard: React.FC = () => {
             </div>
 
             <div className="flex-1 w-full min-h-0 py-4">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <AreaChart data={trendLineData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorRevenueBI" x1="0" y1="0" x2="0" y2="1">

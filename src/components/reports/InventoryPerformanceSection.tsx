@@ -136,7 +136,7 @@ export const InventoryPerformanceSection: React.FC<InventoryPerformanceProps> = 
 
           <div className="h-[250px] w-full bg-gray-950/20 p-2 rounded-xl border border-brand-border/40 flex items-center justify-center">
             {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <PieChart>
                   <Pie
                     data={chartData}
@@ -208,7 +208,7 @@ export const InventoryPerformanceSection: React.FC<InventoryPerformanceProps> = 
           <h4 className="text-xs font-semibold text-gray-200 font-sans">Inventory Movement & Audit Adjustments Log</h4>
         </div>
 
-        <div className="border border-brand-border rounded-xl overflow-hidden">
+        <div className="border border-brand-border rounded-xl overflow-hidden overflow-x-auto">
           <table className="w-full text-left border-collapse text-gray-300">
             <thead>
               <tr className="bg-gray-950 text-gray-400 border-b border-brand-border text-[9px] uppercase tracking-wider">

@@ -373,7 +373,7 @@ export const InventoryDashboardStats: React.FC<InventoryDashboardStatsProps> = (
               <div className="h-44 flex items-center justify-center text-gray-500 text-xs">No active category valuation available.</div>
             ) : (
               <div className="h-44 flex items-center justify-center">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <PieChart>
                     <Pie
                       data={stats.categoryDistData}

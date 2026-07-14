@@ -897,7 +897,7 @@ export const ReportsView: React.FC = () => {
               </div>
 
               <div className="h-[280px] w-full bg-gray-950/20 p-2 rounded-xl border border-brand-border/40">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
@@ -1005,7 +1005,7 @@ export const ReportsView: React.FC = () => {
 
               <div className="h-[220px] w-full flex items-center justify-center">
                 {filteredExpenses.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <PieChart>
                       <Pie
                         data={Object.entries(
@@ -1070,7 +1070,7 @@ export const ReportsView: React.FC = () => {
               </div>
 
               <div className="h-[250px] w-full bg-gray-950/20 p-2 rounded-xl border border-brand-border/40">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
                     <XAxis dataKey="name" stroke="#6b7280" fontSize={10} className="font-mono" />
@@ -1120,7 +1120,7 @@ export const ReportsView: React.FC = () => {
               </div>
 
               <div className="h-[250px] w-full bg-gray-950/20 p-2 rounded-xl border border-brand-border/40">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
                     <XAxis dataKey="name" stroke="#6b7280" fontSize={10} className="font-mono" />
@@ -1170,7 +1170,7 @@ export const ReportsView: React.FC = () => {
               </div>
 
               <div className="h-[250px] w-full bg-gray-950/20 p-2 rounded-xl border border-brand-border/40">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
                     <XAxis dataKey="name" stroke="#6b7280" fontSize={10} className="font-mono" />

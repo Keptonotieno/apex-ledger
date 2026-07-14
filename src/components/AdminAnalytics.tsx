@@ -652,7 +652,8 @@ export const AdminAnalytics: React.FC = () => {
             </div>
 
             {/* Main stats matrix table */}
-            <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-x-auto border border-brand-border/40 rounded-xl">
+              <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b-2 border-black font-sans uppercase font-bold bg-gray-100">
                   <th className="p-2">Financial Index KPI</th>
@@ -686,9 +687,10 @@ export const AdminAnalytics: React.FC = () => {
                 </tr>
               </tbody>
             </table>
+          </div>
 
             {/* Asset and Liability table */}
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <h4 className="text-xs font-bold uppercase font-sans border-b border-gray-300 pb-1">Asset Value Holdings</h4>
                 <table className="w-full text-xs text-left">
@@ -738,10 +740,9 @@ export const AdminAnalytics: React.FC = () => {
               </div>
             </div>
 
-            {/* Performance tables */}
             <div className="space-y-3">
               <h3 className="text-sm font-bold uppercase font-sans border-b border-gray-300 pb-1">II. OPERATIONAL LEADERBOARDS</h3>
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <span className="text-xs font-bold text-gray-700 block mb-1">Top Spending Customers</span>
                   <table className="w-full text-[11px] border-collapse">
@@ -1035,7 +1036,7 @@ export const AdminAnalytics: React.FC = () => {
                     <p className="text-[10px] text-gray-500 font-mono">Daily comparison of gross sales turn vs direct cost vs expenses</p>
                   </div>
                   <div className="flex-1 w-full min-h-0 py-2">
-                    <ResponsiveContainer width="100%" height="90%">
+                    <ResponsiveContainer width="100%" height="90%" minWidth={0} minHeight={0}>
                       <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                         <defs>
                           <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
@@ -1079,7 +1080,7 @@ export const AdminAnalytics: React.FC = () => {
                   ) : (
                     <div className="flex-1 flex items-center justify-center relative min-h-0">
                       <div className="w-full h-40">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                           <RPieChart>
                             <Pie
                               data={expensePieData}
@@ -1166,7 +1167,7 @@ export const AdminAnalytics: React.FC = () => {
                   <p className="text-[10px] text-gray-500 font-mono">Growth line representing total turnover across period days</p>
                 </div>
                 <div className="flex-1 w-full min-h-0 py-2">
-                  <ResponsiveContainer width="100%" height="90%">
+                  <ResponsiveContainer width="100%" height="90%" minWidth={0} minHeight={0}>
                     <LineChart data={chartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
                       <XAxis dataKey="date" stroke="#6b7280" fontSize={10} className="font-mono" />
@@ -1343,7 +1344,7 @@ export const AdminAnalytics: React.FC = () => {
                     <p className="text-[10px] text-gray-500 font-mono">Stock asset holding valuation splits in KSh</p>
                   </div>
                   <div className="flex-1 w-full min-h-0 py-2">
-                    <ResponsiveContainer width="100%" height="90%">
+                    <ResponsiveContainer width="100%" height="90%" minWidth={0} minHeight={0}>
                       <BarChart data={stockBarData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
                         <XAxis dataKey="category" stroke="#6b7280" fontSize={10} />
@@ -1395,7 +1396,7 @@ export const AdminAnalytics: React.FC = () => {
                     <p className="text-[10px] text-gray-500 font-mono">Top spend contributions on ledger in KSh</p>
                   </div>
                   <div className="flex-1 w-full min-h-0 py-2">
-                    <ResponsiveContainer width="100%" height="90%">
+                    <ResponsiveContainer width="100%" height="90%" minWidth={0} minHeight={0}>
                       <BarChart data={topCustomerChartData} layout="vertical">
                         <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
                         <XAxis type="number" stroke="#6b7280" fontSize={10} />

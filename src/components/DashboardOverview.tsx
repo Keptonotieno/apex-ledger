@@ -1243,7 +1243,7 @@ export const DashboardOverview: React.FC = () => {
             </div>
 
             <div className="flex-1 w-full min-h-0">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <BarChart data={getCashFlowData()}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                   <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
@@ -1289,7 +1289,7 @@ export const DashboardOverview: React.FC = () => {
             </div>
 
             <div className="flex-1 w-full min-h-0">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <AreaChart data={getNetWorthTrajectory()}>
                   <defs>
                     <linearGradient id="colorNetWorth" x1="0" y1="0" x2="0" y2="1">
@@ -1327,7 +1327,7 @@ export const DashboardOverview: React.FC = () => {
             ) : (
               <div className="flex items-center gap-4 flex-1 min-h-0 pt-3">
                 <div className="w-[150px] h-[150px] shrink-0">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <PieChart>
                       <Pie
                         data={expenseChartData}
