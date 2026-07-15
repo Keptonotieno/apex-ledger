@@ -74,6 +74,12 @@ export const InventoryModule: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
 
+  // Bulk actions states
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [showBulkStockModal, setShowBulkStockModal] = useState(false);
+  const [bulkStockQty, setBulkStockQty] = useState(10);
+  const [bulkStockAction, setBulkStockAction] = useState<'add' | 'set'>('add');
+
   // Stock adjustments
   const [adjustments, setAdjustments] = useState<StockAdjustment[]>([]);
 
@@ -422,6 +428,66 @@ export const InventoryModule: React.FC = () => {
     });
   };
 
+  // BULK ACTIONS STATUS & QUANTITY HANDLERS
+  const handleBulkStatusUpdate = (status: 'Active' | 'Discontinued' | 'Hidden' | 'In Stock') => {
+    if (isEmployee) {
+      alert('Action Restricted: Employees cannot modify product status.');
+      return;
+    }
+
+    if (selectedProductIds.length === 0) return;
+
+    let successCount = 0;
+    selectedProductIds.forEach(id => {
+      const prod = products.find(p => p.id === id);
+      if (prod) {
+        let updates: Partial<Product> = {};
+        if (status === 'Active') {
+          updates = { productStatus: 'Active' };
+        } else if (status === 'Discontinued') {
+          updates = { productStatus: 'Discontinued' };
+        } else if (status === 'Hidden') {
+          updates = { productStatus: 'Hidden' };
+        } else if (status === 'In Stock') {
+          updates = { 
+            productStatus: 'Active',
+            quantity: prod.quantity > 0 ? prod.quantity : 10
+          };
+        }
+        updateProduct(id, updates);
+        successCount++;
+      }
+    });
+
+    alert(`Successfully updated status to "${status}" for ${successCount} items.`);
+    setSelectedProductIds([]);
+  };
+
+  const handleBulkQtyAdjustSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isEmployee) return;
+
+    let successCount = 0;
+    selectedProductIds.forEach(id => {
+      const prod = products.find(p => p.id === id);
+      if (prod) {
+        let newQty = prod.quantity;
+        if (bulkStockAction === 'add') {
+          newQty += bulkStockQty;
+        } else {
+          newQty = Math.max(0, bulkStockQty);
+        }
+
+        updateProduct(id, { quantity: newQty });
+        successCount++;
+      }
+    });
+
+    alert(`Successfully updated quantity for ${successCount} items.`);
+    setSelectedProductIds([]);
+    setShowBulkStockModal(false);
+  };
+
   // PROCUREMENT RECORDING SUBMIT
   const handleAddProcurementItem = () => {
     if (!newItemName.trim() || newItemQty <= 0 || newItemPrice <= 0) return;
@@ -747,6 +813,66 @@ export const InventoryModule: React.FC = () => {
             </div>
           )}
 
+          {/* Bulk Action Panel (Visible when items are selected) */}
+          {selectedProductIds.length > 0 && (
+            <div className="bg-cyan-950/20 border border-cyan-500/30 p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center gap-3">
+                <div className="w-5 h-5 bg-cyan-500 text-gray-950 rounded-full flex items-center justify-center font-mono font-bold text-xs">
+                  {selectedProductIds.length}
+                </div>
+                <div>
+                  <span className="font-semibold text-gray-200 text-xs block">Items Selected for Bulk Action</span>
+                  <span className="text-[10px] text-gray-400 font-mono line-clamp-1 max-w-[300px] md:max-w-[500px]">
+                    {selectedProductIds.map(id => products.find(p => p.id === id)?.name).filter(Boolean).join(', ')}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Status update actions */}
+                <span className="text-[10px] text-gray-500 font-mono uppercase mr-1">Status:</span>
+                
+                <button
+                  onClick={() => handleBulkStatusUpdate('In Stock')}
+                  className="px-3 py-1.5 bg-emerald-950/85 hover:bg-emerald-900 border border-emerald-500/20 text-emerald-400 rounded-lg text-xs font-mono font-bold transition cursor-pointer"
+                >
+                  Mark In Stock
+                </button>
+
+                <button
+                  onClick={() => handleBulkStatusUpdate('Discontinued')}
+                  className="px-3 py-1.5 bg-gray-950 hover:bg-gray-900 border border-brand-border/60 text-gray-400 rounded-lg text-xs font-mono font-bold transition cursor-pointer"
+                >
+                  Mark Discontinued
+                </button>
+
+                <button
+                  onClick={() => handleBulkStatusUpdate('Hidden')}
+                  className="px-3 py-1.5 bg-amber-950/20 hover:bg-amber-950/40 border border-amber-500/20 text-amber-400 rounded-lg text-xs font-mono font-bold transition cursor-pointer"
+                >
+                  Hide Item
+                </button>
+
+                <div className="h-5 w-px bg-brand-border/60 mx-1 hidden sm:block" />
+
+                {/* Bulk quantity action */}
+                <button
+                  onClick={() => setShowBulkStockModal(true)}
+                  className="px-3 py-1.5 bg-indigo-950 hover:bg-indigo-900 border border-indigo-500/20 text-indigo-400 rounded-lg text-xs font-mono font-bold transition cursor-pointer"
+                >
+                  Adjust Qty
+                </button>
+
+                <button
+                  onClick={() => setSelectedProductIds([])}
+                  className="px-2.5 py-1.5 bg-gray-900 hover:bg-gray-800 text-gray-400 rounded-lg text-xs font-mono transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Main layout container (Card grid vs. Table row) */}
           {viewMode === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -772,6 +898,14 @@ export const InventoryModule: React.FC = () => {
                     onAdjustStock={handleAdjustStock}
                     onTransferStock={handleTransferStockBranches}
                     hasDelegatedAccess={hasDelegatedAccess}
+                    isSelected={selectedProductIds.includes(p.id)}
+                    onToggleSelect={() => {
+                      setSelectedProductIds(prev => 
+                        prev.includes(p.id) 
+                          ? prev.filter(id => id !== p.id) 
+                          : [...prev, p.id]
+                      );
+                    }}
                   />
                 ))
               )}
@@ -782,6 +916,20 @@ export const InventoryModule: React.FC = () => {
                 <table className="w-full text-left text-xs">
                   <thead className="bg-gray-950/80 border-b border-brand-border text-gray-500 font-mono text-[9px] tracking-wider uppercase">
                     <tr>
+                      <th className="p-4 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={filteredProducts.length > 0 && selectedProductIds.length === filteredProducts.length}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedProductIds(filteredProducts.map(p => p.id));
+                            } else {
+                              setSelectedProductIds([]);
+                            }
+                          }}
+                          className="w-3.5 h-3.5 accent-cyan-500 rounded border-brand-border bg-gray-950 text-cyan-500 cursor-pointer"
+                        />
+                      </th>
                       <th className="p-4">SKU Portfolio / Item</th>
                       <th className="p-4">Category</th>
                       <th className="p-4 text-right">Cost Price</th>
@@ -795,7 +943,7 @@ export const InventoryModule: React.FC = () => {
                   <tbody className="divide-y divide-brand-border/40 text-gray-200 font-sans">
                     {filteredProducts.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="p-12 text-center text-gray-500 font-mono">
+                        <td colSpan={9} className="p-12 text-center text-gray-500 font-mono">
                           No items match chosen search specifications.
                         </td>
                       </tr>
@@ -817,6 +965,14 @@ export const InventoryModule: React.FC = () => {
                           onAdjustStock={handleAdjustStock}
                           onTransferStock={handleTransferStockBranches}
                           hasDelegatedAccess={hasDelegatedAccess}
+                          isSelected={selectedProductIds.includes(p.id)}
+                          onToggleSelect={() => {
+                            setSelectedProductIds(prev => 
+                              prev.includes(p.id) 
+                                ? prev.filter(id => id !== p.id) 
+                                : [...prev, p.id]
+                            );
+                          }}
                         />
                       ))
                     )}
@@ -1350,6 +1506,88 @@ export const InventoryModule: React.FC = () => {
         categories={categories}
         onApplyAdjustment={handleApplyBulkAdjustments}
       />
+
+      {/* BULK STOCK QUANTITY ADJUSTMENT MODAL */}
+      {showBulkStockModal && (
+        <div className="fixed inset-0 bg-gray-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="glass-panel p-6 rounded-2xl w-full max-w-md shadow-2xl relative border border-brand-border animate-in fade-in zoom-in-95 duration-200 text-xs">
+            <button onClick={() => setShowBulkStockModal(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-200">
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-sm font-bold text-gray-200 mb-4 flex items-center gap-2 font-mono uppercase tracking-wider">
+              <RefreshCw className="w-5 h-5 text-indigo-400 shrink-0" />
+              <span>Bulk Stock Quantity Update</span>
+            </h3>
+
+            <form onSubmit={handleBulkQtyAdjustSubmit} className="space-y-4">
+              <div>
+                <p className="text-gray-400 mb-2 leading-relaxed">
+                  Apply a bulk quantity change to the <strong className="text-cyan-400">{selectedProductIds.length}</strong> selected products.
+                </p>
+              </div>
+
+              <div className="space-y-3 bg-gray-950/40 p-3.5 rounded-xl border border-brand-border/60">
+                <div>
+                  <label className="text-gray-400 block font-mono mb-1.5">Adjustment Action:</label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBulkStockAction('add')}
+                      className={`flex-1 py-2 rounded-lg text-xs font-mono font-bold border transition ${
+                        bulkStockAction === 'add'
+                          ? 'bg-indigo-950/40 text-indigo-400 border-indigo-500/30'
+                          : 'bg-gray-950 border-transparent text-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      Add/Deduct Quantity (+)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBulkStockAction('set')}
+                      className={`flex-1 py-2 rounded-lg text-xs font-mono font-bold border transition ${
+                        bulkStockAction === 'set'
+                          ? 'bg-indigo-950/40 text-indigo-400 border-indigo-500/30'
+                          : 'bg-gray-950 border-transparent text-gray-400 hover:text-gray-200'
+                      }`}
+                    >
+                      Set Absolute Stock (=)
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-gray-400 block font-mono mb-1.5">
+                    {bulkStockAction === 'add' ? 'Quantity change (use negative to subtract):' : 'New absolute quantity:'}
+                  </label>
+                  <input
+                    type="number"
+                    value={bulkStockQty}
+                    onChange={(e) => setBulkStockQty(Number(e.target.value))}
+                    className="w-full bg-gray-950 border border-brand-border rounded-lg p-2.5 text-gray-200 outline-none focus:border-cyan-500/40 text-xs font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowBulkStockModal(false)}
+                  className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-gray-400 border border-brand-border/60 rounded-lg text-xs font-mono transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-950 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-900 rounded-lg text-xs font-mono font-bold transition"
+                >
+                  Apply to Selected
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* CUSTOM CATEGORY DELETION & REASSIGNMENT MODAL */}
       {deletingCategory && (() => {

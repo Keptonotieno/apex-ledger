@@ -74,7 +74,7 @@ export const ReceiptUploader: React.FC<ReceiptUploaderProps> = ({ receiptUrl, on
         videoRef.current.srcObject = stream;
       }
     } catch (err) {
-      console.warn('Camera access blocked or not supported inside iframe. Loading simulated capture interface.', err);
+      console.log('Camera access blocked or not supported inside iframe. Loading simulated capture interface.', err);
     }
   };
 

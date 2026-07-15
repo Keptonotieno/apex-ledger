@@ -21,6 +21,8 @@ interface ProductCardProps {
   onAdjustStock: (productId: string, qty: number, type: 'Receive' | 'Transfer', reason: string) => void;
   onTransferStock: (productId: string, qty: number, targetBranchId: string, targetBranchName: string) => void;
   hasDelegatedAccess?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({
@@ -37,7 +39,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   onQuickPriceUpdate,
   onAdjustStock,
   onTransferStock,
-  hasDelegatedAccess = false
+  hasDelegatedAccess = false,
+  isSelected = false,
+  onToggleSelect
 }) => {
   const isEmployee = activeUser.role === UserRole.EMPLOYEE && !hasDelegatedAccess;
   const isOwner = activeUser.role === UserRole.ADMIN;
@@ -162,7 +166,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         <div className="space-y-3.5">
           {/* Header Portfolio elements */}
           <div>
-            <span className="text-[9px] text-cyan-400 font-mono block uppercase mb-1">{product.category}</span>
+            <div className="flex items-center gap-2 mb-1">
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={onToggleSelect}
+                className="w-3.5 h-3.5 accent-cyan-500 rounded border-brand-border bg-gray-950 text-cyan-500 cursor-pointer"
+              />
+              <span className="text-[9px] text-cyan-400 font-mono block uppercase">{product.category}</span>
+            </div>
             <h4 className="font-semibold text-gray-100 text-sm group-hover:text-cyan-400 transition line-clamp-1">{product.name}</h4>
             <div className="text-[10px] text-gray-500 font-mono mt-0.5 flex flex-wrap items-center gap-1.5">
               <span>SKU: {product.sku}</span>
@@ -551,7 +563,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
   // Render list/table row view
   return (
-    <tr className="hover:bg-gray-900/30 transition text-xs font-sans">
+    <tr className={`hover:bg-gray-900/30 transition text-xs font-sans ${isSelected ? 'bg-cyan-950/10' : ''}`}>
+      <td className="p-4 w-10 text-center">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={onToggleSelect}
+          className="w-3.5 h-3.5 accent-cyan-500 rounded border-brand-border bg-gray-950 text-cyan-500 cursor-pointer"
+        />
+      </td>
       <td className="p-4">
         <div className="font-semibold text-gray-100">{product.name}</div>
         <div className="text-[10px] text-gray-500 font-mono flex items-center gap-1.5 mt-0.5">

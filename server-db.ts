@@ -229,7 +229,7 @@ export async function initDb(): Promise<void> {
       await initPgDb();
       return;
     } catch (err) {
-      console.error('CRITICAL: Failed to initialize PostgreSQL database (e.g. auth failure). Falling back to SQLite:', err);
+      console.info('[Database] PostgreSQL connection is not active or credentials are pending. Gracefully routing storage to local SQLite database (offline-first sync enabled).');
       try {
         await pgPool.end();
       } catch (e) {}

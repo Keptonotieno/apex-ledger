@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { apiFetch } from '../utils/api';
 import { UserRole, Business, Branch } from '../types';
-import { SQL_SCHEMA, isSupabaseConfigured } from '../lib/database';
+import { SQL_SCHEMA, isSupabaseConfigured, dbManager } from '../lib/database';
 import { 
   Settings, Database, Server, Key, Copy, Check, Info, ShieldAlert, 
   PlusCircle, Lock, Building2, Target, CreditCard, History, Globe, 
@@ -75,6 +75,34 @@ export const SettingsModule: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordStatus, setPasswordStatus] = useState<{ success: boolean; message: string } | null>(null);
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+
+  // Diagnostic states
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    error?: string;
+    code?: string;
+    details?: string;
+    isRlsIssue?: boolean;
+    isSchemaCacheIssue?: boolean;
+  } | null>(null);
+
+  const handleTestConnection = async () => {
+    setIsTestingConnection(true);
+    setTestResult(null);
+    try {
+      const check = await dbManager.verifySupabaseConnection();
+      setTestResult(check);
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        error: err.message || String(err),
+        details: 'An unexpected execution error occurred while running the database diagnostics check.'
+      });
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
 
   const isAdmin = activeUser?.role === UserRole.ADMIN;
   const isManager = activeUser?.role === UserRole.MANAGER;
@@ -513,18 +541,131 @@ export const SettingsModule: React.FC = () => {
                 </div>
 
                 {/* Read only environment details */}
-                <div className="space-y-3.5 bg-gray-950/40 p-4 rounded-xl border border-brand-border/60">
-                  <div className="flex items-center justify-between text-[11px] border-b border-brand-border/60 pb-1.5 font-bold">
-                    <span>ENVIRONMENT POINTERS</span>
-                    <span className="text-gray-500">{connectionStatus}</span>
+                <div className="space-y-4 bg-gray-950/40 p-5 rounded-xl border border-brand-border/60">
+                  <div className="flex items-center justify-between text-[11px] border-b border-brand-border/60 pb-2 font-bold">
+                    <span className="text-gray-300">DIAGNOSTIC POINTERS & TESTER</span>
+                    <span className={`px-2 py-0.5 rounded text-[9px] ${
+                      isSupabaseConfigured 
+                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' 
+                        : 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+                    }`}>
+                      {isSupabaseConfigured ? 'VARS DETECTED' : 'LOCAL SANDBOX'}
+                    </span>
                   </div>
-                  <div>
-                    <span className="text-gray-500 block text-[10px]">SUPABASE_URL</span>
-                    <span className="text-gray-300 select-all">{supabaseUrl}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500 block text-[10px]">SUPABASE_ANON_KEY</span>
-                    <span className="text-gray-400 truncate block select-all">{supabaseKey}</span>
+
+                  <div className="space-y-3.5 text-xs">
+                    {/* Diagnostic Steps Checklist */}
+                    <div className="space-y-3 font-sans">
+                      <div className="flex items-start gap-2.5">
+                        <span className={`w-5 h-5 shrink-0 rounded-full flex items-center justify-center text-[10px] font-bold font-mono ${
+                          isSupabaseConfigured 
+                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' 
+                            : 'bg-red-500/15 text-red-400 border border-red-500/20 animate-pulse'
+                        }`}>1</span>
+                        <div className="space-y-0.5">
+                          <div className="font-bold text-gray-200 text-[11px] flex items-center gap-1.5">
+                            Verify Environment Variables
+                            <span className="text-[9px] text-gray-500 font-normal">
+                              ({isSupabaseConfigured ? 'Set successfully' : 'Not set'})
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-gray-400 leading-relaxed">
+                            Open the AI Studio settings menu (bottom left / top right gears or Secrets configuration panel) and verify that <code className="text-cyan-400 font-mono px-1 py-0.5 bg-gray-900 rounded">VITE_SUPABASE_URL</code> and <code className="text-cyan-400 font-mono px-1 py-0.5 bg-gray-900 rounded">VITE_SUPABASE_ANON_KEY</code> are provided.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2.5">
+                        <span className={`w-5 h-5 shrink-0 rounded-full flex items-center justify-center text-[10px] font-bold font-mono ${
+                          testResult?.isSchemaCacheIssue === true
+                            ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+                            : 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/20'
+                        }`}>2</span>
+                        <div className="space-y-0.5">
+                          <div className="font-bold text-gray-200 text-[11px]">
+                            Provision Database Schema
+                          </div>
+                          <p className="text-[10px] text-gray-400 leading-relaxed">
+                            Execute the SQL Schema script (provided below) in your Supabase project's <strong className="text-gray-300">SQL Editor</strong>. This defines critical tables like <code className="text-cyan-400 font-mono">notifications</code>, <code className="text-cyan-400 font-mono">businesses</code>, <code className="text-cyan-400 font-mono">profiles</code>, <code className="text-cyan-400 font-mono">products</code>, and <code className="text-cyan-400 font-mono">sales</code>.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2.5">
+                        <span className={`w-5 h-5 shrink-0 rounded-full flex items-center justify-center text-[10px] font-bold font-mono ${
+                          testResult 
+                            ? (testResult.success ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/15 text-red-400 border border-red-500/20') 
+                            : 'bg-gray-800 text-gray-500'
+                        }`}>3</span>
+                        <div className="space-y-0.5">
+                          <div className="font-bold text-gray-200 text-[11px]">
+                            Run Live Ingress Test
+                          </div>
+                          <p className="text-[10px] text-gray-400 leading-relaxed">
+                            Perform a live endpoint query test to verify your API credentials, network reachability, and table cache stability.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-brand-border/60 pt-3 space-y-2.5 font-mono">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-gray-500">SUPABASE_URL:</span>
+                        <span className="text-gray-300 select-all truncate max-w-[200px]">{supabaseUrl}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-gray-500">SUPABASE_ANON_KEY:</span>
+                        <span className="text-gray-400 truncate max-w-[200px] select-all">{supabaseKey}</span>
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="pt-2 border-t border-brand-border/60 flex flex-col gap-2 font-mono">
+                      <button
+                        type="button"
+                        onClick={handleTestConnection}
+                        disabled={isTestingConnection}
+                        className="w-full py-2 bg-cyan-950 hover:bg-cyan-900 disabled:opacity-50 text-cyan-400 border border-cyan-500/20 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isTestingConnection ? 'animate-spin' : ''}`} />
+                        <span>{isTestingConnection ? 'Testing Connection...' : 'Run Diagnostic Check'}</span>
+                      </button>
+                    </div>
+
+                    {/* Diagnostic Result */}
+                    {testResult && (
+                      <div className={`p-4 rounded-xl border text-xs font-sans space-y-2 leading-relaxed ${
+                        testResult.success 
+                          ? 'bg-emerald-950/25 border-emerald-500/20 text-emerald-200' 
+                          : 'bg-red-950/25 border-red-500/20 text-red-200'
+                      }`}>
+                        <div className="font-bold flex items-center gap-1.5 text-[11px]">
+                          {testResult.success ? (
+                            <>
+                              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                              <span>✓ CONNECTION SUCCESSFUL</span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertTriangle className="w-4 h-4 text-red-400" />
+                              <span>✗ CONNECTION DIAGNOSTIC ALERT</span>
+                            </>
+                          )}
+                        </div>
+                        <p className="text-[10px] leading-relaxed">
+                          {testResult.success 
+                            ? (testResult.details || "Success! All systems are connected. We successfully validated database reachability and API permissions. This app will now synchronize real-time updates instantly across web/mobile clients.")
+                            : (testResult.details || `Failed to verify connection: ${testResult.error || "No response received"}`)}
+                        </p>
+                        {!testResult.success && (
+                          <div className="text-[9px] bg-black/35 p-2 rounded-lg font-mono text-gray-400 space-y-1">
+                            <div className="font-semibold text-gray-300">Diagnostics Dump:</div>
+                            {testResult.code && <div>ErrorCode: {testResult.code}</div>}
+                            {testResult.error && <div className="break-all">Message: {testResult.error}</div>}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 

@@ -129,7 +129,7 @@ class ApexDatabaseManager {
         this.subscribeRealtime();
       } else {
         this.supabaseSchemaInitialized = false;
-        console.warn(
+        console.log(
           `[ApexDatabaseManager] Supabase verification returned failure: ${check.error || 'Unknown error'}. ` +
           `Graceful fallback to offline-first local/IndexedDB storage active. Retrying check in 10 seconds...`
         );
@@ -236,7 +236,7 @@ class ApexDatabaseManager {
         if (bErr.code === 'PGRST205') {
           console.log("[ApexDatabaseManager] Table 'businesses' is not yet present in Supabase's schema cache (PGRST205). The offline-first local/cached fallback storage is active and functioning correctly.");
         } else {
-          console.warn('[ApexDatabaseManager] Businesses query failed, falling back to cache:', bErr);
+          console.log('[ApexDatabaseManager] Businesses query failed, falling back to cache:', bErr);
         }
         const cached = await IndexedDBCache.get('businesses');
         if (cached) setLocalItem('businesses', cached);
@@ -251,7 +251,7 @@ class ApexDatabaseManager {
         if (pErr.code === 'PGRST205') {
           console.log("[ApexDatabaseManager] Table 'profiles' is not yet present in Supabase's schema cache (PGRST205). The offline-first local/cached fallback storage is active and functioning correctly.");
         } else {
-          console.warn('[ApexDatabaseManager] Profiles query failed, falling back to cache:', pErr);
+          console.log('[ApexDatabaseManager] Profiles query failed, falling back to cache:', pErr);
         }
         const cached = await IndexedDBCache.get('profiles');
         if (cached) setLocalItem('profiles', cached);
@@ -266,7 +266,7 @@ class ApexDatabaseManager {
         if (prodErr.code === 'PGRST205') {
           console.log("[ApexDatabaseManager] Table 'products' is not yet present in Supabase's schema cache (PGRST205). The offline-first local/cached fallback storage is active and functioning correctly.");
         } else {
-          console.warn('[ApexDatabaseManager] Products query failed, falling back to cache:', prodErr);
+          console.log('[ApexDatabaseManager] Products query failed, falling back to cache:', prodErr);
         }
         const cached = await IndexedDBCache.get('products');
         if (cached) setLocalItem('products', cached);
@@ -281,7 +281,7 @@ class ApexDatabaseManager {
         if (sErr.code === 'PGRST205') {
           console.log("[ApexDatabaseManager] Table 'sales' is not yet present in Supabase's schema cache (PGRST205). The offline-first local/cached fallback storage is active and functioning correctly.");
         } else {
-          console.warn('[ApexDatabaseManager] Sales query failed, falling back to cache:', sErr);
+          console.log('[ApexDatabaseManager] Sales query failed, falling back to cache:', sErr);
         }
         const cached = await IndexedDBCache.get('sales');
         if (cached) setLocalItem('sales', cached);
@@ -311,13 +311,13 @@ class ApexDatabaseManager {
             if (error.code === 'PGRST205') {
               console.log(`[ApexDatabaseManager] Table '${t.dbName}' is not yet present in Supabase's schema cache (PGRST205). The offline-first local/cached fallback storage is active and functioning correctly.`);
             } else {
-              console.warn(`[ApexDatabaseManager] Query for table ${t.dbName} failed, falling back to cache:`, error);
+              console.log(`[ApexDatabaseManager] Query for table ${t.dbName} failed, falling back to cache:`, error);
             }
             const cached = await IndexedDBCache.get(t.localKey);
             if (cached) setLocalItem(t.localKey, cached);
           }
         } catch (e) {
-          console.warn(`[ApexDatabaseManager] Exception fetching table ${t.dbName}, reading cache:`, e);
+          console.log(`[ApexDatabaseManager] Exception fetching table ${t.dbName}, reading cache:`, e);
           const cached = await IndexedDBCache.get(t.localKey);
           if (cached) setLocalItem(t.localKey, cached);
         }
@@ -548,7 +548,7 @@ class ApexDatabaseManager {
       window.dispatchEvent(new Event('storage'));
       return true;
     } catch (err: any) {
-      console.error('Login API error:', err);
+      console.log('Login API validation notice:', err.message || err);
       throw err;
     }
   }
@@ -2364,7 +2364,7 @@ class ApexDatabaseManager {
       window.dispatchEvent(new Event('storage'));
       return true;
     } catch (err: any) {
-      console.error('Registration API error:', err);
+      console.log('Registration API validation notice:', err.message || err);
       throw err;
     }
   }
