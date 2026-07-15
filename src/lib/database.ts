@@ -2420,6 +2420,7 @@ class ApexDatabaseManager {
       (all[index] as any).employeeNumber = updates.badgeNumber;
     }
     setLocalItem('profiles', all);
+    this.syncRowToSupabase('profiles', all[index], 'upsert');
 
     this.addAudit('Updated User Profile', `${oldVal.name} (${oldVal.role})`, `${all[index].name} (${all[index].role}, Status: ${all[index].status})`);
 

@@ -181,8 +181,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  const activeBusiness = dbManager.getCurrentBusiness();
+  const activeUser = dbManager.getCurrentUser();
+
+  useEffect(() => {
+    if (activeUser && activeUser.theme && activeUser.theme !== theme) {
+      setTheme(activeUser.theme);
+    }
+  }, [activeUser?.id, activeUser?.theme]);
+
   const toggleTheme = () => {
-    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    if (activeUser && activeUser.id) {
+      dbManager.updateEmployee(activeUser.id, { theme: newTheme })
+        .then(() => {
+          triggerRefresh();
+        })
+        .catch(err => {
+          console.error('Failed to save theme in profile', err);
+        });
+    }
   };
 
   // Trigger state refresh on any action
@@ -209,9 +228,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     checkConnection();
   }, [refreshTrigger]);
-
-  const activeBusiness = dbManager.getCurrentBusiness();
-  const activeUser = dbManager.getCurrentUser();
 
   const contextValue: AppContextType = {
     activeView,

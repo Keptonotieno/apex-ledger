@@ -7,7 +7,7 @@ import {
   Settings, Database, Server, Key, Copy, Check, Info, ShieldAlert, 
   PlusCircle, Lock, Building2, Target, CreditCard, History, Globe, 
   RefreshCw, FileDown, ShieldCheck, HelpCircle, AlertTriangle, Eye, ShieldCheck as SecurityIcon,
-  Camera, Pencil, Trash2
+  Camera, Pencil, Trash2, Sun, Moon
 } from 'lucide-react';
 
 export const SettingsModule: React.FC = () => {
@@ -22,7 +22,9 @@ export const SettingsModule: React.FC = () => {
     branches,
     addBranch,
     updateBranch,
-    deleteBranch
+    deleteBranch,
+    theme,
+    toggleTheme
   } = useApp();
 
   const [activeSubTab, setActiveSubTab] = useState<'Developer' | 'Workspaces' | 'Targets' | 'Security'>('Developer');
@@ -888,6 +890,40 @@ export const SettingsModule: React.FC = () => {
                       className="w-full bg-gray-950/60 border border-brand-border rounded-lg p-2.5 text-xs text-gray-200 outline-none focus:border-cyan-500/30 font-sans"
                     />
                   </div>
+                </div>
+
+                {/* Display Theme Toggle */}
+                <div className="pt-3 border-t border-brand-border/40 space-y-2">
+                  <label className="text-gray-400 block text-xs font-sans font-semibold">Display Theme Mode</label>
+                  <div className="flex gap-3 max-w-sm">
+                    <button
+                      type="button"
+                      onClick={() => theme !== 'light' && toggleTheme()}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl border font-mono text-xs font-bold transition cursor-pointer ${
+                        theme === 'light'
+                          ? 'bg-cyan-500/10 border-cyan-400 text-cyan-400 shadow-md shadow-cyan-500/5'
+                          : 'bg-gray-950/40 border-brand-border/60 text-gray-400 hover:text-gray-200 hover:border-brand-border'
+                      }`}
+                    >
+                      <Sun className="w-4 h-4 text-amber-500" />
+                      <span>Light</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => theme !== 'dark' && toggleTheme()}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl border font-mono text-xs font-bold transition cursor-pointer ${
+                        theme === 'dark'
+                          ? 'bg-cyan-500/10 border-cyan-400 text-cyan-400 shadow-md shadow-cyan-500/5'
+                          : 'bg-gray-950/40 border-brand-border/60 text-gray-400 hover:text-gray-200 hover:border-brand-border'
+                      }`}
+                    >
+                      <Moon className="w-4 h-4 text-indigo-400" />
+                      <span>Dark</span>
+                    </button>
+                  </div>
+                  <span className="text-[10px] text-gray-500 block leading-relaxed font-sans">
+                    Your theme preference is saved securely and synchronized with your workspace across all active sessions.
+                  </span>
                 </div>
                 <div className="p-3.5 bg-cyan-500/5 rounded-xl border border-cyan-500/10 text-[11px] text-gray-400 font-sans">
                   <span className="text-cyan-400 font-semibold uppercase font-mono mr-1.5">Note:</span>

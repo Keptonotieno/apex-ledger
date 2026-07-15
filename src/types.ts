@@ -21,6 +21,7 @@ export interface UserProfile {
   lastLogin?: string;
   createdBy?: string;
   allowExpenses?: boolean;
+  theme?: 'light' | 'dark';
 }
 
 export interface Business {
