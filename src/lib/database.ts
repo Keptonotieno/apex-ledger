@@ -2773,6 +2773,169 @@ class ApexDatabaseManager {
 
 export const dbManager = new ApexDatabaseManager();
 
+/**
+ * Centralized utility function in src/lib/database.ts that automatically appends
+ * company_id / business_id query filters based on activeBusiness.id / activeBusiness context,
+ * ensuring strict tenant isolation and preventing data leaks across organizations during API calls.
+ */
+export function appendCompanyFilter<T = any>(
+  queryOrParams: any,
+  companyId?: string,
+  idFieldName: string = 'business_id'
+): any {
+  const activeCompanyId = companyId || dbManager.getActiveBusinessId() || localStorage.getItem('apex_ledger_active_business_id') || '';
+
+  if (!activeCompanyId) return queryOrParams;
+
+  // 1. Supabase Query Builder chaining (.eq('business_id', activeCompanyId))
+  if (queryOrParams && typeof queryOrParams.eq === 'function') {
+    return queryOrParams.eq(idFieldName, activeCompanyId);
+  }
+
+  // 2. URLSearchParams instance
+  if (queryOrParams instanceof URLSearchParams) {
+    queryOrParams.set('company_id', activeCompanyId);
+    queryOrParams.set('business_id', activeCompanyId);
+    return queryOrParams;
+  }
+
+  // 3. Plain object filter / query params
+  if (queryOrParams && typeof queryOrParams === 'object' && !Array.isArray(queryOrParams)) {
+    return {
+      ...queryOrParams,
+      [idFieldName]: activeCompanyId,
+      company_id: activeCompanyId,
+      business_id: activeCompanyId,
+      businessId: activeCompanyId,
+      companyId: activeCompanyId
+    };
+  }
+
+  // 4. Query string
+  if (typeof queryOrParams === 'string') {
+    const separator = queryOrParams.includes('?') ? '&' : '?';
+    return `${queryOrParams}${separator}company_id=${encodeURIComponent(activeCompanyId)}&business_id=${encodeURIComponent(activeCompanyId)}`;
+  }
+
+  return queryOrParams;
+}
+
+export function applyCompanyFilter(params: Record<string, any> = {}, companyId?: string): Record<string, any> {
+  return appendCompanyFilter(params, companyId);
+}
+
+export function withCompanyScope<T extends Record<string, any>>(dataOrFilters: T, companyId?: string): T {
+  const activeCompanyId = companyId || dbManager.getActiveBusinessId() || localStorage.getItem('apex_ledger_active_business_id') || '';
+  if (!activeCompanyId) return dataOrFilters;
+  return {
+    ...dataOrFilters,
+    business_id: activeCompanyId,
+    company_id: activeCompanyId,
+    businessId: activeCompanyId,
+    companyId: activeCompanyId
+  };
+}
+
+/**
+ * Centralized typed Supabase query builder utility that automatically injects
+ * the active company_id / business_id from activeBusiness context into every database query,
+ * ensuring strict multi-tenant isolation.
+ */
+export function createCompanyQueryBuilder(companyId?: string) {
+  const getActiveCompanyId = () => 
+    companyId || dbManager.getActiveBusinessId() || localStorage.getItem('apex_ledger_active_business_id') || '';
+
+  return {
+    get activeCompanyId() {
+      return getActiveCompanyId();
+    },
+
+    from<T = any>(table: string) {
+      if (!supabase) {
+        throw new Error('Supabase client is not initialized');
+      }
+
+      const activeId = getActiveCompanyId();
+      const query = supabase.from(table);
+      const companyCol = table === 'businesses' ? 'id' : 'business_id';
+
+      return {
+        select(columns: string = '*') {
+          let builder = query.select(columns);
+          if (activeId) {
+            builder = builder.eq(companyCol, activeId);
+          }
+          return builder;
+        },
+
+        insert(values: any | any[], options?: any) {
+          const prepareValue = (item: any) => {
+            if (typeof item === 'object' && item !== null && activeId && table !== 'businesses') {
+              return {
+                ...item,
+                business_id: item.business_id || item.company_id || activeId,
+                company_id: item.company_id || item.business_id || activeId
+              };
+            }
+            return item;
+          };
+
+          const scopedValues = Array.isArray(values)
+            ? values.map(prepareValue)
+            : prepareValue(values);
+
+          return query.insert(scopedValues, options);
+        },
+
+        update(values: any, options?: any) {
+          let builder = query.update(values, options);
+          if (activeId) {
+            builder = builder.eq(companyCol, activeId);
+          }
+          return builder;
+        },
+
+        delete(options?: any) {
+          let builder = query.delete(options);
+          if (activeId) {
+            builder = builder.eq(companyCol, activeId);
+          }
+          return builder;
+        },
+
+        upsert(values: any | any[], options?: any) {
+          const prepareValue = (item: any) => {
+            if (typeof item === 'object' && item !== null && activeId && table !== 'businesses') {
+              return {
+                ...item,
+                business_id: item.business_id || item.company_id || activeId,
+                company_id: item.company_id || item.business_id || activeId
+              };
+            }
+            return item;
+          };
+
+          const scopedValues = Array.isArray(values)
+            ? values.map(prepareValue)
+            : prepareValue(values);
+
+          let builder = query.upsert(scopedValues, options);
+          if (activeId && table !== 'businesses') {
+            builder = builder.eq('business_id', activeId);
+          }
+          return builder;
+        }
+      };
+    }
+  };
+}
+
+export const companyQueryBuilder = createCompanyQueryBuilder();
+
+export function companyScopedFrom<T = any>(table: string, companyId?: string) {
+  return createCompanyQueryBuilder(companyId).from<T>(table);
+}
+
 // Supabase DB Schema generation & RLS Documentation helper for the UI setup modal
 export const SQL_SCHEMA = `-- APEX LEDGER - COMPLETE POSTGRESQL SCHEMAS (SUPABASE-READY)
 -- Ensure this script is executed in the Supabase SQL Editor.
@@ -2868,12 +3031,12 @@ ALTER TABLE sale_items ENABLE ROW LEVEL SECURITY;
 
 -- 9. Tenant Isolation Policies
 CREATE POLICY tenant_isolation_businesses ON businesses
-  FOR ALL USING (id IN (
+  FOR ALL USING (owner_id = auth.uid() OR id IN (
     SELECT business_id FROM profiles WHERE id = auth.uid()
   ));
 
 CREATE POLICY tenant_isolation_profiles ON profiles
-  FOR ALL USING (business_id IN (
+  FOR ALL USING (id = auth.uid() OR business_id IN (
     SELECT business_id FROM profiles WHERE id = auth.uid()
   ));
 
@@ -2885,6 +3048,13 @@ CREATE POLICY tenant_isolation_products ON products
 CREATE POLICY tenant_isolation_sales ON sales
   FOR ALL USING (business_id IN (
     SELECT business_id FROM profiles WHERE id = auth.uid()
+  ));
+
+CREATE POLICY tenant_isolation_sale_items ON sale_items
+  FOR ALL USING (sale_id IN (
+    SELECT id FROM sales WHERE business_id IN (
+      SELECT business_id FROM profiles WHERE id = auth.uid()
+    )
   ));
 
 -- 10. Branches Table

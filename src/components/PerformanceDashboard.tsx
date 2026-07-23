@@ -573,7 +573,7 @@ export const PerformanceDashboard: React.FC = () => {
       };
     }).sort((a, b) => b.value - a.value);
 
-    return list.length > 0 ? list : [{ name: 'Beverages', value: 12000, percentage: 40 }, { name: 'Food', value: 9500, percentage: 31 }, { name: 'Electronics', value: 8500, percentage: 29 }];
+    return list.length > 0 ? list : [];
   }, [filteredSales, products]);
 
   // 3. Chronological sales growth & progress trends
@@ -588,15 +588,6 @@ export const PerformanceDashboard: React.FC = () => {
       Revenue: val,
     })).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    if (list.length === 0) {
-      return [
-        { date: '2026-07-01', Revenue: 18000 },
-        { date: '2026-07-02', Revenue: 24500 },
-        { date: '2026-07-03', Revenue: 31000 },
-        { date: '2026-07-04', Revenue: 19000 },
-        { date: '2026-07-05', Revenue: 42000 }
-      ];
-    }
     return list;
   }, [filteredSales]);
 

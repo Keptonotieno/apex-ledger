@@ -4,6 +4,15 @@ import fs from 'fs';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import pg from 'pg';
+import { AsyncLocalStorage } from 'async_hooks';
+
+export interface DbSession {
+  pgClient?: pg.PoolClient;
+  inTransaction?: boolean;
+  activeSavepoints?: Set<string>;
+}
+
+export const dbSessionStorage = new AsyncLocalStorage<DbSession>();
 
 const { Pool } = pg;
 
@@ -77,6 +86,12 @@ function translateQueryToPg(sql: string, params: any[]): { sql: string; params: 
 function pgQuery(sql: string, params: any[] = []): Promise<any> {
   if (!pgPool) throw new Error('PostgreSQL pool is not initialized');
   const { sql: translatedSql, params: translatedParams } = translateQueryToPg(sql, params);
+  
+  const session = dbSessionStorage.getStore();
+  if (session && session.pgClient) {
+    return session.pgClient.query(translatedSql, translatedParams);
+  }
+  
   return pgPool.query(translatedSql, translatedParams);
 }
 
@@ -543,112 +558,121 @@ async function runSeedAndMigration(): Promise<void> {
 }
 
 export async function syncAllWorkspaceTables(businessId: string, workspaceDataJson: string): Promise<void> {
-  try {
-    const ws = JSON.parse(workspaceDataJson);
-    if (!ws) return;
-
-    // Use a Savepoint (nested-friendly transaction) to speed up batch writes 100x and ensure atomicity
-    await dbRun('SAVEPOINT sync_all_ws_tables');
-
+  const outerSession = dbSessionStorage.getStore();
+  const runSync = async () => {
     try {
-      // 1. Sync employees
-      await syncEmployeesFromWorkspace(businessId, workspaceDataJson);
+      const ws = JSON.parse(workspaceDataJson);
+      if (!ws) return;
 
-      // 2. Sync timelogs
-      if (Array.isArray(ws.timelogs)) {
-        await dbRun('DELETE FROM timelogs WHERE business_id = ?', [businessId]);
-        for (const log of ws.timelogs) {
-          await dbRun(`
-            INSERT OR IGNORE INTO timelogs (id, business_id, user_id, user_name, role, clock_in, clock_out, work_hours, date, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `, [
-            log.id,
-            log.businessId || businessId,
-            log.userId || '',
-            log.userName || '',
-            log.role || '',
-            log.clockIn || '',
-            log.clockOut || null,
-            log.workHours !== undefined ? log.workHours : null,
-            log.date || '',
-            log.status || ''
-          ]);
+      // Use a Savepoint (nested-friendly transaction) to speed up batch writes 100x and ensure atomicity
+      await dbRun('SAVEPOINT sync_all_ws_tables');
+
+      try {
+        // 1. Sync employees
+        await syncEmployeesFromWorkspace(businessId, workspaceDataJson);
+
+        // 2. Sync timelogs
+        if (Array.isArray(ws.timelogs)) {
+          await dbRun('DELETE FROM timelogs WHERE business_id = ?', [businessId]);
+          for (const log of ws.timelogs) {
+            await dbRun(`
+              INSERT OR IGNORE INTO timelogs (id, business_id, user_id, user_name, role, clock_in, clock_out, work_hours, date, status)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+              log.id,
+              log.businessId || businessId,
+              log.userId || '',
+              log.userName || '',
+              log.role || '',
+              log.clockIn || '',
+              log.clockOut || null,
+              log.workHours !== undefined ? log.workHours : null,
+              log.date || '',
+              log.status || ''
+            ]);
+          }
         }
-      }
 
-      // 3. Sync sales
-      if (Array.isArray(ws.sales)) {
-        await dbRun('DELETE FROM sales WHERE business_id = ?', [businessId]);
-        for (const sale of ws.sales) {
-          await dbRun(`
-            INSERT OR IGNORE INTO sales (id, invoice_number, business_id, total_amount, discount, tax, net_amount, customer_name, customer_id, date, time, cashier_name, cashier_role, payment_method, items_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `, [
-            sale.id,
-            sale.invoiceNumber || '',
-            sale.businessId || businessId,
-            sale.totalAmount || 0,
-            sale.discount || 0,
-            sale.tax || 0,
-            sale.netAmount || 0,
-            sale.customerName || 'Walk-in Customer',
-            sale.customerId || null,
-            sale.date || '',
-            sale.time || '',
-            sale.cashierName || '',
-            sale.cashierRole || 'Employee',
-            sale.paymentMethod || 'Cash',
-            JSON.stringify(sale.items || [])
-          ]);
+        // 3. Sync sales
+        if (Array.isArray(ws.sales)) {
+          await dbRun('DELETE FROM sales WHERE business_id = ?', [businessId]);
+          for (const sale of ws.sales) {
+            await dbRun(`
+              INSERT OR IGNORE INTO sales (id, invoice_number, business_id, total_amount, discount, tax, net_amount, customer_name, customer_id, date, time, cashier_name, cashier_role, payment_method, items_json)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+              sale.id,
+              sale.invoiceNumber || '',
+              sale.businessId || businessId,
+              sale.totalAmount || 0,
+              sale.discount || 0,
+              sale.tax || 0,
+              sale.netAmount || 0,
+              sale.customerName || 'Walk-in Customer',
+              sale.customerId || null,
+              sale.date || '',
+              sale.time || '',
+              sale.cashierName || '',
+              sale.cashierRole || 'Employee',
+              sale.paymentMethod || 'Cash',
+              JSON.stringify(sale.items || [])
+            ]);
+          }
         }
-      }
 
-      // 4. Sync tasks
-      if (Array.isArray(ws.tasks)) {
-        await dbRun('DELETE FROM tasks WHERE business_id = ?', [businessId]);
-        for (const task of ws.tasks) {
-          await dbRun(`
-            INSERT OR IGNORE INTO tasks (id, business_id, title, assigned_to, assigned_to_id, status)
-            VALUES (?, ?, ?, ?, ?, ?)
-          `, [
-            task.id,
-            task.businessId || businessId,
-            task.title || '',
-            task.assignedTo || task.assignedEmployeeName || '',
-            task.assignedToId || task.assignedEmployeeId || null,
-            task.status || 'Pending'
-          ]);
+        // 4. Sync tasks
+        if (Array.isArray(ws.tasks)) {
+          await dbRun('DELETE FROM tasks WHERE business_id = ?', [businessId]);
+          for (const task of ws.tasks) {
+            await dbRun(`
+              INSERT OR IGNORE INTO tasks (id, business_id, title, assigned_to, assigned_to_id, status)
+              VALUES (?, ?, ?, ?, ?, ?)
+            `, [
+              task.id,
+              task.businessId || businessId,
+              task.title || '',
+              task.assignedTo || task.assignedEmployeeName || '',
+              task.assignedToId || task.assignedEmployeeId || null,
+              task.status || 'Pending'
+            ]);
+          }
         }
-      }
 
-      // 5. Sync expenses
-      if (Array.isArray(ws.expenses)) {
-        await dbRun('DELETE FROM expenses WHERE business_id = ?', [businessId]);
-        for (const exp of ws.expenses) {
-          await dbRun(`
-            INSERT OR IGNORE INTO expenses (id, business_id, amount, category, date, description, recorded_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `, [
-            exp.id,
-            exp.businessId || businessId,
-            exp.amount || 0,
-            exp.category || '',
-            exp.date || '',
-            exp.description || '',
-            exp.recordedBy || ''
-          ]);
+        // 5. Sync expenses
+        if (Array.isArray(ws.expenses)) {
+          await dbRun('DELETE FROM expenses WHERE business_id = ?', [businessId]);
+          for (const exp of ws.expenses) {
+            await dbRun(`
+              INSERT OR IGNORE INTO expenses (id, business_id, amount, category, date, description, recorded_by)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+            `, [
+              exp.id,
+              exp.businessId || businessId,
+              exp.amount || 0,
+              exp.category || '',
+              exp.date || '',
+              exp.description || '',
+              exp.recordedBy || ''
+            ]);
+          }
         }
-      }
 
-      await dbRun('RELEASE sync_all_ws_tables');
-      console.log(`Successfully synchronized SQLite index tables for business: ${businessId}`);
-    } catch (innerErr) {
-      await dbRun('ROLLBACK TO sync_all_ws_tables');
-      await dbRun('RELEASE sync_all_ws_tables');
-      throw innerErr;
+        await dbRun('RELEASE sync_all_ws_tables');
+        console.log(`Successfully synchronized SQLite index tables for business: ${businessId}`);
+      } catch (innerErr) {
+        await dbRun('ROLLBACK TO sync_all_ws_tables');
+        await dbRun('RELEASE sync_all_ws_tables');
+        throw innerErr;
+      }
+    } catch (err) {
+      console.error('Error synchronizing index tables from workspace JSON:', err);
     }
-  } catch (err) {
-    console.error('Error synchronizing index tables from workspace JSON:', err);
+  };
+
+  if (outerSession) {
+    return runSync();
+  } else {
+    return dbSessionStorage.run({ activeSavepoints: new Set() }, runSync);
   }
 }
 
@@ -843,10 +867,105 @@ export function dbAll(sql: string, params: any[] = []): Promise<any[]> {
 }
 
 export async function dbRun(sql: string, params: any[] = []): Promise<{ id: number; changes: number }> {
+  const cleanSql = sql.replace(/\s+/g, ' ').trim().toLowerCase();
+
   if (pgPool) {
+    const session = dbSessionStorage.getStore();
+    
+    // Check transaction verbs
+    const isBegin = cleanSql.startsWith('begin') || cleanSql.startsWith('savepoint');
+    const isCommit = cleanSql.startsWith('commit') || cleanSql.startsWith('release');
+    const isRollback = cleanSql.startsWith('rollback');
+    
+    if (session && (isBegin || isCommit || isRollback)) {
+      if (!session.activeSavepoints) {
+        session.activeSavepoints = new Set();
+      }
+      
+      // 1. Transaction START
+      if (isBegin) {
+        if (!session.pgClient) {
+          session.pgClient = await pgPool.connect();
+          await session.pgClient.query('BEGIN');
+          session.inTransaction = true;
+          console.log('[PostgreSQL] Session acquired client and started main transaction block.');
+        }
+        
+        if (cleanSql.startsWith('savepoint')) {
+          const match = sql.match(/savepoint\s+([a-zA-Z0-9_]+)/i);
+          const savepointName = match ? match[1].toLowerCase() : 'sync_all_ws_tables';
+          
+          if (session.inTransaction) {
+            // We are already inside an active transaction block, so run a nested savepoint
+            const { sql: translatedSql, params: translatedParams } = translateQueryToPg(sql, params);
+            await session.pgClient.query(translatedSql, translatedParams);
+            session.activeSavepoints.add(savepointName);
+            console.log(`[PostgreSQL] Nested savepoint '${savepointName}' established.`);
+          } else {
+            session.inTransaction = true;
+          }
+        }
+        return { id: 0, changes: 0 };
+      }
+      
+      // 2. Transaction COMMIT / RELEASE
+      if (isCommit) {
+        if (session.pgClient) {
+          const isSavepointRelease = cleanSql.startsWith('release');
+          let savepointName = '';
+          if (isSavepointRelease) {
+            const match = sql.match(/release(?:\s+savepoint)?\s+([a-zA-Z0-9_]+)/i);
+            savepointName = match ? match[1].toLowerCase() : 'sync_all_ws_tables';
+          }
+          
+          if (isSavepointRelease && session.activeSavepoints.has(savepointName)) {
+            const { sql: translatedSql, params: translatedParams } = translateQueryToPg(sql, params);
+            await session.pgClient.query(translatedSql, translatedParams);
+            session.activeSavepoints.delete(savepointName);
+            console.log(`[PostgreSQL] Nested savepoint '${savepointName}' released.`);
+          } else {
+            await session.pgClient.query('COMMIT');
+            session.pgClient.release();
+            session.pgClient = undefined;
+            session.inTransaction = false;
+            session.activeSavepoints.clear();
+            console.log('[PostgreSQL] Main transaction committed and client released.');
+          }
+        }
+        return { id: 0, changes: 0 };
+      }
+      
+      // 3. Transaction ROLLBACK
+      if (isRollback) {
+        if (session.pgClient) {
+          const isSavepointRollback = cleanSql.includes('to savepoint') || cleanSql.includes('to ');
+          let savepointName = '';
+          if (isSavepointRollback) {
+            const match = sql.match(/to\s+(?:savepoint\s+)?([a-zA-Z0-9_]+)/i);
+            savepointName = match ? match[1].toLowerCase() : 'sync_all_ws_tables';
+          }
+          
+          if (isSavepointRollback && session.activeSavepoints.has(savepointName)) {
+            const { sql: translatedSql, params: translatedParams } = translateQueryToPg(sql, params);
+            await session.pgClient.query(translatedSql, translatedParams);
+            console.log(`[PostgreSQL] Nested savepoint rolled back to '${savepointName}'.`);
+          } else {
+            try {
+              await session.pgClient.query('ROLLBACK');
+            } catch (rErr) {}
+            session.pgClient.release();
+            session.pgClient = undefined;
+            session.inTransaction = false;
+            session.activeSavepoints.clear();
+            console.log('[PostgreSQL] Main transaction rolled back and client released.');
+          }
+        }
+        return { id: 0, changes: 0 };
+      }
+    }
+
     try {
       const res = await pgQuery(sql, params);
-      const cleanSql = sql.replace(/\s+/g, ' ').trim().toLowerCase();
       const isWorkspaceWrite = cleanSql.includes('workspaces') && (cleanSql.includes('insert') || cleanSql.includes('update'));
       
       if (isWorkspaceWrite) {

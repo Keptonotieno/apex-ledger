@@ -4,10 +4,26 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import cookieParser from 'cookie-parser';
 import { createServer as createViteServer } from 'vite';
-import { initDb, dbRun, dbGet, dbAll } from './server-db';
+import { initDb, dbRun, dbGet, dbAll, dbSessionStorage, DbSession } from './server-db';
 
 const app = express();
 const PORT = 3000;
+
+// Request Transaction Scope Middleware (PostgreSQL-safe)
+app.use((req, res, next) => {
+  const session: DbSession = { activeSavepoints: new Set() };
+  dbSessionStorage.run(session, () => {
+    res.on('finish', () => {
+      if (session.pgClient) {
+        console.warn('[PostgreSQL] Connection leak detected! Request finished but client was not released. Automatically rolling back and releasing.');
+        session.pgClient.query('ROLLBACK').catch(() => {});
+        session.pgClient.release();
+        session.pgClient = undefined;
+      }
+    });
+    next();
+  });
+});
 
 // Body parser with high capacity for workspace synchronization
 app.use(express.json({ limit: '50mb' }));
