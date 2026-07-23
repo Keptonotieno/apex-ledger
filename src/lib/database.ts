@@ -204,10 +204,8 @@ class ApexDatabaseManager {
     if (token || this.activeUserId) {
       try {
         const res = await apiFetch('/api/auth/me');
-        if (!res.ok) {
-          this.clearLocalWorkspace();
-          window.dispatchEvent(new Event('storage'));
-        } else {
+        const contentType = res.headers.get('content-type');
+        if (res.ok && contentType && contentType.includes('application/json')) {
           const data = await res.json();
           if (data.success && data.user) {
             this.activeUserId = data.user.id;
@@ -219,22 +217,23 @@ class ApexDatabaseManager {
               SessionManager.setToken(data.token);
             }
 
-            // Load fresh workspace state from persistent SQLite database
             const workspaceRes = await apiFetch('/api/workspace/load');
-            if (workspaceRes.ok) {
+            const wsContentType = workspaceRes.headers.get('content-type');
+            if (workspaceRes.ok && wsContentType && wsContentType.includes('application/json')) {
               const wsData = await workspaceRes.json();
               if (wsData.success && wsData.workspace) {
                 this.writeWorkspaceToLocalStorage(wsData.workspace);
                 window.dispatchEvent(new Event('storage'));
               }
             }
-          } else {
-            this.clearLocalWorkspace();
-            window.dispatchEvent(new Event('storage'));
           }
+        } else if (res.status === 401) {
+          // Only clear local workspace if server explicitly returned 401 Unauthorized
+          this.clearLocalWorkspace();
+          window.dispatchEvent(new Event('storage'));
         }
       } catch (err) {
-        console.error('Session startup verification failed:', err);
+        console.warn('Session startup verification notice:', err);
       }
     }
   }
@@ -534,89 +533,194 @@ class ApexDatabaseManager {
       throw new Error('Email and password are required for Owner login.');
     }
 
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // 1. Attempt Express server login endpoint
     try {
       const res = await apiFetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email: normalizedEmail, password })
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Authentication failed');
+
+      const contentType = res.headers.get('content-type');
+      if (res.ok && contentType && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data.success) {
+          this.clearLocalWorkspace();
+          this.writeWorkspaceToLocalStorage(data.workspace);
+          this.activeUserId = data.userId;
+          this.activeBusinessId = data.businessId;
+          localStorage.setItem('apex_ledger_active_user_id', data.userId);
+          localStorage.setItem('apex_ledger_active_business_id', data.businessId);
+          if (data.token) {
+            SessionManager.setToken(data.token);
+          }
+          this.addAudit('Logged In', `${data.user.name} (Owner)`, 'N/A', '127.0.0.1');
+          window.dispatchEvent(new Event('storage'));
+          return true;
+        } else {
+          throw new Error(data.error || 'Authentication failed');
+        }
+      } else if (res.status === 401 || res.status === 403 || res.status === 429 || (contentType && contentType.includes('application/json'))) {
+        const errData = await res.json().catch(() => null);
+        if (errData && errData.error) {
+          throw new Error(errData.error);
+        }
       }
-
-      // Clear existing local workspace completely
-      this.clearLocalWorkspace();
-
-      // Write loaded workspace into LocalStorage
-      this.writeWorkspaceToLocalStorage(data.workspace);
-
-      // Set session identifiers locally
-      this.activeUserId = data.userId;
-      this.activeBusinessId = data.businessId;
-      localStorage.setItem('apex_ledger_active_user_id', data.userId);
-      localStorage.setItem('apex_ledger_active_business_id', data.businessId);
-      if (data.token) {
-        SessionManager.setToken(data.token);
-      }
-
-      this.addAudit('Logged In', `${data.user.name} (Owner)`, 'N/A', '127.0.0.1');
-
-      window.dispatchEvent(new Event('storage'));
-      return true;
     } catch (err: any) {
-      console.log('Login API validation notice:', err.message || err);
-      throw err;
+      if (err.message && (err.message.includes('Incorrect') || err.message.includes('suspended') || err.message.includes('locked') || err.message.includes('not found') || err.message.includes('Employees must log in'))) {
+        throw err;
+      }
+      console.warn('Server login endpoint unavailable or non-JSON response, attempting client/Supabase login:', err);
+    }
+
+    // 2. Client-side / Supabase login fallback
+    try {
+      // If Supabase configured, attempt Supabase Auth
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data: supaAuth } = await supabase.auth.signInWithPassword({
+            email: normalizedEmail,
+            password: password
+          });
+          if (supaAuth?.user) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('email', normalizedEmail)
+              .maybeSingle();
+
+            if (profile) {
+              this.activeUserId = profile.id;
+              this.activeBusinessId = profile.business_id || profile.businessId || '';
+              localStorage.setItem('apex_ledger_active_user_id', profile.id);
+              if (this.activeBusinessId) {
+                localStorage.setItem('apex_ledger_active_business_id', this.activeBusinessId);
+              }
+              SessionManager.setToken('supa_' + Date.now());
+              window.dispatchEvent(new Event('storage'));
+              return true;
+            }
+          }
+        } catch (sErr) {
+          console.warn('Supabase auth login check notice:', sErr);
+        }
+      }
+
+      // Check local workspace profiles
+      const profiles = this.getProfiles();
+      const found = profiles.find(p => p.email && p.email.toLowerCase().trim() === normalizedEmail);
+
+      if (found) {
+        if (found.status === 'Suspended' || found.status === 'Archived' || found.status === 'Deleted') {
+          throw new Error(`Account status is ${found.status}. Access restricted.`);
+        }
+        if (found.role === 'Employee') {
+          throw new Error('Employees must log in using their unique Employee ID on the Employee login tab.');
+        }
+        if (found.password && found.password !== password) {
+          throw new Error('Incorrect password.');
+        }
+
+        this.activeUserId = found.id;
+        this.activeBusinessId = found.businessId || this.activeBusinessId || '';
+        localStorage.setItem('apex_ledger_active_user_id', found.id);
+        if (found.businessId) {
+          localStorage.setItem('apex_ledger_active_business_id', found.businessId);
+        }
+        SessionManager.setToken('session_' + Date.now());
+        this.addAudit('Logged In', `${found.name} (Owner)`, 'N/A');
+        window.dispatchEvent(new Event('storage'));
+        return true;
+      }
+
+      throw new Error('Email not found. Please verify your credentials or register a new workspace tenant.');
+    } catch (fallbackErr: any) {
+      throw new Error(fallbackErr.message || 'Login failed.');
     }
   }
 
   async loginWithEmployeeNumber(employeeNumber: string): Promise<boolean> {
+    const empNumClean = employeeNumber.trim().toUpperCase();
+
+    // 1. Attempt Express server employee-login endpoint
     try {
       const res = await apiFetch('/api/auth/employee-login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ employeeNumber })
       });
 
-      if (!res.ok) {
+      const contentType = res.headers.get('content-type');
+      if (res.ok && contentType && contentType.includes('application/json')) {
         const data = await res.json();
-        throw new Error(data.error || 'Authentication failed.');
-      }
+        if (data.success) {
+          this.writeWorkspaceToLocalStorage(data.workspace);
+          this.activeUserId = data.userId;
+          this.activeBusinessId = data.businessId;
+          const found = data.workspace.profiles?.find((p: any) => p.id === data.userId);
+          const empBranch = found?.branch || 'Main HQ';
+          const branches = data.workspace.branches || [];
+          const bFound = branches.find((b: any) => b.businessId === data.businessId && b.name === empBranch);
+          this.activeBranchId = bFound ? bFound.id : 'all';
 
-      const data = await res.json();
-      if (data.success) {
-        // Write loaded workspace into LocalStorage
-        this.writeWorkspaceToLocalStorage(data.workspace);
-
-        // Set session identifiers locally
-        this.activeUserId = data.userId;
-        this.activeBusinessId = data.businessId;
-        
-        // Find the active branch
-        const found = data.workspace.profiles?.find((p: any) => p.id === data.userId);
-        const empBranch = found?.branch || 'Main HQ';
-        const branches = data.workspace.branches || [];
-        const bFound = branches.find((b: any) => b.businessId === data.businessId && b.name === empBranch);
-        this.activeBranchId = bFound ? bFound.id : 'all';
-
-        localStorage.setItem('apex_ledger_active_user_id', data.userId);
-        localStorage.setItem('apex_ledger_active_business_id', data.businessId);
-        localStorage.setItem('apex_ledger_active_branch_id', this.activeBranchId);
-        if (data.token) {
-          SessionManager.setToken(data.token);
+          localStorage.setItem('apex_ledger_active_user_id', data.userId);
+          localStorage.setItem('apex_ledger_active_business_id', data.businessId);
+          localStorage.setItem('apex_ledger_active_branch_id', this.activeBranchId);
+          if (data.token) {
+            SessionManager.setToken(data.token);
+          }
+          this.addAudit('Employee Logged In', 'N/A', `${found?.name || 'Employee'} (${found?.role || 'Staff'})`);
+          window.dispatchEvent(new Event('storage'));
+          return true;
         }
-
-        this.addAudit('Employee Logged In', 'N/A', `${found?.name || 'Employee'} (${found?.role || 'Staff'})`);
-        window.dispatchEvent(new Event('storage'));
-        return true;
+      } else if (res.status === 400 || res.status === 403 || res.status === 404 || res.status === 429) {
+        const data = await res.json().catch(() => null);
+        if (data && data.error) {
+          throw new Error(data.error);
+        }
       }
     } catch (err: any) {
-      console.error('Employee login error:', err);
-      throw err;
+      if (err.message && (err.message.includes('not found') || err.message.includes('suspended') || err.message.includes('deleted') || err.message.includes('locked'))) {
+        throw err;
+      }
+      console.warn('Server employee login endpoint unavailable, attempting local profile lookup:', err);
     }
-    return false;
+
+    // 2. Client-side fallback lookup in local workspace profiles
+    const profiles = this.getProfiles();
+    const found = profiles.find(p => {
+      const num = p.badgeNumber || p.employeeNumber;
+      return num && typeof num === 'string' && num.trim().toUpperCase() === empNumClean;
+    });
+
+    if (!found) {
+      throw new Error('Employee ID not found.');
+    }
+
+    if (found.status === 'Deleted' || found.status === 'Archived') {
+      throw new Error('This employee account has been deleted/decommissioned. Access is restricted.');
+    }
+
+    if (found.status === 'Suspended') {
+      throw new Error('This employee account is suspended. Please contact your manager.');
+    }
+
+    if (found.status !== 'Active') {
+      throw new Error('This employee account is inactive.');
+    }
+
+    this.activeUserId = found.id;
+    this.activeBusinessId = found.businessId || this.activeBusinessId;
+    localStorage.setItem('apex_ledger_active_user_id', found.id);
+    if (this.activeBusinessId) {
+      localStorage.setItem('apex_ledger_active_business_id', this.activeBusinessId);
+    }
+    SessionManager.setToken('emp_session_' + Date.now());
+    this.addAudit('Employee Logged In', 'N/A', `${found.name} (${found.role})`);
+    window.dispatchEvent(new Event('storage'));
+    return true;
   }
 
   async logout(isTimeout: boolean = false) {
@@ -2344,35 +2448,172 @@ class ApexDatabaseManager {
   }
 
   async registerTenant(ownerName: string, businessName: string, email: string, password: string): Promise<boolean> {
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // 1. Attempt Express server endpoint
     try {
       const res = await apiFetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fullName: ownerName, businessName, email, password })
+        body: JSON.stringify({ fullName: ownerName, businessName, email: normalizedEmail, password })
       });
 
       const contentType = res.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await res.text();
-        console.error('Server returned non-JSON response:', text);
-        throw new Error(`Server returned non-JSON response (${res.status}). Please check server logs.`);
+      if (res.ok && contentType && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data.success) {
+          this.writeWorkspaceToLocalStorage(data.workspace);
+          this.activeUserId = data.userId;
+          this.activeBusinessId = data.businessId;
+          localStorage.setItem('apex_ledger_active_user_id', data.userId);
+          localStorage.setItem('apex_ledger_active_business_id', data.businessId);
+          if (data.token) {
+            SessionManager.setToken(data.token);
+          }
+          this.addAudit('Created User Profile', 'N/A', `${ownerName} (Owner / Admin)`);
+          this.addAudit('Logged In (New Tenant)', 'N/A', `${ownerName} (Owner / Admin)`);
+          window.dispatchEvent(new Event('storage'));
+          return true;
+        } else {
+          throw new Error(data.error || 'Registration failed');
+        }
+      } else if (res.status === 400 || (contentType && contentType.includes('application/json'))) {
+        const errData = await res.json().catch(() => null);
+        if (errData && errData.error) {
+          throw new Error(errData.error);
+        }
+      }
+    } catch (err: any) {
+      if (err.message && (err.message.includes('already exists') || err.message.includes('required'))) {
+        throw err;
+      }
+      console.warn('Server registration endpoint unavailable or non-JSON response, executing client/Supabase tenant provisioner:', err);
+    }
+
+    // 2. Client-side / Supabase Tenant Provisioner Fallback (for Vercel deployment or offline mode)
+    try {
+      // Check for duplicate email in local profiles
+      const existingProfiles = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
+      if (existingProfiles.some(p => p.email && p.email.toLowerCase().trim() === normalizedEmail)) {
+        throw new Error('An account with this email already exists. Please sign in.');
       }
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Registration failed');
+      // If Supabase is configured, attempt Supabase Auth signup
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const siteOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+          await supabase.auth.signUp({
+            email: normalizedEmail,
+            password: password,
+            options: {
+              emailRedirectTo: siteOrigin ? `${siteOrigin}` : undefined,
+              data: {
+                full_name: ownerName,
+                business_name: businessName
+              }
+            }
+          });
+        } catch (sErr) {
+          console.warn('Supabase auth signup notice:', sErr);
+        }
       }
 
-      // Write returned workspace data into localStorage
-      this.writeWorkspaceToLocalStorage(data.workspace);
+      const userId = 'u_owner_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+      const businessId = 'b_biz_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+      const workspaceId = 'w_work_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+
+      const initialWorkspace = {
+        businesses: [{
+          id: businessId,
+          name: businessName,
+          type: 'Retail',
+          currency: 'KSh',
+          status: 'Active',
+          createdAt: new Date().toISOString()
+        }],
+        branches: [{
+          id: 'br_default',
+          businessId: businessId,
+          name: 'Main Branch',
+          location: 'HQ',
+          status: 'Active',
+          isHeadquarters: true,
+          createdAt: new Date().toISOString()
+        }],
+        categories: [],
+        profiles: [{
+          id: userId,
+          name: ownerName,
+          email: normalizedEmail,
+          password: password,
+          role: 'Owner / Admin',
+          businessId: businessId,
+          onlineStatus: 'online',
+          status: 'Active'
+        }],
+        products: [],
+        customers: [],
+        debts: [],
+        sales: [],
+        expenses: [],
+        procurements: [],
+        tasks: [],
+        events: [],
+        timelogs: [],
+        notifications: [{
+          id: 'not_welcome_' + Date.now(),
+          businessId: businessId,
+          title: '🎉 Welcome to Apex Ledger!',
+          message: `Your workspace tenant "${businessName}" has been successfully created and initialized.`,
+          type: 'success',
+          date: new Date().toISOString().split('T')[0],
+          read: false
+        }],
+        audits: [{
+          id: 'audit_' + Date.now(),
+          businessId: businessId,
+          userId: userId,
+          action: 'Created Business & Tenant',
+          target: businessName,
+          details: `${ownerName} registered new workspace tenant`,
+          timestamp: new Date().toISOString()
+        }],
+        budgets: [],
+        invoices: [],
+        bank_transactions: [],
+        reconciliations: []
+      };
+
+      // Write workspace into LocalStorage & IndexedDB
+      this.writeWorkspaceToLocalStorage(initialWorkspace);
 
       // Set active workspace & user session
-      this.activeUserId = data.userId;
-      this.activeBusinessId = data.businessId;
-      localStorage.setItem('apex_ledger_active_user_id', data.userId);
-      localStorage.setItem('apex_ledger_active_business_id', data.businessId);
-      if (data.token) {
-        SessionManager.setToken(data.token);
+      this.activeUserId = userId;
+      this.activeBusinessId = businessId;
+      localStorage.setItem('apex_ledger_active_user_id', userId);
+      localStorage.setItem('apex_ledger_active_business_id', businessId);
+      SessionManager.setToken('session_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9));
+
+      // If Supabase is configured, sync initial business & profile records
+      if (isSupabaseConfigured && supabase) {
+        try {
+          await supabase.from('businesses').upsert([{
+            id: businessId,
+            name: businessName,
+            status: 'Active',
+            created_at: new Date().toISOString()
+          }] as any);
+          await supabase.from('profiles').upsert([{
+            id: userId,
+            business_id: businessId,
+            name: ownerName,
+            email: normalizedEmail,
+            role: 'Owner / Admin',
+            status: 'Active'
+          }] as any);
+        } catch (dbSyncErr) {
+          console.warn('Initial Supabase table sync notice:', dbSyncErr);
+        }
       }
 
       this.addAudit('Created User Profile', 'N/A', `${ownerName} (Owner / Admin)`);
@@ -2380,38 +2621,79 @@ class ApexDatabaseManager {
 
       window.dispatchEvent(new Event('storage'));
       return true;
-    } catch (err: any) {
-      console.log('Registration API validation notice:', err.message || err);
-      throw err;
+    } catch (fallbackErr: any) {
+      console.error('Registration fallback failed:', fallbackErr);
+      throw new Error(fallbackErr.message || 'Failed to complete tenant registration.');
     }
   }
 
   async addEmployee(profile: Omit<UserProfile, 'id' | 'businessId' | 'onlineStatus'>): Promise<UserProfile> {
-    const res = await apiFetch('/api/employee/register', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ employee: profile })
-    });
+    const activeBizId = this.activeBusinessId || localStorage.getItem('apex_ledger_active_business_id') || '';
+    let newProfile: UserProfile | null = null;
 
-    if (!res.ok) {
-      const errData = await res.json();
-      throw new Error(errData.error || 'Failed to register employee on backend.');
+    try {
+      const res = await apiFetch('/api/employee/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employee: profile })
+      });
+
+      const contentType = res.headers.get('content-type');
+      if (res.ok && contentType && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data.success && data.profile) {
+          newProfile = data.profile;
+        }
+      } else if (res.status === 400 || (contentType && contentType.includes('application/json'))) {
+        const errData = await res.json().catch(() => null);
+        if (errData && errData.error) {
+          throw new Error(errData.error);
+        }
+      }
+    } catch (err: any) {
+      if (err.message && (err.message.includes('already in use') || err.message.includes('must be alphanumeric'))) {
+        throw err;
+      }
+      console.warn('Server employee registration unavailable, using local provisioner:', err);
     }
 
-    const { profile: newProfile } = await res.json();
+    if (!newProfile) {
+      const all = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
+      const badgeNumber = profile.badgeNumber || (profile as any).employeeNumber || `EMP-${String(all.length + 1).padStart(3, '0')}`;
+      newProfile = {
+        ...profile,
+        id: 'u_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
+        businessId: activeBizId,
+        onlineStatus: 'offline',
+        status: 'Active',
+        badgeNumber,
+        employeeNumber: badgeNumber,
+        registrationDate: new Date().toISOString()
+      };
+    }
 
     // Sync state locally so UI is fully up to date immediately
     const all = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
     all.push(newProfile);
     setLocalItem('profiles', all);
 
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('profiles').upsert([{
+          id: newProfile.id,
+          business_id: activeBizId,
+          name: newProfile.name,
+          email: newProfile.email || '',
+          role: newProfile.role,
+          status: newProfile.status || 'Active'
+        }] as any);
+      } catch (sErr) {
+        console.warn('Supabase employee profile sync notice:', sErr);
+      }
+    }
+
     this.addAudit('Created User Profile', 'N/A', `${profile.name} (${profile.role})`);
-
-    // Dispatch local storage event for instant multi-tab and active session synchronization
     window.dispatchEvent(new Event('storage'));
-
     return newProfile;
   }
 

@@ -16,6 +16,8 @@ export interface UserProfile {
   status?: 'Active' | 'Suspended' | 'Archived' | 'Deleted';
   phone?: string;
   badgeNumber?: string;
+  employeeNumber?: string;
+  password?: string;
   dateJoined?: string;
   registrationDate?: string;
   lastLogin?: string;
