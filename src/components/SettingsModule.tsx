@@ -112,8 +112,8 @@ export const SettingsModule: React.FC = () => {
   const canManageBranches = isAdmin || (isManager && !!activeBusiness?.allowManagersToManageBranches);
 
   // Environment fields (read only / showcase)
-  const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || 'https://ais-database.supabase.co';
-  const supabaseKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || 'eyJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5eiI1Njk...';
+  const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL || (import.meta as any).env.NEXT_PUBLIC_SUPABASE_URL || 'Not Configured';
+  const supabaseKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || (import.meta as any).env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'Not Configured';
 
   // Load branches and targets on mount or business switch
   useEffect(() => {
