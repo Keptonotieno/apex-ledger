@@ -228,8 +228,8 @@ class ApexDatabaseManager {
             }
           }
         } else if (res.status === 401) {
-          // Only clear local workspace if server explicitly returned 401 Unauthorized
-          this.clearLocalWorkspace();
+          // Token expired or invalid; clear session token without wiping local business records
+          SessionManager.clearToken();
           window.dispatchEvent(new Event('storage'));
         }
       } catch (err) {
@@ -363,15 +363,6 @@ class ApexDatabaseManager {
   private saveTimeout: any = null;
 
   clearLocalWorkspace() {
-    const keys = [
-      'businesses', 'branches', 'categories', 'profiles', 'products', 
-      'customers', 'debts', 'sales', 'expenses', 'procurements', 
-      'tasks', 'events', 'timelogs', 'notifications', 'audits',
-      'budgets', 'invoices', 'bank_transactions', 'reconciliations'
-    ];
-    keys.forEach(key => {
-      localStorage.removeItem(`apex_ledger_${key}`);
-    });
     localStorage.removeItem('apex_ledger_active_business_id');
     localStorage.removeItem('apex_ledger_active_user_id');
     SessionManager.clearToken();
@@ -758,123 +749,33 @@ class ApexDatabaseManager {
   }
 
   private initDatabase() {
-    // Purge any legacy seed business records to ensure a completely pristine start
-    const existingBizStr = localStorage.getItem('apex_ledger_businesses');
-    if (existingBizStr) {
-      try {
-        const list = JSON.parse(existingBizStr) as Business[];
-        const filtered = list.filter(b => 
-          b.name !== 'Apex Retail Group' &&
-          b.name !== 'Apex Ledger Enterprise' && 
-          b.name !== 'Apex Retail Branch 1' &&
-          b.id !== 'b1' &&
-          b.id !== 'b2'
-        );
-        if (filtered.length !== list.length) {
-          if (filtered.length === 0) {
-            localStorage.setItem('apex_ledger_businesses', JSON.stringify(DEFAULT_BUSINESSES));
-            this.activeBusinessId = '';
-            localStorage.removeItem('apex_ledger_active_business_id');
-          } else {
-            localStorage.setItem('apex_ledger_businesses', JSON.stringify(filtered));
-            const hasActive = filtered.some(b => b.id === this.activeBusinessId);
-            if (!hasActive) {
-              this.activeBusinessId = filtered[0].id;
-              localStorage.setItem('apex_ledger_active_business_id', filtered[0].id);
-            }
-          }
-        }
-      } catch (e) {
-        // Safe fallback
+    // Ensure default collection structures exist if brand new installation
+    const collections = [
+      { key: 'businesses', defaultVal: DEFAULT_BUSINESSES },
+      { key: 'profiles', defaultVal: DEFAULT_PROFILES },
+      { key: 'products', defaultVal: DEFAULT_PRODUCTS },
+      { key: 'customers', defaultVal: DEFAULT_CUSTOMERS },
+      { key: 'debts', defaultVal: DEFAULT_DEBTS },
+      { key: 'sales', defaultVal: DEFAULT_SALES },
+      { key: 'expenses', defaultVal: DEFAULT_EXPENSES },
+      { key: 'procurements', defaultVal: DEFAULT_PROCUREMENTS },
+      { key: 'tasks', defaultVal: DEFAULT_TASKS },
+      { key: 'events', defaultVal: DEFAULT_EVENTS },
+      { key: 'timelogs', defaultVal: DEFAULT_TIMELOGS },
+      { key: 'notifications', defaultVal: DEFAULT_NOTIFICATIONS },
+      { key: 'audits', defaultVal: DEFAULT_AUDITS },
+      { key: 'branches', defaultVal: DEFAULT_BRANCHES },
+      { key: 'budgets', defaultVal: DEFAULT_BUDGETS },
+      { key: 'invoices', defaultVal: DEFAULT_INVOICES },
+      { key: 'bank_transactions', defaultVal: DEFAULT_BANK_TRANSACTIONS },
+      { key: 'reconciliations', defaultVal: DEFAULT_RECONCILIATIONS }
+    ];
+
+    for (const c of collections) {
+      if (!localStorage.getItem(`apex_ledger_${c.key}`)) {
+        setLocalItem(c.key, c.defaultVal || []);
       }
     }
-
-    // Purge legacy seed user profiles
-    const existingProfilesStr = localStorage.getItem('apex_ledger_profiles');
-    if (existingProfilesStr) {
-      try {
-        const list = JSON.parse(existingProfilesStr) as UserProfile[];
-        const filtered = list.filter(p => 
-          p.id !== 'u1' && 
-          p.id !== 'u2' &&
-          p.email !== 'sarah@apex.com' &&
-          p.email !== 'john@apex.com'
-        );
-        if (filtered.length !== list.length) {
-          localStorage.setItem('apex_ledger_profiles', JSON.stringify(filtered));
-        }
-      } catch (e) {}
-    }
-
-    // Purge any associated residual default data keys
-    const keysToPurge = ['products', 'customers', 'debts', 'sales', 'expenses', 'branches', 'budgets', 'invoices', 'bank_transactions', 'reconciliations'];
-    for (const key of keysToPurge) {
-      const str = localStorage.getItem(`apex_ledger_${key}`);
-      if (str) {
-        try {
-          const list = JSON.parse(str) as any[];
-          const filtered = list.filter((item: any) => 
-            item.businessId !== 'b1' && 
-            item.businessId !== 'b2' && 
-            item.id !== 'p1' && 
-            item.id !== 'p2' && 
-            item.id !== 'p3' &&
-            item.id !== 'br1' &&
-            item.id !== 'br2' &&
-            item.id !== 'rec1' &&
-            item.id !== 'bt1' &&
-            item.id !== 'bt2' &&
-            item.id !== 'bt3' &&
-            item.id !== 'inv1' &&
-            item.id !== 'inv2' &&
-            item.id !== 'inv3' &&
-            item.id !== 'd1' &&
-            item.id !== 'c1' &&
-            item.id !== 'c2'
-          );
-          if (filtered.length !== list.length) {
-            localStorage.setItem(`apex_ledger_${key}`, JSON.stringify(filtered));
-          }
-        } catch (e) {}
-      }
-    }
-
-    if (!localStorage.getItem('apex_ledger_businesses')) {
-      setLocalItem('businesses', DEFAULT_BUSINESSES);
-      setLocalItem('profiles', DEFAULT_PROFILES);
-      setLocalItem('products', DEFAULT_PRODUCTS);
-      setLocalItem('customers', DEFAULT_CUSTOMERS);
-      setLocalItem('debts', DEFAULT_DEBTS);
-      setLocalItem('sales', DEFAULT_SALES);
-      setLocalItem('expenses', DEFAULT_EXPENSES);
-      setLocalItem('procurements', DEFAULT_PROCUREMENTS);
-      setLocalItem('tasks', DEFAULT_TASKS);
-      setLocalItem('events', DEFAULT_EVENTS);
-      setLocalItem('timelogs', DEFAULT_TIMELOGS);
-      setLocalItem('notifications', DEFAULT_NOTIFICATIONS);
-      setLocalItem('audits', DEFAULT_AUDITS);
-      setLocalItem('branches', DEFAULT_BRANCHES);
-      setLocalItem('budgets', DEFAULT_BUDGETS);
-      setLocalItem('invoices', DEFAULT_INVOICES);
-      setLocalItem('bank_transactions', DEFAULT_BANK_TRANSACTIONS);
-      setLocalItem('reconciliations', DEFAULT_RECONCILIATIONS);
-    } else if (!localStorage.getItem('apex_ledger_branches')) {
-      setLocalItem('branches', DEFAULT_BRANCHES);
-    }
-
-    if (!localStorage.getItem('apex_ledger_budgets')) {
-      setLocalItem('budgets', DEFAULT_BUDGETS);
-    }
-    if (!localStorage.getItem('apex_ledger_invoices')) {
-      setLocalItem('invoices', DEFAULT_INVOICES);
-    }
-    if (!localStorage.getItem('apex_ledger_bank_transactions')) {
-      setLocalItem('bank_transactions', DEFAULT_BANK_TRANSACTIONS);
-    }
-    if (!localStorage.getItem('apex_ledger_reconciliations')) {
-      setLocalItem('reconciliations', DEFAULT_RECONCILIATIONS);
-    }
-
   }
 
   // Set active context

@@ -20,15 +20,34 @@ const DB_PATH = path.join(process.cwd(), 'apex_ledger.db');
 
 let db: sqlite3.Database;
 
-// Forced SQLite exclusively as per user and prompt guidelines unless PostgreSQL/Supabase is configured in environment
-const isPgConfigured = !!(process.env.DATABASE_URL || process.env.SQL_CONNECTION_STRING);
+function getPgConnectionString(): string | undefined {
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+  if (process.env.SQL_CONNECTION_STRING) return process.env.SQL_CONNECTION_STRING;
+  if (process.env.SUPABASE_DB_URL) return process.env.SUPABASE_DB_URL;
+  if (process.env.POSTGRES_URL) return process.env.POSTGRES_URL;
+  
+  const supaUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const supaPass = process.env.SQL_PASSWORD || process.env.SUPABASE_DB_PASSWORD || process.env.DATABASE_PASSWORD;
+  if (supaUrl && supaPass) {
+    try {
+      const parsed = new URL(supaUrl);
+      const hostParts = parsed.hostname.split('.');
+      const projectRef = hostParts[0];
+      return `postgresql://postgres.${projectRef}:${encodeURIComponent(supaPass)}@db.${projectRef}.supabase.co:5432/postgres`;
+    } catch (e) {
+      // ignore
+    }
+  }
+  return undefined;
+}
+
+const connectionString = getPgConnectionString();
+const isPgConfigured = !!(connectionString || process.env.SQL_HOST);
 
 let pgPool: pg.Pool | null = null;
 
 if (isPgConfigured) {
-  console.log('PostgreSQL/Supabase configuration found. Instantiating pg Pool...');
-  const connectionString = process.env.DATABASE_URL || process.env.SQL_CONNECTION_STRING;
-  
+  console.log('PostgreSQL/Supabase configuration detected. Instantiating pg Pool...');
   pgPool = new Pool({
     connectionString,
     host: connectionString ? undefined : process.env.SQL_HOST,
@@ -36,7 +55,6 @@ if (isPgConfigured) {
     password: connectionString ? undefined : process.env.SQL_PASSWORD,
     database: connectionString ? undefined : process.env.SQL_DB_NAME,
     connectionTimeoutMillis: 15000,
-    // Supabase and most remote PostgreSQL services require SSL
     ssl: { rejectUnauthorized: false }
   });
 

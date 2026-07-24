@@ -153,12 +153,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
             }
           } else {
-            // Token is invalid/expired
-            dbManager.clearLocalWorkspace();
+            // Token is invalid/expired - clear active token only, preserve local workspace records
+            SessionManager.clearToken();
           }
         } else {
-          // Server rejected session
-          dbManager.clearLocalWorkspace();
+          // Server session unauthenticated - clear active token only
+          SessionManager.clearToken();
         }
       } catch (err) {
         console.error('Session restoration failed:', err);

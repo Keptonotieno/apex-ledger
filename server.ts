@@ -799,10 +799,19 @@ app.post('/api/workspace/save', async (req, res) => {
     const sanitizedWorkspace = { ...workspace };
     
     // Write workspace state atomically
-    await dbRun(
-      'UPDATE workspaces SET workspace_data = ? WHERE business_id = ?',
-      [JSON.stringify(sanitizedWorkspace), session.business_id]
-    );
+    const workspaceJson = JSON.stringify(sanitizedWorkspace);
+    const existingWs = await dbGet('SELECT business_id FROM workspaces WHERE business_id = ?', [session.business_id]);
+    if (existingWs) {
+      await dbRun(
+        'UPDATE workspaces SET workspace_data = ? WHERE business_id = ?',
+        [workspaceJson, session.business_id]
+      );
+    } else {
+      await dbRun(
+        'INSERT INTO workspaces (business_id, workspace_id, workspace_data) VALUES (?, ?, ?)',
+        [session.business_id, session.workspace_id || ('w_' + session.business_id), workspaceJson]
+      );
+    }
 
     res.json({ success: true });
   } catch (err: any) {

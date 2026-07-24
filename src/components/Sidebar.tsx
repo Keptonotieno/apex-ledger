@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useApp } from '../context/AppContext';
 import { UserRole } from '../types';
 import { 
@@ -6,7 +7,7 @@ import {
   DollarSign, BarChart3, TrendingUp, Users, ClipboardList, 
   Calendar, CheckSquare, ShieldAlert, Settings, FileText, 
   ChevronLeft, ChevronRight, UserCheck, ShieldAlert as LockIcon,
-  LogOut, Database, Camera, Building2, Truck, Receipt, X
+  Database, Camera, Building2, Truck, Receipt, X
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -107,27 +108,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
     }
   };
 
-  return (
-    <>
-      {/* Backdrop overlay for narrow viewports when sidebar drawer is open */}
-      {!collapsed && (
-        <div 
-          className="fixed inset-0 bg-gray-950/80 backdrop-blur-md z-[50] md:hidden transition-opacity duration-300"
-          onClick={() => setCollapsed(true)}
-          id="sidebar-mobile-backdrop"
-        />
-      )}
-      
-      <aside 
-        className={`glass-panel h-screen border-r border-brand-border flex flex-col transition-all duration-300 z-[55] fixed md:sticky top-0 left-0 print:hidden ${
-          collapsed 
-            ? 'w-0 -translate-x-full md:w-20 md:translate-x-0 overflow-hidden md:overflow-visible' 
-            : 'w-[82vw] max-w-xs md:w-72 translate-x-0 shadow-2xl md:shadow-none'
-        }`}
-      >
+  // Common navigation content component
+  const SidebarBody = ({ isCollapsed }: { isCollapsed: boolean }) => (
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Brand Logo & Name */}
       <div className="p-4 sm:p-5 flex items-center justify-between border-b border-brand-border shrink-0">
-        {!collapsed && (
+        {!isCollapsed ? (
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl bg-cyan-950/50 border border-cyan-500/40 flex items-center justify-center glow-cyan shrink-0">
               <TrendingUp className="w-5 h-5 text-cyan-400" />
@@ -137,8 +123,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
               <span className="text-[10px] text-cyan-400 font-mono tracking-wider block truncate">ENTERPRISE VAULT</span>
             </div>
           </div>
-        )}
-        {collapsed && (
+        ) : (
           <div className="w-10 h-10 mx-auto rounded-xl bg-cyan-950/50 border border-cyan-500/40 flex items-center justify-center glow-cyan">
             <TrendingUp className="w-5 h-5 text-cyan-400" />
           </div>
@@ -146,9 +131,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
         <button 
           onClick={() => setCollapsed(!collapsed)}
           className="p-2 rounded-xl border border-brand-border bg-gray-900/50 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/30 transition shrink-0"
-          aria-label={collapsed ? "Expand sidebar" : "Close sidebar"}
+          aria-label={isCollapsed ? "Expand sidebar" : "Close sidebar"}
         >
-          {collapsed ? (
+          {isCollapsed ? (
             <ChevronRight className="w-4 h-4" />
           ) : (
             <>
@@ -161,9 +146,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
 
       {/* Tenant Branch Switcher */}
       <div className="px-4 py-3 border-b border-brand-border shrink-0">
-        {collapsed ? (
+        {isCollapsed ? (
           <div className="w-8 h-8 rounded-lg bg-gray-800 flex items-center justify-center text-xs font-bold text-cyan-400 mx-auto">
-            {activeBusiness.name.substring(0, 1)}
+            {activeBusiness.name ? activeBusiness.name.substring(0, 1) : 'B'}
           </div>
         ) : (
           <div className="relative">
@@ -217,24 +202,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
           const Icon = item.icon;
 
           if (!permitted) {
-            // Completely hide restricted views for Employee role as per strict requirement
             if (activeUser.role === UserRole.EMPLOYEE) {
               return null;
             }
-            // Render a locked menu item for demo role switcher
             return (
               <div
                 key={item.id}
                 className={`flex items-center justify-between px-3.5 py-3 rounded-xl text-gray-600 cursor-not-allowed select-none transition-colors min-h-[44px] ${
-                  collapsed ? 'justify-center' : ''
+                  isCollapsed ? 'justify-center' : ''
                 }`}
                 title={`Requires ${item.minRole}`}
               >
                 <div className="flex items-center gap-3">
                   <Icon className="w-4.5 h-4.5 opacity-40 shrink-0" />
-                  {!collapsed && <span className="text-sm font-medium line-through decoration-gray-700/60">{item.name}</span>}
+                  {!isCollapsed && <span className="text-sm font-medium line-through decoration-gray-700/60">{item.name}</span>}
                 </div>
-                {!collapsed && <LockIcon className="w-3.5 h-3.5 text-gray-600" />}
+                {!isCollapsed && <LockIcon className="w-3.5 h-3.5 text-gray-600" />}
               </div>
             );
           }
@@ -247,13 +230,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
                 active 
                   ? 'bg-cyan-400 text-gray-950 font-bold shadow-md shadow-cyan-400/25' 
                   : 'text-gray-400 hover:text-gray-100 hover:bg-gray-900/50'
-              } ${collapsed ? 'justify-center' : ''}`}
+              } ${isCollapsed ? 'justify-center' : ''}`}
             >
               <Icon className={`w-4.5 h-4.5 shrink-0 ${active ? 'text-gray-950' : 'text-gray-400 group-hover:text-cyan-400'}`} />
-              {!collapsed && <span className="text-sm">{item.name}</span>}
+              {!isCollapsed && <span className="text-sm">{item.name}</span>}
               
-              {/* Tooltip on collapsed state */}
-              {collapsed && (
+              {isCollapsed && (
                 <div className="absolute left-full ml-3 px-2 py-1 bg-gray-950 text-gray-200 text-xs rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-all duration-150 z-50 whitespace-nowrap shadow-md border border-brand-border">
                   {item.name}
                 </div>
@@ -269,7 +251,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
           <button 
             onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}
             className={`w-full flex items-center gap-3 rounded-xl text-left hover:bg-gray-900/60 transition ${
-              collapsed ? 'justify-center p-1' : 'p-2 border border-brand-border'
+              isCollapsed ? 'justify-center p-1' : 'p-2 border border-brand-border'
             }`}
           >
             <div className="relative shrink-0 group/avatar">
@@ -301,7 +283,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
               </label>
             </div>
 
-            {!collapsed && (
+            {!isCollapsed && (
               <div className="flex-1 overflow-hidden">
                 <div className="text-sm font-semibold text-gray-200 truncate capitalize">{activeUser.name}</div>
                 <div className="text-[10px] text-cyan-400 font-mono tracking-wider truncate">{activeUser.role}</div>
@@ -309,8 +291,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
             )}
           </button>
 
-          {/* Upload Link under the Profile Card */}
-          {!collapsed && (
+          {!isCollapsed && (
             <div className="mt-2 flex justify-center gap-1.5">
               <label 
                 onClick={(e) => e.stopPropagation()}
@@ -330,7 +311,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
                   onClick={(e) => {
                     e.stopPropagation();
                     updateEmployee(activeUser.id, { avatarUrl: undefined });
-                    alert("Profile photo removed successfully!");
                   }}
                   className="text-[9px] text-rose-500 hover:text-rose-400 font-mono uppercase tracking-wider cursor-pointer transition flex items-center gap-1.5 py-1 px-2.5 rounded-md border border-brand-border/40 hover:border-rose-500/20 bg-gray-950/30"
                 >
@@ -340,7 +320,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
             </div>
           )}
 
-          {/* Interactive Role Switcher Modal Dropdown to demonstrate role morphing */}
           {showRoleSwitcher && (
             <div className="absolute bottom-full left-0 w-full mb-2 p-1 bg-gray-900 border border-brand-border rounded-xl shadow-2xl z-50">
               <div className="px-2 py-1.5 text-[10px] text-gray-400 font-mono uppercase tracking-wider border-b border-brand-border/60">
@@ -371,15 +350,61 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
           )}
         </div>
         
-        {/* Support indicator */}
-        {!collapsed && (
+        {!isCollapsed && (
           <div className="mt-3 flex items-center justify-between text-[10px] text-gray-500 font-mono px-2">
             <span>SECURE WORKSPACE</span>
             <span className="text-cyan-400/80 animate-pulse">● LIVE SYNC</span>
           </div>
         )}
       </div>
-    </aside>
-  </>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Mobile Drawer Navigation using Framer Motion */}
+      <AnimatePresence>
+        {!collapsed && (
+          <>
+            {/* Backdrop overlay */}
+            <motion.div 
+              key="mobile-nav-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 bg-gray-950/80 backdrop-blur-md z-[60] md:hidden"
+              onClick={() => setCollapsed(true)}
+              id="sidebar-mobile-backdrop"
+            />
+
+            {/* Slide-in Drawer */}
+            <motion.aside
+              key="mobile-nav-drawer"
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+              className="fixed top-0 left-0 bottom-0 w-[85vw] max-w-xs bg-gray-950/95 border-r border-brand-border flex flex-col z-[65] md:hidden shadow-2xl overflow-hidden"
+              id="sidebar-mobile-drawer"
+            >
+              <SidebarBody isCollapsed={false} />
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Desktop Sticky Sidebar (>= 768px) */}
+      <aside 
+        className={`hidden md:flex glass-panel h-screen border-r border-brand-border flex-col transition-all duration-300 z-30 sticky top-0 left-0 print:hidden ${
+          collapsed 
+            ? 'w-20 overflow-visible' 
+            : 'w-72 shadow-none'
+        }`}
+      >
+        <SidebarBody isCollapsed={collapsed} />
+      </aside>
+    </>
   );
 };
+
