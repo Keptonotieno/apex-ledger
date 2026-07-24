@@ -32,7 +32,7 @@ import { AccountingModule } from './components/AccountingModule';
 import { UserRole } from './types';
 import { motion, AnimatePresence } from 'motion/react';
 import { SessionManager } from './utils/SessionManager';
-import { dbManager } from './lib/database';
+import { dbManager, isSupabaseConfigured, supabase } from './lib/database';
 import { AlertTriangle, Clock, LogOut } from 'lucide-react';
 import { LockScreen } from './components/LockScreen';
 import { SnackbarNotification } from './components/SnackbarNotification';
@@ -61,6 +61,55 @@ function DashboardLayout() {
   const [isLocked, setIsLocked] = useState<boolean>(() => {
     return localStorage.getItem('apex_ledger_locked') === 'true';
   });
+
+  // Synchronize isLocked state with local storage on every change
+  React.useEffect(() => {
+    if (isLocked) {
+      localStorage.setItem('apex_ledger_locked', 'true');
+    } else {
+      localStorage.removeItem('apex_ledger_locked');
+    }
+  }, [isLocked]);
+
+  // Recurring background heartbeat to check Supabase session validity & token expiration
+  React.useEffect(() => {
+    if (!isLoggedIn) return;
+
+    const checkSessionHeartbeat = async () => {
+      // Check local session manager token
+      const currentToken = SessionManager.getToken();
+      if (!currentToken) {
+        console.warn('Heartbeat: Session token missing, logging out gracefully.');
+        logout();
+        return;
+      }
+
+      // Check Supabase session if configured
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data: { session }, error } = await supabase.auth.getSession();
+          if (error || !session) {
+            console.warn('Heartbeat: Supabase session invalid or expired, logging out gracefully:', error?.message);
+            logout();
+            return;
+          }
+
+          if (session.expires_at && session.expires_at * 1000 < Date.now()) {
+            console.warn('Heartbeat: Supabase authentication token expired, logging out gracefully.');
+            logout();
+            return;
+          }
+        } catch (err) {
+          console.warn('Heartbeat session check notice:', err);
+        }
+      }
+    };
+
+    // Run session check heartbeat every 30 seconds
+    const interval = setInterval(checkSessionHeartbeat, 30000);
+
+    return () => clearInterval(interval);
+  }, [isLoggedIn, logout]);
 
   // Inactivity-based auto-locking/logout
   React.useEffect(() => {
