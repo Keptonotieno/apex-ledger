@@ -1,15 +1,114 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { UserRole, UserProfile } from '../types';
+import { isSupabaseConfigured, supabase, dbManager } from '../lib/database';
+import { SessionManager } from '../utils/SessionManager';
 import { 
   Lock, Mail, Eye, EyeOff, ShieldCheck, 
   ChevronRight, Users, CheckCircle, Database, Smartphone,
-  Store, Plus, Shield, ArrowUpRight
+  Store, Plus, Shield, ArrowUpRight, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export const Login: React.FC = () => {
   const { login, loginWithEmployeeNumber, registerTenant, profiles } = useApp();
+  
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+
+  // Automatically check Supabase session & handle token refresh upon mount
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkSupabaseSession = async () => {
+      if (!isSupabaseConfigured || !supabase) {
+        if (isMounted) setIsCheckingSession(false);
+        return;
+      }
+
+      try {
+        // Checking getSession automatically refreshes active tokens if expired/stale
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (session?.user) {
+          const userEmail = session.user.email;
+          const userId = session.user.id;
+
+          // Silently query profile and business association
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .or(`id.eq.${userId}${userEmail ? `,email.eq.${userEmail}` : ''}`)
+            .maybeSingle();
+
+          const businessId = profile?.business_id || profile?.businessId || session.user.user_metadata?.business_id;
+
+          if (profile && businessId && profile.status !== 'Suspended' && profile.status !== 'Deactivated') {
+            dbManager.setActiveUser(profile.id);
+            dbManager.setActiveBusiness(businessId);
+            SessionManager.setToken(session.access_token || ('supa_' + Date.now()));
+            window.dispatchEvent(new Event('storage'));
+            window.dispatchEvent(new Event('apex-db-update'));
+            return; // Successfully re-validated! Session active.
+          } else if (userEmail) {
+            // Fallback check against dbManager profiles
+            const localProfiles = dbManager.getProfiles();
+            const matchedLocal = localProfiles.find(
+              p => p.id === userId || (p.email && p.email.toLowerCase() === userEmail.toLowerCase())
+            );
+            if (matchedLocal && matchedLocal.businessId) {
+              dbManager.setActiveUser(matchedLocal.id);
+              dbManager.setActiveBusiness(matchedLocal.businessId);
+              SessionManager.setToken(session.access_token || ('supa_' + Date.now()));
+              window.dispatchEvent(new Event('storage'));
+              window.dispatchEvent(new Event('apex-db-update'));
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Silent session check notice:', err);
+      } finally {
+        if (isMounted) {
+          setIsCheckingSession(false);
+        }
+      }
+    };
+
+    checkSupabaseSession();
+
+    // Listen to token refresh and auth events
+    const { data: authListener } = supabase
+      ? supabase.auth.onAuthStateChange(async (event, session) => {
+          if ((event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') && session?.user) {
+            const userEmail = session.user.email;
+            const userId = session.user.id;
+
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('*')
+              .or(`id.eq.${userId}${userEmail ? `,email.eq.${userEmail}` : ''}`)
+              .maybeSingle();
+
+            const bizId = profile?.business_id || profile?.businessId || session.user.user_metadata?.business_id;
+
+            if (profile && bizId) {
+              dbManager.setActiveUser(profile.id);
+              dbManager.setActiveBusiness(bizId);
+              SessionManager.setToken(session.access_token || ('supa_' + Date.now()));
+              window.dispatchEvent(new Event('storage'));
+              window.dispatchEvent(new Event('apex-db-update'));
+            }
+          }
+        })
+      : { data: { subscription: null } };
+
+    return () => {
+      isMounted = false;
+      if (authListener?.subscription) {
+        authListener.subscription.unsubscribe();
+      }
+    };
+  }, []);
   
   // Start on the Register Tenant screen by default as requested
   const [view, setView] = useState<'register' | 'login' | 'forgot' | 'reset'>('register');
@@ -196,7 +295,31 @@ export const Login: React.FC = () => {
     }
   };
 
-
+  if (isCheckingSession) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex flex-col justify-center items-center px-4 py-8 relative overflow-hidden font-sans select-none">
+        <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-cyan-500/5 blur-3xl pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 rounded-full bg-indigo-500/5 blur-3xl pointer-events-none" />
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex flex-col items-center gap-4 z-10 p-8 rounded-3xl bg-[#111622]/80 border border-gray-800/80 shadow-2xl backdrop-blur-md"
+        >
+          <div className="w-12 h-12 border-3 border-cyan-400/20 border-t-cyan-400 rounded-full animate-spin flex items-center justify-center">
+            <Loader2 className="w-6 h-6 text-cyan-400 animate-spin" />
+          </div>
+          <div className="text-center">
+            <p className="font-mono text-xs text-cyan-400 uppercase tracking-widest animate-pulse font-bold">
+              Verifying Session & Business
+            </p>
+            <p className="text-[11px] text-gray-400 mt-1">
+              Validating security token...
+            </p>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col justify-center items-center px-4 py-8 relative overflow-hidden font-sans select-none">
