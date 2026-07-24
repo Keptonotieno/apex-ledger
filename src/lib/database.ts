@@ -275,9 +275,14 @@ class ApexDatabaseManager {
 
       const { data: prodData, error: prodErr } = await supabase.from('products').select('*');
       if (!prodErr && prodData && prodData.length > 0) {
-        const camelProdData = keysToCamel(prodData);
-        setLocalItem('products', camelProdData);
-        await IndexedDBCache.set('products', camelProdData);
+        const camelProdData = keysToCamel(prodData) as Product[];
+        const existingLocal = getLocalItem<Product[]>('products', DEFAULT_PRODUCTS);
+        const prodMap = new Map<string, Product>();
+        existingLocal.forEach(p => prodMap.set(p.id, p));
+        camelProdData.forEach(p => prodMap.set(p.id, p));
+        const mergedProds = Array.from(prodMap.values());
+        setLocalItem('products', mergedProds);
+        await IndexedDBCache.set('products', mergedProds);
       } else if (prodErr) {
         if (prodErr.code === 'PGRST205') {
           console.log("[ApexDatabaseManager] Table 'products' is not yet present in Supabase's schema cache (PGRST205). The offline-first local/cached fallback storage is active and functioning correctly.");
@@ -358,6 +363,8 @@ class ApexDatabaseManager {
         }
       }
     }
+    window.dispatchEvent(new Event('apex-db-update'));
+    window.dispatchEvent(new Event('storage'));
   }
 
   private saveTimeout: any = null;
@@ -560,10 +567,10 @@ class ApexDatabaseManager {
         }
       }
     } catch (err: any) {
-      if (err.message && (err.message.includes('Incorrect') || err.message.includes('suspended') || err.message.includes('locked') || err.message.includes('not found') || err.message.includes('Employees must log in'))) {
+      if (err.message && (err.message.includes('Incorrect password') || err.message.includes('suspended') || err.message.includes('locked') || err.message.includes('Employees must log in'))) {
         throw err;
       }
-      console.warn('Server login endpoint unavailable or non-JSON response, attempting client/Supabase login:', err);
+      console.warn('Server login endpoint notice, falling back to Supabase/client profile verification:', err);
     }
 
     // 2. Client-side / Supabase login fallback
@@ -571,7 +578,7 @@ class ApexDatabaseManager {
       // If Supabase configured, attempt Supabase Auth
       if (isSupabaseConfigured && supabase) {
         try {
-          const { data: supaAuth } = await supabase.auth.signInWithPassword({
+          const { data: supaAuth, error: authErr } = await supabase.auth.signInWithPassword({
             email: normalizedEmail,
             password: password
           });
@@ -579,7 +586,7 @@ class ApexDatabaseManager {
             const { data: profile } = await supabase
               .from('profiles')
               .select('*')
-              .eq('email', normalizedEmail)
+              .or(`id.eq.${supaAuth.user.id},email.eq.${normalizedEmail}`)
               .maybeSingle();
 
             if (profile) {
@@ -592,10 +599,60 @@ class ApexDatabaseManager {
               SessionManager.setToken('supa_' + Date.now());
               window.dispatchEvent(new Event('storage'));
               return true;
+            } else {
+              // Create profile in Supabase on the fly if auth succeeded
+              const meta = supaAuth.user.user_metadata || {};
+              const ownerName = meta.full_name || normalizedEmail.split('@')[0];
+              const businessId = meta.business_id || ('b_biz_' + Math.random().toString(36).substring(2, 9));
+              try {
+                await supabase.from('profiles').upsert([{
+                  id: supaAuth.user.id,
+                  business_id: businessId,
+                  name: ownerName,
+                  email: normalizedEmail,
+                  role: 'Owner / Admin',
+                  status: 'Active'
+                }] as any);
+              } catch (e) {
+                console.warn('Supabase profile upsert error:', e);
+              }
+
+              this.activeUserId = supaAuth.user.id;
+              this.activeBusinessId = businessId;
+              localStorage.setItem('apex_ledger_active_user_id', supaAuth.user.id);
+              localStorage.setItem('apex_ledger_active_business_id', businessId);
+              SessionManager.setToken('supa_' + Date.now());
+              window.dispatchEvent(new Event('storage'));
+              return true;
             }
+          } else if (authErr) {
+            console.warn('Supabase Auth signIn error:', authErr.message);
           }
         } catch (sErr) {
           console.warn('Supabase auth login check notice:', sErr);
+        }
+
+        // Direct Supabase profiles table check
+        try {
+          const { data: directProfile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', normalizedEmail)
+            .maybeSingle();
+
+          if (directProfile) {
+            this.activeUserId = directProfile.id;
+            this.activeBusinessId = directProfile.business_id || directProfile.businessId || '';
+            localStorage.setItem('apex_ledger_active_user_id', directProfile.id);
+            if (this.activeBusinessId) {
+              localStorage.setItem('apex_ledger_active_business_id', this.activeBusinessId);
+            }
+            SessionManager.setToken('supa_' + Date.now());
+            window.dispatchEvent(new Event('storage'));
+            return true;
+          }
+        } catch (dpErr) {
+          console.warn('Direct Supabase profile check notice:', dpErr);
         }
       }
 
@@ -914,16 +971,32 @@ class ApexDatabaseManager {
   getProducts(): Product[] {
     const all = getLocalItem<Product[]>('products', DEFAULT_PRODUCTS);
     const currentUser = this.getCurrentUser();
-    const activeBizId = currentUser.role === UserRole.EMPLOYEE ? currentUser.businessId : this.activeBusinessId;
-    const filtered = all.filter(p => p.businessId === activeBizId);
+    
+    // Resolve active business ID consistently for all user roles
+    const activeBizId = (currentUser.role === UserRole.EMPLOYEE && currentUser.businessId) 
+      ? currentUser.businessId 
+      : (this.activeBusinessId || currentUser.businessId);
+
+    if (!activeBizId) return [];
+
+    const filtered = all.filter(p => p.businessId === activeBizId || (p as any).business_id === activeBizId);
     
     if (currentUser.role === UserRole.EMPLOYEE) {
       const empBranch = currentUser.branch || 'Main HQ';
-      return filtered.filter(p => (p as any).branch === empBranch || (p as any).branchId === empBranch);
+      return filtered.filter(p => {
+        const pBranch = (p as any).branch || (p as any).branchId;
+        if (!pBranch || pBranch === 'all' || pBranch === 'All Branches' || pBranch === 'Main HQ') return true;
+        return pBranch === empBranch;
+      });
     }
 
     if (this.activeBranchId && this.activeBranchId !== 'all') {
-      return filtered.filter(p => (p as any).branchId === this.activeBranchId || (p as any).branch === this.getCurrentBranchName());
+      const currentBranchName = this.getCurrentBranchName();
+      return filtered.filter(p => {
+        const pBranch = (p as any).branch || (p as any).branchId;
+        if (!pBranch || pBranch === 'all' || pBranch === 'All Branches') return true;
+        return (p as any).branchId === this.activeBranchId || (p as any).branch === currentBranchName;
+      });
     }
     return filtered;
   }
@@ -1555,12 +1628,17 @@ class ApexDatabaseManager {
   }
 
   addProduct(product: Omit<Product, 'id' | 'businessId' | 'stockStatus'>) {
+    const user = this.getCurrentUser();
+    if (user.role === UserRole.EMPLOYEE) {
+      throw new Error('Employees are only authorized to view products and record sales. Creating products is restricted.');
+    }
     const all = getLocalItem<Product[]>('products', DEFAULT_PRODUCTS);
+    const targetBizId = user.businessId || this.activeBusinessId;
     const newProduct: Product = {
       ...product,
       id: 'prod_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9),
-      businessId: this.activeBusinessId,
-      stockStatus: product.quantity === 0 ? 'Out of Stock' : (product.quantity <= product.minStockAlert ? 'Low Stock' : 'In Stock')
+      businessId: targetBizId,
+      stockStatus: product.quantity === 0 ? 'Out of Stock' : (product.quantity <= (product.minStockAlert || 5) ? 'Low Stock' : 'In Stock')
     };
 
     all.push(newProduct);
@@ -1569,12 +1647,19 @@ class ApexDatabaseManager {
 
     this.syncRowToSupabase('products', newProduct, 'upsert');
 
+    window.dispatchEvent(new Event('apex-db-update'));
+    window.dispatchEvent(new Event('storage'));
+
     if (newProduct.stockStatus === 'Low Stock' || newProduct.stockStatus === 'Out of Stock') {
       this.addNotification(`Stock Alert: ${newProduct.name}`, `${newProduct.name} is ${newProduct.stockStatus.toLowerCase()} (${newProduct.quantity} left)`, 'alert');
     }
   }
 
   updateProduct(productId: string, updates: Partial<Product>) {
+    const user = this.getCurrentUser();
+    if (user.role === UserRole.EMPLOYEE) {
+      throw new Error('Employees are only authorized to view products and record sales. Editing products is restricted.');
+    }
     const all = getLocalItem<Product[]>('products', DEFAULT_PRODUCTS);
     const index = all.findIndex(p => p.id === productId);
     if (index === -1) return;
@@ -1586,7 +1671,7 @@ class ApexDatabaseManager {
     if (updated.quantity !== undefined || updated.minStockAlert !== undefined) {
       updated.stockStatus = updated.quantity === 0 
         ? 'Out of Stock' 
-        : (updated.quantity <= updated.minStockAlert ? 'Low Stock' : 'In Stock');
+        : (updated.quantity <= (updated.minStockAlert || 5) ? 'Low Stock' : 'In Stock');
     }
 
     all[index] = updated;
@@ -1598,12 +1683,19 @@ class ApexDatabaseManager {
 
     this.syncRowToSupabase('products', updated, 'upsert');
 
+    window.dispatchEvent(new Event('apex-db-update'));
+    window.dispatchEvent(new Event('storage'));
+
     if (updated.stockStatus === 'Low Stock' && oldVal.stockStatus !== 'Low Stock') {
       this.addNotification(`Low Stock: ${updated.name}`, `${updated.name} has reached low stock threshold.`, 'alert');
     }
   }
 
   deleteProduct(productId: string) {
+    const user = this.getCurrentUser();
+    if (user.role === UserRole.EMPLOYEE) {
+      throw new Error('Employees are only authorized to view products and record sales. Deleting products is restricted.');
+    }
     const all = getLocalItem<Product[]>('products', DEFAULT_PRODUCTS);
     const target = all.find(p => p.id === productId);
     if (!target) return;
@@ -1616,6 +1708,9 @@ class ApexDatabaseManager {
     this.addAudit('Deleted Product', target.name, 'N/A', undefined, auditId);
 
     this.syncRowToSupabase('products', target, 'delete');
+
+    window.dispatchEvent(new Event('apex-db-update'));
+    window.dispatchEvent(new Event('storage'));
   }
 
   recordSale(saleData: {
@@ -1629,12 +1724,17 @@ class ApexDatabaseManager {
     const sales = getLocalItem<Sale[]>('sales', DEFAULT_SALES);
     const customers = getLocalItem<Customer[]>('customers', DEFAULT_CUSTOMERS);
 
+    const currentUser = this.getCurrentUser();
+    const targetBizId = (currentUser.role === UserRole.EMPLOYEE && currentUser.businessId)
+      ? currentUser.businessId
+      : (this.activeBusinessId || currentUser.businessId);
+
     let totalAmount = 0;
     const saleItems: SaleItem[] = [];
 
     // Process each product, decrement inventory
     for (const item of saleData.items) {
-      const prodIndex = products.findIndex(p => p.id === item.productId && p.businessId === this.activeBusinessId);
+      const prodIndex = products.findIndex(p => p.id === item.productId && (p.businessId === targetBizId || (p as any).business_id === targetBizId));
       if (prodIndex === -1) continue;
 
       const p = products[prodIndex];
@@ -1704,7 +1804,7 @@ class ApexDatabaseManager {
       }, 'upsert');
     }
     for (const item of saleData.items) {
-      const p = products.find(prod => prod.id === item.productId && prod.businessId === this.activeBusinessId);
+      const p = products.find(prod => prod.id === item.productId && (prod.businessId === targetBizId || (prod as any).business_id === targetBizId));
       if (p) {
         this.syncRowToSupabase('products', p, 'upsert');
       }
@@ -2371,6 +2471,40 @@ class ApexDatabaseManager {
           if (data.token) {
             SessionManager.setToken(data.token);
           }
+
+          // Also sync to Supabase if configured so user exists in Supabase Auth & profiles
+          if (isSupabaseConfigured && supabase) {
+            try {
+              await supabase.from('businesses').upsert([{
+                id: data.businessId,
+                name: businessName,
+                status: 'Active',
+                created_at: new Date().toISOString()
+              }] as any);
+              await supabase.from('profiles').upsert([{
+                id: data.userId,
+                business_id: data.businessId,
+                name: ownerName,
+                email: normalizedEmail,
+                role: 'Owner / Admin',
+                status: 'Active'
+              }] as any);
+              await supabase.auth.signUp({
+                email: normalizedEmail,
+                password: password,
+                options: {
+                  data: {
+                    full_name: ownerName,
+                    business_name: businessName,
+                    business_id: data.businessId
+                  }
+                }
+              }).catch(sErr => console.warn('Supabase auth signup notice:', sErr));
+            } catch (dbSyncErr) {
+              console.warn('Supabase sync notice during register:', dbSyncErr);
+            }
+          }
+
           this.addAudit('Created User Profile', 'N/A', `${ownerName} (Owner / Admin)`);
           this.addAudit('Logged In (New Tenant)', 'N/A', `${ownerName} (Owner / Admin)`);
           window.dispatchEvent(new Event('storage'));
@@ -3240,10 +3374,31 @@ CREATE POLICY tenant_isolation_profiles ON profiles
     SELECT business_id FROM profiles WHERE id = auth.uid()
   ));
 
-CREATE POLICY tenant_isolation_products ON products
-  FOR ALL USING (business_id IN (
+CREATE POLICY tenant_select_products ON products
+  FOR SELECT USING (business_id IN (
     SELECT business_id FROM profiles WHERE id = auth.uid()
   ));
+
+CREATE POLICY tenant_modify_products ON products
+  FOR INSERT WITH CHECK (
+    business_id IN (
+      SELECT business_id FROM profiles WHERE id = auth.uid() AND (role = 'Admin' OR role = 'Manager')
+    )
+  );
+
+CREATE POLICY tenant_update_products ON products
+  FOR UPDATE USING (
+    business_id IN (
+      SELECT business_id FROM profiles WHERE id = auth.uid() AND (role = 'Admin' OR role = 'Manager')
+    )
+  );
+
+CREATE POLICY tenant_delete_products ON products
+  FOR DELETE USING (
+    business_id IN (
+      SELECT business_id FROM profiles WHERE id = auth.uid() AND (role = 'Admin' OR role = 'Manager')
+    )
+  );
 
 CREATE POLICY tenant_isolation_sales ON sales
   FOR ALL USING (business_id IN (

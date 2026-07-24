@@ -165,6 +165,10 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isEmployee) {
+      alert('Employees are not authorized to create or modify products.');
+      return;
+    }
     if (!name.trim() || !sku.trim()) {
       alert('Product Name and SKU are mandatory fields.');
       return;

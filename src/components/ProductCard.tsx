@@ -43,8 +43,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   isSelected = false,
   onToggleSelect
 }) => {
-  const isEmployee = activeUser.role === UserRole.EMPLOYEE && !hasDelegatedAccess;
+  const isEmployee = activeUser.role === UserRole.EMPLOYEE;
   const isOwner = activeUser.role === UserRole.ADMIN;
+  const isManagerOrOwner = activeUser.role === UserRole.ADMIN || activeUser.role === UserRole.MANAGER;
 
   // Inline forms
   const [showPricePopover, setShowPricePopover] = useState(false);
@@ -332,7 +333,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                 <Archive className="w-3.5 h-3.5" />
               </button>
 
-              {isOwner && (
+              {isManagerOrOwner && (
                 <button
                   onClick={() => onDelete(product)}
                   className="p-1.5 bg-gray-950 border border-brand-border/80 text-gray-400 hover:text-rose-400 hover:border-rose-500/20 rounded-lg transition ml-auto cursor-pointer"
@@ -645,7 +646,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               >
                 <Archive className="w-3.5 h-3.5" />
               </button>
-              {isOwner && (
+              {isManagerOrOwner && (
                 <button
                   onClick={() => onDelete(product)}
                   className="p-1.5 bg-gray-950 border border-brand-border text-gray-400 hover:text-rose-400 hover:border-rose-500/20 rounded-lg transition"

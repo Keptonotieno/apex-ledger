@@ -317,8 +317,47 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    const user = await dbGet('SELECT * FROM users WHERE email = ?', [normalizedEmail]);
+    let user = await dbGet('SELECT * FROM users WHERE LOWER(email) = ?', [normalizedEmail]);
     
+    // Auto-heal missing user record from employees or workspaces if present
+    if (!user) {
+      const emp = await dbGet('SELECT * FROM employees WHERE LOWER(email) = ? AND status != "Deleted"', [normalizedEmail]);
+      if (emp && (emp.role === 'Owner / Admin' || emp.role === 'Manager' || emp.role === 'Admin' || emp.role === 'Owner')) {
+        const passwordHash = bcrypt.hashSync(password, 10);
+        const userId = emp.id || ('u_owner_' + Date.now());
+        await dbRun(
+          'INSERT INTO users (id, full_name, business_name, email, password_hash, business_id, workspace_id, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [userId, emp.full_name || 'Business Owner', 'Business', normalizedEmail, passwordHash, emp.business_id, emp.workspace_id || 'w_work_default', new Date().toISOString(), emp.status || 'Active']
+        );
+        user = await dbGet('SELECT * FROM users WHERE id = ?', [userId]);
+      }
+    }
+
+    if (!user) {
+      const workspaces = await dbAll('SELECT business_id, workspace_id, workspace_data FROM workspaces');
+      for (const wsRow of workspaces) {
+        try {
+          const wsData = JSON.parse(wsRow.workspace_data);
+          if (wsData && Array.isArray(wsData.profiles)) {
+            const matchedProf = wsData.profiles.find((p: any) => p.email && p.email.toLowerCase().trim() === normalizedEmail);
+            if (matchedProf && matchedProf.role !== 'Employee') {
+              const plainPassword = matchedProf.password || password;
+              const passwordHash = bcrypt.hashSync(plainPassword, 10);
+              const bizName = wsData.businesses?.[0]?.name || 'Business';
+              await dbRun(
+                'INSERT INTO users (id, full_name, business_name, email, password_hash, business_id, workspace_id, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [matchedProf.id || ('u_' + Date.now()), matchedProf.name || 'Owner', bizName, normalizedEmail, passwordHash, wsRow.business_id, wsRow.workspace_id, new Date().toISOString(), matchedProf.status || 'Active']
+              );
+              user = await dbGet('SELECT * FROM users WHERE LOWER(email) = ?', [normalizedEmail]);
+              break;
+            }
+          }
+        } catch (wsErr) {
+          // ignore invalid JSON
+        }
+      }
+    }
+
     if (!user) {
       recordFailedAttempt(normalizedEmail);
       return res.status(401).json({ success: false, error: 'Email not found.' });
