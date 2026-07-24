@@ -5,7 +5,7 @@ import { GlobalSearchModal } from './GlobalSearchModal';
 import { 
   Bell, Check, RefreshCw, Clock, LogIn, LogOut,
   Wifi, HelpCircle, AlertTriangle, ShieldCheck, Menu, Search, ChevronDown,
-  Sun, Moon
+  Sun, Moon, X
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -95,15 +95,21 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
   };
 
   return (
-    <header className="glass-panel h-20 border-b border-brand-border sticky top-0 z-20 flex items-center justify-between px-6 print:hidden">
+    <header className="glass-panel min-h-[4.5rem] py-2 border-b border-brand-border sticky top-0 z-20 flex items-center justify-between px-3.5 sm:px-6 gap-2 print:hidden">
       
       {/* Left: Hamburger menu toggle & Active View details */}
       <div className="flex items-center gap-4">
         <button 
           onClick={toggleSidebar}
-          className="p-2 rounded-lg border border-brand-border bg-gray-900/40 text-gray-400 hover:text-cyan-400 transition"
+          className="p-2.5 rounded-xl border border-brand-border bg-gray-900/40 text-gray-300 hover:text-cyan-400 hover:border-cyan-500/20 transition flex items-center justify-center shrink-0"
+          aria-label={sidebarCollapsed ? "Open navigation drawer" : "Close navigation drawer"}
+          id="header-hamburger-toggle-btn"
         >
-          <Menu className="w-5 h-5" />
+          {!sidebarCollapsed ? (
+            <X className="w-5 h-5 text-cyan-400" />
+          ) : (
+            <Menu className="w-5 h-5" />
+          )}
         </button>
         <div>
           <h1 className="text-lg font-bold text-gray-100 tracking-tight font-sans capitalize">
@@ -263,7 +269,7 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
 
           {/* Notifications Drawer */}
           {showNotificationDrawer && (
-            <div className="absolute right-0 top-full mt-2 w-80 p-2 bg-gray-900/95 border border-brand-border rounded-xl shadow-2xl z-50">
+            <div className="absolute right-0 top-full mt-2 w-[88vw] max-w-xs sm:w-80 p-2 bg-gray-900/95 border border-brand-border rounded-xl shadow-2xl z-50">
               <div className="flex items-center justify-between p-2 border-b border-brand-border">
                 <span className="text-xs font-bold text-gray-200">System Messages</span>
                 <span className="text-[10px] text-cyan-400 font-mono">Live Logs</span>

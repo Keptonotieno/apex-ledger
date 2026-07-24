@@ -266,7 +266,7 @@ function DashboardLayout() {
         />
 
         {/* Scrollable View Area */}
-        <main className="flex-1 p-6 md:p-8 overflow-y-auto max-w-[1600px] w-full mx-auto space-y-6">
+        <main className="flex-1 p-3.5 sm:p-6 md:p-8 overflow-y-auto max-w-[1600px] w-full mx-auto space-y-6">
           
           {/* Module Transition Canvas */}
           <AnimatePresence mode="wait">
@@ -287,7 +287,7 @@ function DashboardLayout() {
         </main>
 
         {/* Footer info line */}
-        <footer className="glass-panel py-3.5 px-8 text-[10px] text-gray-500 font-mono border-t border-brand-border flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0 print:hidden">
+        <footer className="glass-panel py-3.5 px-4 sm:px-8 text-[10px] text-gray-500 font-mono border-t border-brand-border flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0 print:hidden text-center sm:text-left">
           <span>© 2026 Apex Ledger Enterprise. Cryptographically Protected.</span>
           <div className="flex gap-4">
             <span className="text-cyan-400/80">SQL Relational DB Isolation Active</span>
