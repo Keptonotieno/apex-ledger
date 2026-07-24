@@ -4,6 +4,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import pg from 'pg';
+import { createClient } from '@supabase/supabase-js';
 import { AsyncLocalStorage } from 'async_hooks';
 
 export interface DbSession {
@@ -13,6 +14,19 @@ export interface DbSession {
 }
 
 export const dbSessionStorage = new AsyncLocalStorage<DbSession>();
+
+export function getServerSupabaseClient() {
+  const url = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+  if (url && key) {
+    try {
+      return createClient(url.replace(/\/rest\/v1\/?$/, '').trim(), key.trim());
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
 
 const { Pool } = pg;
 
@@ -441,12 +455,70 @@ export async function initDb(): Promise<void> {
     });
   }
 
+export async function restoreFromSupabaseIfEmpty(): Promise<boolean> {
+  const supa = getServerSupabaseClient();
+  if (!supa) return false;
+
+  try {
+    console.log('[Database] Checking Supabase cloud database for existing workspaces and profiles...');
+    const { data: profiles, error: pErr } = await supa.from('profiles').select('*');
+    if (!pErr && profiles && profiles.length > 0) {
+      console.log(`[Database] Found ${profiles.length} profile(s) in Supabase. Restoring accounts into local database...`);
+      for (const p of profiles) {
+        const email = (p.email || '').toLowerCase().trim();
+        if (!email) continue;
+        const bizId = p.business_id || p.businessId || 'b_biz_default';
+        const wsId = p.workspace_id || p.workspaceId || 'w_work_default';
+        const passwordHash = p.password_hash || bcrypt.hashSync('password', 10);
+        
+        await dbRun(
+          'INSERT OR IGNORE INTO users (id, full_name, business_name, email, password_hash, business_id, workspace_id, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [p.id, p.name || p.full_name || 'Owner', p.business_name || 'Business', email, passwordHash, bizId, wsId, new Date().toISOString(), p.status || 'Active']
+        );
+      }
+    }
+
+    const { data: workspaces, error: wErr } = await supa.from('workspaces').select('*');
+    if (!wErr && workspaces && workspaces.length > 0) {
+      console.log(`[Database] Found ${workspaces.length} workspace(s) in Supabase. Restoring workspaces into local database...`);
+      for (const w of workspaces) {
+        const bizId = w.business_id || w.businessId;
+        const wsId = w.workspace_id || w.workspaceId || 'w_work_default';
+        let dataJson = w.workspace_data || w.workspaceData;
+        if (typeof dataJson !== 'string') {
+          dataJson = JSON.stringify(dataJson);
+        }
+        if (bizId && dataJson) {
+          await dbRun(
+            'INSERT OR IGNORE INTO workspaces (business_id, workspace_id, workspace_data) VALUES (?, ?, ?)',
+            [bizId, wsId, dataJson]
+          );
+          await syncAllWorkspaceTables(bizId, dataJson);
+        }
+      }
+    }
+
+    const restoredUserCount = await dbGet('SELECT COUNT(*) as count FROM users');
+    return restoredUserCount && Number(restoredUserCount.count) > 0;
+  } catch (err) {
+    console.warn('[Database] Exception attempting to restore from Supabase:', err);
+    return false;
+  }
+}
+
 async function runSeedAndMigration(): Promise<void> {
   try {
     // Check if we already have users in the database
     const userCountRow = await dbGet('SELECT COUNT(*) as count FROM users');
     if (userCountRow && Number(userCountRow.count) > 0) {
       console.log('Users exist in database. Skipping migration/seeding.');
+      return;
+    }
+
+    // Attempt restoring accounts and workspaces from Supabase Cloud DB before seeding demo
+    const restored = await restoreFromSupabaseIfEmpty();
+    if (restored) {
+      console.log('Successfully restored existing tenant data from Supabase Cloud DB!');
       return;
     }
 

@@ -238,77 +238,59 @@ class ApexDatabaseManager {
     }
   }
 
+  async mergeAndSyncTable(localKey: string, dbName: string) {
+    if (!isSupabaseConfigured || !supabase || !this.supabaseSchemaInitialized) return;
+    try {
+      const { data: remoteData, error } = await supabase.from(dbName).select('*');
+      const existingLocal = getLocalItem<any[]>(localKey, []);
+      const itemMap = new Map<string, any>();
+
+      existingLocal.forEach(item => {
+        if (item && item.id) itemMap.set(item.id, item);
+      });
+
+      if (!error && Array.isArray(remoteData)) {
+        const camelRemote = keysToCamel(remoteData);
+        camelRemote.forEach((item: any) => {
+          if (item && item.id) itemMap.set(item.id, item);
+        });
+      }
+
+      const mergedList = Array.from(itemMap.values());
+      if (mergedList.length > 0) {
+        setLocalItem(localKey, mergedList);
+        await IndexedDBCache.set(localKey, mergedList);
+      }
+
+      if (!error && existingLocal.length > 0) {
+        const remoteIds = new Set((remoteData || []).map((r: any) => r.id));
+        const unsyncedLocal = existingLocal.filter(item => item && item.id && !remoteIds.has(item.id));
+        if (unsyncedLocal.length > 0) {
+          const snakeUnsynced = keysToSnake(unsyncedLocal);
+          try {
+            await supabase.from(dbName).upsert(snakeUnsynced as any);
+          } catch (e) {
+            console.warn(`Error pushing unsynced ${dbName} to Supabase:`, e);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`Exception in mergeAndSyncTable for ${localKey}:`, err);
+      const cached = await IndexedDBCache.get(localKey);
+      if (cached) setLocalItem(localKey, cached);
+    }
+  }
+
   async syncFromSupabase() {
     if (!isSupabaseConfigured || !supabase || !this.supabaseSchemaInitialized) return;
     try {
       console.log('[ApexDatabaseManager] Syncing database from Supabase and updating IndexedDB cache...');
       
-      const { data: bData, error: bErr } = await supabase.from('businesses').select('*');
-      if (!bErr && bData && bData.length > 0) {
-        const camelBData = keysToCamel(bData);
-        setLocalItem('businesses', camelBData);
-        await IndexedDBCache.set('businesses', camelBData);
-      } else if (bErr) {
-        if (bErr.code === 'PGRST205') {
-          console.log("[ApexDatabaseManager] Table 'businesses' is not yet present in Supabase's schema cache (PGRST205). The offline-first local/cached fallback storage is active and functioning correctly.");
-        } else {
-          console.log('[ApexDatabaseManager] Businesses query failed, falling back to cache:', bErr);
-        }
-        const cached = await IndexedDBCache.get('businesses');
-        if (cached) setLocalItem('businesses', cached);
-      }
-
-      const { data: pData, error: pErr } = await supabase.from('profiles').select('*');
-      if (!pErr && pData && pData.length > 0) {
-        const camelPData = keysToCamel(pData);
-        setLocalItem('profiles', camelPData);
-        await IndexedDBCache.set('profiles', camelPData);
-      } else if (pErr) {
-        if (pErr.code === 'PGRST205') {
-          console.log("[ApexDatabaseManager] Table 'profiles' is not yet present in Supabase's schema cache (PGRST205). The offline-first local/cached fallback storage is active and functioning correctly.");
-        } else {
-          console.log('[ApexDatabaseManager] Profiles query failed, falling back to cache:', pErr);
-        }
-        const cached = await IndexedDBCache.get('profiles');
-        if (cached) setLocalItem('profiles', cached);
-      }
-
-      const { data: prodData, error: prodErr } = await supabase.from('products').select('*');
-      if (!prodErr && prodData && prodData.length > 0) {
-        const camelProdData = keysToCamel(prodData) as Product[];
-        const existingLocal = getLocalItem<Product[]>('products', DEFAULT_PRODUCTS);
-        const prodMap = new Map<string, Product>();
-        existingLocal.forEach(p => prodMap.set(p.id, p));
-        camelProdData.forEach(p => prodMap.set(p.id, p));
-        const mergedProds = Array.from(prodMap.values());
-        setLocalItem('products', mergedProds);
-        await IndexedDBCache.set('products', mergedProds);
-      } else if (prodErr) {
-        if (prodErr.code === 'PGRST205') {
-          console.log("[ApexDatabaseManager] Table 'products' is not yet present in Supabase's schema cache (PGRST205). The offline-first local/cached fallback storage is active and functioning correctly.");
-        } else {
-          console.log('[ApexDatabaseManager] Products query failed, falling back to cache:', prodErr);
-        }
-        const cached = await IndexedDBCache.get('products');
-        if (cached) setLocalItem('products', cached);
-      }
-
-      const { data: sData, error: sErr } = await supabase.from('sales').select('*');
-      if (!sErr && sData && sData.length > 0) {
-        const camelSData = keysToCamel(sData);
-        setLocalItem('sales', camelSData);
-        await IndexedDBCache.set('sales', camelSData);
-      } else if (sErr) {
-        if (sErr.code === 'PGRST205') {
-          console.log("[ApexDatabaseManager] Table 'sales' is not yet present in Supabase's schema cache (PGRST205). The offline-first local/cached fallback storage is active and functioning correctly.");
-        } else {
-          console.log('[ApexDatabaseManager] Sales query failed, falling back to cache:', sErr);
-        }
-        const cached = await IndexedDBCache.get('sales');
-        if (cached) setLocalItem('sales', cached);
-      }
-
       const tables = [
+        { localKey: 'businesses', dbName: 'businesses' },
+        { localKey: 'profiles', dbName: 'profiles' },
+        { localKey: 'products', dbName: 'products' },
+        { localKey: 'sales', dbName: 'sales' },
         { localKey: 'customers', dbName: 'customers' },
         { localKey: 'debts', dbName: 'debts' },
         { localKey: 'expenses', dbName: 'expenses' },
@@ -318,34 +300,19 @@ class ApexDatabaseManager {
         { localKey: 'timelogs', dbName: 'timelogs' },
         { localKey: 'notifications', dbName: 'notifications' },
         { localKey: 'audits', dbName: 'audits' },
-        { localKey: 'branches', dbName: 'branches' }
+        { localKey: 'branches', dbName: 'branches' },
+        { localKey: 'categories', dbName: 'categories' },
+        { localKey: 'budgets', dbName: 'budgets' },
+        { localKey: 'invoices', dbName: 'invoices' },
+        { localKey: 'bank_transactions', dbName: 'bank_transactions' },
+        { localKey: 'reconciliations', dbName: 'reconciliations' }
       ];
 
       for (const t of tables) {
-        try {
-          const { data, error } = await supabase.from(t.dbName).select('*');
-          if (!error && data && data.length > 0) {
-            const camelData = keysToCamel(data);
-            setLocalItem(t.localKey, camelData);
-            await IndexedDBCache.set(t.localKey, camelData);
-          } else if (error) {
-            if (error.code === 'PGRST205') {
-              console.log(`[ApexDatabaseManager] Table '${t.dbName}' is not yet present in Supabase's schema cache (PGRST205). The offline-first local/cached fallback storage is active and functioning correctly.`);
-            } else {
-              console.log(`[ApexDatabaseManager] Query for table ${t.dbName} failed, falling back to cache:`, error);
-            }
-            const cached = await IndexedDBCache.get(t.localKey);
-            if (cached) setLocalItem(t.localKey, cached);
-          }
-        } catch (e) {
-          console.log(`[ApexDatabaseManager] Exception fetching table ${t.dbName}, reading cache:`, e);
-          const cached = await IndexedDBCache.get(t.localKey);
-          if (cached) setLocalItem(t.localKey, cached);
-        }
+        await this.mergeAndSyncTable(t.localKey, t.dbName);
       }
     } catch (err) {
       console.error('[ApexDatabaseManager] Error in syncFromSupabase, resorting to IndexedDB caches:', err);
-      // Fallback to IndexedDB cache entirely if offline/broken
       const keys = [
         'businesses', 'branches', 'categories', 'profiles', 'products', 
         'customers', 'debts', 'sales', 'expenses', 'procurements', 

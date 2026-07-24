@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import cookieParser from 'cookie-parser';
 import { createServer as createViteServer } from 'vite';
-import { initDb, dbRun, dbGet, dbAll, dbSessionStorage, DbSession } from './server-db';
+import { initDb, dbRun, dbGet, dbAll, dbSessionStorage, DbSession, getServerSupabaseClient, syncAllWorkspaceTables } from './server-db';
 
 const app = express();
 const PORT = 3000;
@@ -359,6 +359,48 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     if (!user) {
+      const supa = getServerSupabaseClient();
+      if (supa) {
+        try {
+          const { data: supaProfile } = await supa
+            .from('profiles')
+            .select('*')
+            .or(`email.ilike.${normalizedEmail}`)
+            .maybeSingle();
+
+          if (supaProfile) {
+            const bizId = supaProfile.business_id || supaProfile.businessId || ('b_biz_' + Date.now());
+            const wsId = supaProfile.workspace_id || supaProfile.workspaceId || ('w_work_' + Date.now());
+            const passwordHash = supaProfile.password_hash || bcrypt.hashSync(password, 10);
+            const ownerName = supaProfile.name || supaProfile.full_name || 'Owner';
+            const bizName = supaProfile.business_name || 'Business Workspace';
+
+            const { data: supaWs } = await supa.from('workspaces').select('*').eq('business_id', bizId).maybeSingle();
+            let wsDataStr = supaWs?.workspace_data || supaWs?.workspaceData;
+            if (wsDataStr && typeof wsDataStr !== 'string') wsDataStr = JSON.stringify(wsDataStr);
+
+            if (wsDataStr) {
+              await dbRun(
+                'INSERT OR REPLACE INTO workspaces (business_id, workspace_id, workspace_data) VALUES (?, ?, ?)',
+                [bizId, wsId, wsDataStr]
+              );
+              await syncAllWorkspaceTables(bizId, wsDataStr);
+            }
+
+            await dbRun(
+              'INSERT OR REPLACE INTO users (id, full_name, business_name, email, password_hash, business_id, workspace_id, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+              [supaProfile.id || ('u_' + Date.now()), ownerName, bizName, normalizedEmail, passwordHash, bizId, wsId, new Date().toISOString(), supaProfile.status || 'Active']
+            );
+
+            user = await dbGet('SELECT * FROM users WHERE LOWER(email) = ?', [normalizedEmail]);
+          }
+        } catch (supaErr) {
+          console.warn('Supabase profile auto-recovery notice:', supaErr);
+        }
+      }
+    }
+
+    if (!user) {
       recordFailedAttempt(normalizedEmail);
       return res.status(401).json({ success: false, error: 'Email not found.' });
     }
@@ -370,8 +412,28 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(403).json({ success: false, error: errorMsg });
     }
 
-    // Verify Password
-    const isPasswordValid = bcrypt.compareSync(password, user.password_hash);
+    // Verify Password with local bcrypt and Supabase Auth fallback
+    let isPasswordValid = bcrypt.compareSync(password, user.password_hash);
+
+    if (!isPasswordValid) {
+      const supa = getServerSupabaseClient();
+      if (supa) {
+        try {
+          const { data: supaAuth } = await supa.auth.signInWithPassword({
+            email: normalizedEmail,
+            password: password
+          });
+          if (supaAuth?.user) {
+            isPasswordValid = true;
+            const newHash = bcrypt.hashSync(password, 10);
+            await dbRun('UPDATE users SET password_hash = ? WHERE id = ?', [newHash, user.id]);
+          }
+        } catch (authErr) {
+          // ignore
+        }
+      }
+    }
+
     if (!isPasswordValid) {
       recordFailedAttempt(normalizedEmail);
       await logServerAudit(user.business_id, 'Failed Login Attempt', 'N/A', `Incorrect password for corporate login`, normalizedEmail, user.full_name, 'Owner / Admin', getClientIp(req));
@@ -850,6 +912,23 @@ app.post('/api/workspace/save', async (req, res) => {
         'INSERT INTO workspaces (business_id, workspace_id, workspace_data) VALUES (?, ?, ?)',
         [session.business_id, session.workspace_id || ('w_' + session.business_id), workspaceJson]
       );
+    }
+
+    // Sync SQLite relational tables
+    await syncAllWorkspaceTables(session.business_id, workspaceJson);
+
+    // Sync Supabase cloud storage if configured
+    const supa = getServerSupabaseClient();
+    if (supa) {
+      try {
+        await supa.from('workspaces').upsert([{
+          business_id: session.business_id,
+          workspace_id: session.workspace_id || ('w_' + session.business_id),
+          workspace_data: workspaceJson
+        }] as any);
+      } catch (sErr) {
+        console.warn('Supabase workspace upsert notice:', sErr);
+      }
     }
 
     res.json({ success: true });
