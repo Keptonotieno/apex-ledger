@@ -251,13 +251,13 @@ function DashboardLayout() {
   };
 
   return (
-    <div className="flex min-h-screen bg-brand-dark text-gray-100 selection:bg-cyan-500/30 selection:text-cyan-200">
+    <div className="flex min-h-screen max-w-full overflow-x-hidden bg-brand-dark text-gray-100 selection:bg-cyan-500/30 selection:text-cyan-200">
       
       {/* 1. Side navigation menu */}
       <Sidebar collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
 
       {/* 2. Main content vertical partition */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-x-hidden">
         
         {/* Top interactive Header bar */}
         <Header 
@@ -266,7 +266,7 @@ function DashboardLayout() {
         />
 
         {/* Scrollable View Area */}
-        <main className="flex-1 p-3.5 sm:p-6 md:p-8 overflow-y-auto max-w-[1600px] w-full mx-auto space-y-6">
+        <main className="flex-1 p-3 sm:p-6 md:p-8 overflow-y-auto max-w-[1600px] w-full mx-auto space-y-4 sm:space-y-6 min-w-0">
           
           {/* Module Transition Canvas */}
           <AnimatePresence mode="wait">

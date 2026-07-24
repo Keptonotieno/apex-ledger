@@ -98,10 +98,10 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
     <header className="glass-panel min-h-[4.5rem] py-2 border-b border-brand-border sticky top-0 z-20 flex items-center justify-between px-3.5 sm:px-6 gap-2 print:hidden">
       
       {/* Left: Hamburger menu toggle & Active View details */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0">
         <button 
           onClick={toggleSidebar}
-          className="p-2.5 rounded-xl border border-brand-border bg-gray-900/40 text-gray-300 hover:text-cyan-400 hover:border-cyan-500/20 transition flex items-center justify-center shrink-0"
+          className="p-2 sm:p-2.5 rounded-xl border border-brand-border bg-gray-900/40 text-gray-300 hover:text-cyan-400 hover:border-cyan-500/20 transition flex items-center justify-center shrink-0"
           aria-label={sidebarCollapsed ? "Open navigation drawer" : "Close navigation drawer"}
           id="header-hamburger-toggle-btn"
         >
@@ -111,17 +111,17 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
             <Menu className="w-5 h-5" />
           )}
         </button>
-        <div>
-          <h1 className="text-lg font-bold text-gray-100 tracking-tight font-sans capitalize">
+        <div className="min-w-0">
+          <h1 className="text-sm sm:text-lg font-bold text-gray-100 tracking-tight font-sans capitalize truncate">
             {getViewTitle()}
           </h1>
-          <p className="hidden min-[450px]:block text-xs text-gray-400">
+          <p className="hidden min-[500px]:block text-xs text-gray-400 truncate">
             Welcome back, <span className="text-cyan-400 font-medium capitalize">{activeUser.name}</span>
           </p>
         </div>
 
-        {/* High-fidelity Multi-Business and Branch Indicator Badge */}
-        <div className="flex items-center gap-2 sm:gap-3 bg-gray-950/65 border border-cyan-500/10 px-2 sm:px-3.5 py-1 sm:py-1.5 rounded-xl ml-2 sm:ml-4">
+        {/* Multi-Business & Branch Indicator Badge (visible on tablet/desktop) */}
+        <div className="hidden sm:flex items-center gap-2 sm:gap-3 bg-gray-950/65 border border-cyan-500/10 px-2 sm:px-3.5 py-1 sm:py-1.5 rounded-xl ml-1 sm:ml-4 shrink-0">
           <div className="relative">
             <button 
               onClick={() => setShowBusinessDropdown(!showBusinessDropdown)}
@@ -131,7 +131,7 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
               <div>
                 <span className="text-[8px] text-gray-500 font-mono block uppercase leading-none">Current Business</span>
                 <span className="text-xs font-bold text-gray-200 mt-0.5 flex items-center gap-1 sm:gap-1.5" id="header-current-business-name">
-                  <span className="truncate max-w-[70px] min-[400px]:max-w-[120px] sm:max-w-none">{activeBusiness?.name || 'Corporate Workspace'}</span>
+                  <span className="truncate max-w-[90px] md:max-w-none">{activeBusiness?.name || 'Corporate Workspace'}</span>
                   <ChevronDown className="w-3 h-3 text-gray-400 shrink-0" />
                 </span>
               </div>
@@ -186,10 +186,8 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
             <span className="text-xs font-semibold text-cyan-400 mt-0.5 block truncate max-w-[80px] sm:max-w-none" id="header-current-branch-name">{currentBranchName}</span>
           </div>
         </div>
-      </div>
-
-      {/* Right: Search, Sync, notifications, profile actions */}
-      <div className="flex items-center gap-4 md:gap-6">
+      </div>      {/* Right: Search, Sync, notifications, profile actions */}
+      <div className="flex items-center gap-1.5 sm:gap-3 md:gap-6 shrink-0">
         
         {/* Search input bar (Click to open Global Search Modal) */}
         <div 
@@ -207,11 +205,11 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
         {/* Mobile Search Button */}
         <button
           onClick={() => setIsSearchOpen(true)}
-          className="md:hidden p-2.5 rounded-xl border border-brand-border bg-gray-900/40 text-gray-300 hover:text-cyan-400 hover:border-cyan-500/20 transition cursor-pointer flex items-center justify-center shrink-0"
+          className="md:hidden p-2 sm:p-2.5 rounded-xl border border-brand-border bg-gray-900/40 text-gray-300 hover:text-cyan-400 hover:border-cyan-500/20 transition cursor-pointer flex items-center justify-center shrink-0"
           title="Search anything"
           id="header-mobile-search-btn"
         >
-          <Search className="w-4.5 h-4.5" />
+          <Search className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
         </button>
 
         {/* Attendance Toggle Widget */}
@@ -239,14 +237,14 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
         {/* Dynamic Theme Toggle */}
         <button
           onClick={toggleTheme}
-          className="p-2.5 rounded-xl border border-brand-border bg-gray-900/40 text-gray-300 hover:text-cyan-400 hover:border-cyan-500/20 transition cursor-pointer flex items-center justify-center shrink-0"
+          className="p-2 sm:p-2.5 rounded-xl border border-brand-border bg-gray-900/40 text-gray-300 hover:text-cyan-400 hover:border-cyan-500/20 transition cursor-pointer flex items-center justify-center shrink-0"
           title={theme === 'dark' ? 'Switch to High-Contrast Light Mode' : 'Switch to Brand Dark Mode'}
           id="theme-toggle-btn"
         >
           {theme === 'dark' ? (
-            <Sun className="w-4.5 h-4.5 text-amber-400" />
+            <Sun className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-400" />
           ) : (
-            <Moon className="w-4.5 h-4.5 text-slate-700" />
+            <Moon className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-slate-700" />
           )}
         </button>
 
@@ -259,9 +257,9 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
                 markNotificationsRead();
               }
             }}
-            className="p-2.5 rounded-xl border border-brand-border bg-gray-900/40 text-gray-300 hover:text-cyan-400 hover:border-cyan-500/20 transition relative"
+            className="p-2 sm:p-2.5 rounded-xl border border-brand-border bg-gray-900/40 text-gray-300 hover:text-cyan-400 hover:border-cyan-500/20 transition relative"
           >
-            <Bell className="w-4.5 h-4.5" />
+            <Bell className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
             {unreadNotifications.length > 0 && (
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-cyan-400 rounded-full"></span>
             )}

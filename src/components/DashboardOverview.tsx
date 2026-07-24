@@ -1633,16 +1633,16 @@ export const DashboardOverview: React.FC = () => {
     <div className="space-y-6" id="executive-dashboard-root">
       
       {/* Dynamic Branch/Business Selection & Management Bar */}
-      <div className="glass-panel p-5 rounded-2xl border border-brand-border bg-gray-950/40 flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+      <div className="glass-panel p-3.5 sm:p-5 rounded-2xl border border-brand-border bg-gray-950/40 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full md:w-auto">
           {/* Business Selector Dropdown */}
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1 w-full">
             <label className="text-[9px] text-gray-500 font-mono uppercase font-bold tracking-wider">Active Workspace</label>
-            <div className="relative">
+            <div className="relative w-full">
               <select
                 value={activeBusiness?.id || ''}
                 onChange={(e) => setActiveBusiness(e.target.value)}
-                className="bg-gray-900 border border-brand-border text-gray-100 py-1.5 pl-3 pr-8 rounded-xl text-xs font-sans focus:outline-none focus:border-cyan-500/50 appearance-none cursor-pointer min-w-[160px]"
+                className="w-full bg-gray-900 border border-brand-border text-gray-100 py-2 pl-3 pr-8 rounded-xl text-xs font-sans focus:outline-none focus:border-cyan-500/50 appearance-none cursor-pointer"
               >
                 {businesses.map((biz) => (
                   <option key={biz.id} value={biz.id}>
@@ -1655,13 +1655,13 @@ export const DashboardOverview: React.FC = () => {
           </div>
 
           {/* Branch Selector Dropdown */}
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1 w-full">
             <label className="text-[9px] text-gray-500 font-mono uppercase font-bold tracking-wider">Active Branch / Station</label>
-            <div className="relative">
+            <div className="relative w-full">
               <select
                 value={activeBranchId}
                 onChange={(e) => setActiveBranchId(e.target.value)}
-                className="bg-gray-900 border border-brand-border text-gray-100 py-1.5 pl-3 pr-8 rounded-xl text-xs font-sans focus:outline-none focus:border-cyan-500/50 appearance-none cursor-pointer min-w-[180px]"
+                className="w-full bg-gray-900 border border-brand-border text-gray-100 py-2 pl-3 pr-8 rounded-xl text-xs font-sans focus:outline-none focus:border-cyan-500/50 appearance-none cursor-pointer"
               >
                 <option value="all">🌐 All Branches Combined</option>
                 {branches.map((b) => (
@@ -1676,22 +1676,22 @@ export const DashboardOverview: React.FC = () => {
         </div>
 
         {/* Create Workspace/Branch Controls */}
-        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-end">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full md:w-auto justify-end">
           <button
             onClick={() => setIsCustomizing(!isCustomizing)}
-            className={`flex items-center gap-1.5 px-3 py-2 border rounded-xl text-xs font-medium transition duration-150 cursor-pointer ${
+            className={`col-span-2 sm:col-span-1 flex items-center justify-center gap-1.5 px-3 py-2 border rounded-xl text-xs font-medium transition duration-150 cursor-pointer ${
               isCustomizing 
                 ? 'bg-amber-500/10 border-amber-500/40 text-amber-400' 
                 : 'bg-gray-900 hover:bg-slate-800 border-brand-border text-gray-200'
             }`}
           >
             <Settings className={`w-4 h-4 text-amber-400 ${isCustomizing ? 'animate-spin' : ''}`} />
-            <span>{isCustomizing ? 'Layout Studio Active' : 'Customize Layout'}</span>
+            <span>{isCustomizing ? 'Layout Active' : 'Customize'}</span>
           </button>
 
           <button
             onClick={() => setShowBizModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-gray-900 hover:bg-cyan-950/20 border border-brand-border hover:border-cyan-500/30 rounded-xl text-xs font-medium text-gray-200 transition duration-150 cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-900 hover:bg-cyan-950/20 border border-brand-border hover:border-cyan-500/30 rounded-xl text-xs font-medium text-gray-200 transition duration-150 cursor-pointer"
           >
             <Plus className="w-4 h-4 text-cyan-400" />
             <span>Add Business</span>
@@ -1699,7 +1699,7 @@ export const DashboardOverview: React.FC = () => {
           
           <button
             onClick={() => setShowBranchModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-gray-900 hover:bg-emerald-950/20 border border-brand-border hover:border-emerald-500/30 rounded-xl text-xs font-medium text-gray-200 transition duration-150 cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-900 hover:bg-emerald-950/20 border border-brand-border hover:border-emerald-500/30 rounded-xl text-xs font-medium text-gray-200 transition duration-150 cursor-pointer"
           >
             <Plus className="w-4 h-4 text-emerald-400" />
             <span>Create Branch</span>
