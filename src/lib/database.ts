@@ -3,6 +3,7 @@ import { IndexedDBCache } from './indexedDbCache';
 import { verifySupabaseConnection as runSupabaseConnectionCheck } from './supabase-checker';
 import { SessionManager } from '../utils/SessionManager';
 import { apiFetch } from '../utils/api';
+import { db, isFirebaseConfigured, doc, setDoc, deleteDoc, collection, getDocs } from './firebase';
 import { 
   UserRole, UserProfile, Business, Product, Sale, SaleItem,
   Customer, DebtRecord, Expense, Procurement, 
@@ -120,6 +121,7 @@ class ApexDatabaseManager {
   constructor() {
     this.initDatabase();
     this.loadFromIndexedDBCache().then(() => {
+      this.syncFromFirebase();
       if (isSupabaseConfigured && supabase) {
         this.verifyAndSyncWithRetry();
       }
@@ -440,6 +442,20 @@ class ApexDatabaseManager {
       console.error('[ApexDatabaseManager] Failed to cache row write to IndexedDB:', cacheErr);
     }
 
+    // Firebase Firestore sync
+    if (isFirebaseConfigured && db && row && row.id) {
+      try {
+        const docRef = doc(db, dbName, String(row.id));
+        if (action === 'delete') {
+          await deleteDoc(docRef);
+        } else {
+          await setDoc(docRef, row, { merge: true });
+        }
+      } catch (fErr) {
+        console.warn(`Firestore sync notice for table ${dbName}:`, fErr);
+      }
+    }
+
     if (!isSupabaseConfigured || !supabase || !this.supabaseSchemaInitialized) return;
     try {
       // Create schema table map overrides if needed, or defaults to the same name
@@ -452,6 +468,61 @@ class ApexDatabaseManager {
     } catch (err) {
       console.error(`Supabase sync failed for table ${dbName}:`, err);
     }
+  }
+
+  async syncFromFirebase() {
+    if (!isFirebaseConfigured || !db) return;
+    try {
+      console.log('[ApexDatabaseManager] Syncing database from Firebase Firestore...');
+      const tables = [
+        { localKey: 'businesses', dbName: 'businesses' },
+        { localKey: 'profiles', dbName: 'profiles' },
+        { localKey: 'products', dbName: 'products' },
+        { localKey: 'sales', dbName: 'sales' },
+        { localKey: 'customers', dbName: 'customers' },
+        { localKey: 'debts', dbName: 'debts' },
+        { localKey: 'expenses', dbName: 'expenses' },
+        { localKey: 'procurements', dbName: 'procurements' },
+        { localKey: 'tasks', dbName: 'tasks' },
+        { localKey: 'events', dbName: 'events' },
+        { localKey: 'timelogs', dbName: 'timelogs' },
+        { localKey: 'notifications', dbName: 'notifications' },
+        { localKey: 'audits', dbName: 'audits' },
+        { localKey: 'branches', dbName: 'branches' },
+        { localKey: 'categories', dbName: 'categories' },
+        { localKey: 'budgets', dbName: 'budgets' },
+        { localKey: 'invoices', dbName: 'invoices' },
+        { localKey: 'bank_transactions', dbName: 'bank_transactions' },
+        { localKey: 'reconciliations', dbName: 'reconciliations' }
+      ];
+
+      for (const t of tables) {
+        try {
+          const querySnapshot = await getDocs(collection(db, t.dbName));
+          if (!querySnapshot.empty) {
+            const remoteDocs: any[] = [];
+            querySnapshot.forEach((docSnap) => {
+              remoteDocs.push({ id: docSnap.id, ...docSnap.data() });
+            });
+            const existingLocal = getLocalItem<any[]>(t.localKey, []);
+            const itemMap = new Map<string, any>();
+            existingLocal.forEach(item => { if (item && item.id) itemMap.set(item.id, item); });
+            remoteDocs.forEach(item => { if (item && item.id) itemMap.set(item.id, item); });
+            const mergedList = Array.from(itemMap.values());
+            if (mergedList.length > 0) {
+              setLocalItem(t.localKey, mergedList);
+              await IndexedDBCache.set(t.localKey, mergedList);
+            }
+          }
+        } catch (e) {
+          console.warn(`Firestore collection load notice for ${t.dbName}:`, e);
+        }
+      }
+    } catch (err) {
+      console.warn('[ApexDatabaseManager] Error in syncFromFirebase:', err);
+    }
+    window.dispatchEvent(new Event('apex-db-update'));
+    window.dispatchEvent(new Event('storage'));
   }
 
   subscribeRealtime() {
