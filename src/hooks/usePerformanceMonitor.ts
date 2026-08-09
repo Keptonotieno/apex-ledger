@@ -105,5 +105,5 @@ export function usePerformanceMonitor(moduleName: string, options: UsePerformanc
         );
       }
     }
-  });
+  }, [moduleName, ...deps]);
 }

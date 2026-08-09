@@ -140,7 +140,7 @@ export const ExpensesModule: React.FC = () => {
     } else {
       setDepartment('');
     }
-  }, [departments, department]);
+  }, [departments]);
 
   useEffect(() => {
     if (departments.length > 0) {
@@ -150,7 +150,7 @@ export const ExpensesModule: React.FC = () => {
     } else {
       setEditDepartment('');
     }
-  }, [departments, editDepartment]);
+  }, [departments]);
 
   const handleSaveDepartment = (e: React.FormEvent) => {
     e.preventDefault();

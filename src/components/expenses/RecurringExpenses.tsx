@@ -91,7 +91,7 @@ export const RecurringExpenses: React.FC<RecurringExpensesProps> = ({
     } else {
       setDepartment('');
     }
-  }, [departments, department]);
+  }, [departments]);
 
   useEffect(() => {
     const data = localStorage.getItem(localKey);
@@ -105,7 +105,7 @@ export const RecurringExpenses: React.FC<RecurringExpensesProps> = ({
       localStorage.setItem(localKey, JSON.stringify(DEFAULT_RECURRING));
       setProfiles(DEFAULT_RECURRING);
     }
-  }, [businessId]);
+  }, [businessId, localKey]);
 
   const saveProfiles = (updated: RecurringProfile[]) => {
     localStorage.setItem(localKey, JSON.stringify(updated));

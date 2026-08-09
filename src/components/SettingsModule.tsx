@@ -7,8 +7,22 @@ import {
   Settings, Database, Server, Key, Copy, Check, Info, ShieldAlert, 
   PlusCircle, Lock, Building2, Target, CreditCard, History, Globe, 
   RefreshCw, FileDown, ShieldCheck, HelpCircle, AlertTriangle, Eye, ShieldCheck as SecurityIcon,
-  Camera, Pencil, Trash2, Sun, Moon
+  Camera, Pencil, Trash2, Sun, Moon, Fingerprint, Smartphone, Layout, UploadCloud, DownloadCloud, RotateCcw
 } from 'lucide-react';
+import { 
+  registerPasskey, 
+  removePasskey, 
+  getPasskeyConfig, 
+  savePasskeyConfig, 
+  authenticatePasskey,
+  WebAuthnCredential
+} from '../utils/webauthn';
+import {
+  backupLayoutToFirestore,
+  fetchLayoutFromFirestore,
+  getLocalLayoutBackup,
+  DashboardLayoutState
+} from '../utils/dashboardLayoutBackup';
 
 export const SettingsModule: React.FC = () => {
   const { 
@@ -24,7 +38,8 @@ export const SettingsModule: React.FC = () => {
     updateBranch,
     deleteBranch,
     theme,
-    toggleTheme
+    toggleTheme,
+    activeView
   } = useApp();
 
   const [activeSubTab, setActiveSubTab] = useState<'Developer' | 'Workspaces' | 'Targets' | 'Security'>('Developer');
@@ -70,6 +85,148 @@ export const SettingsModule: React.FC = () => {
   const [sessionTimeout, setSessionTimeout] = useState('30 minutes');
   const [ipWhitelist, setIpWhitelist] = useState('*');
   const [auditLogRetention, setAuditLogRetention] = useState('365 days');
+
+  // WebAuthn Passkey States
+  const [passkeyConfig, setPasskeyConfig] = useState(() => getPasskeyConfig(activeUser?.id || ''));
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [passkeyStatusMsg, setPasskeyStatusMsg] = useState<{ success: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    if (!activeUser?.id) return;
+    const syncPasskey = () => {
+      setPasskeyConfig(getPasskeyConfig(activeUser.id));
+    };
+    syncPasskey();
+    window.addEventListener('apex-webauthn-update', syncPasskey);
+    return () => window.removeEventListener('apex-webauthn-update', syncPasskey);
+  }, [activeUser?.id]);
+
+  const handleRegisterPasskey = async () => {
+    if (!activeUser) return;
+    setPasskeyLoading(true);
+    setPasskeyStatusMsg(null);
+    try {
+      const result = await registerPasskey({
+        id: activeUser.id,
+        name: activeUser.name,
+        email: activeUser.email
+      });
+      if (result.success) {
+        setPasskeyStatusMsg({ success: true, text: result.message || 'Passkey registered successfully!' });
+        addAudit('Registered WebAuthn Passkey', 'No Passkey Bound', result.credential?.deviceLabel || 'Biometric Credential');
+      } else {
+        setPasskeyStatusMsg({ success: false, text: result.message || 'Failed to register Passkey.' });
+      }
+    } catch (err: any) {
+      setPasskeyStatusMsg({ success: false, text: err.message || 'Error creating passkey credential.' });
+    } finally {
+      setPasskeyLoading(false);
+    }
+  };
+
+  const handleTestPasskey = async () => {
+    if (!activeUser) return;
+    setPasskeyLoading(true);
+    setPasskeyStatusMsg(null);
+    try {
+      const res = await authenticatePasskey({
+        id: activeUser.id,
+        name: activeUser.name,
+        email: activeUser.email
+      });
+      setPasskeyStatusMsg({ success: res.success, text: res.message || (res.success ? 'Biometric scan verified!' : 'Authentication failed.') });
+    } catch (err: any) {
+      setPasskeyStatusMsg({ success: false, text: err.message || 'Biometric test failed.' });
+    } finally {
+      setPasskeyLoading(false);
+    }
+  };
+
+  const handleTogglePasskey = (enabled: boolean) => {
+    if (!activeUser) return;
+    savePasskeyConfig(activeUser.id, enabled, passkeyConfig.credential);
+    addAudit('Updated WebAuthn Passkey Policy', `Passkey Unlock: ${passkeyConfig.enabled}`, `Passkey Unlock: ${enabled}`);
+    setPasskeyStatusMsg({
+      success: true,
+      text: enabled ? 'WebAuthn biometric unlock enabled for session lock screen.' : 'WebAuthn biometric unlock disabled.'
+    });
+  };
+
+  const handleRemovePasskey = () => {
+    if (!activeUser) return;
+    if (confirm('Are you sure you want to remove your registered WebAuthn Passkey from this device?')) {
+      removePasskey(activeUser.id);
+      addAudit('Removed WebAuthn Passkey', passkeyConfig.credential?.deviceLabel || 'Passkey', 'Removed');
+      setPasskeyStatusMsg({ success: true, text: 'WebAuthn Passkey removed.' });
+    }
+  };
+
+  // Dashboard Layout Backup States
+  const [layoutState, setLayoutState] = useState<DashboardLayoutState | null>(() => getLocalLayoutBackup(activeUser?.id || ''));
+  const [layoutSyncLoading, setLayoutSyncLoading] = useState(false);
+  const [layoutSyncMsg, setLayoutSyncMsg] = useState<{ success: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    if (!activeUser?.id) return;
+    const refreshLayoutData = async () => {
+      const data = await fetchLayoutFromFirestore(activeUser.id);
+      if (data) setLayoutState(data);
+    };
+    refreshLayoutData();
+    window.addEventListener('apex-layout-updated', refreshLayoutData);
+    return () => window.removeEventListener('apex-layout-updated', refreshLayoutData);
+  }, [activeUser?.id]);
+
+  const handleManualBackupLayout = async () => {
+    if (!activeUser) return;
+    setLayoutSyncLoading(true);
+    setLayoutSyncMsg(null);
+    try {
+      const currentScroll = document.querySelector('main')?.scrollTop || 0;
+      const currentView = activeView || 'settings';
+      const res = await backupLayoutToFirestore(activeUser.id, {
+        sidebarCollapsed: window.innerWidth < 1024,
+        activeModule: currentView,
+        scrollPosition: currentScroll,
+        businessId: activeBusiness?.id
+      });
+      if (res.success && res.data) {
+        setLayoutState(res.data);
+        setLayoutSyncMsg({ success: true, text: res.message || 'Layout backed up to Firestore cloud successfully!' });
+        addAudit('Backup Dashboard Layout', 'Previous Backup', `Module: ${res.data.activeModule}`);
+      } else {
+        setLayoutSyncMsg({ success: false, text: res.message || 'Failed to backup layout.' });
+      }
+    } catch (err: any) {
+      setLayoutSyncMsg({ success: false, text: err.message || 'Error backing up layout.' });
+    } finally {
+      setLayoutSyncLoading(false);
+    }
+  };
+
+  const handleManualRestoreLayout = async () => {
+    if (!activeUser) return;
+    setLayoutSyncLoading(true);
+    setLayoutSyncMsg(null);
+    try {
+      const remote = await fetchLayoutFromFirestore(activeUser.id);
+      if (remote) {
+        setLayoutState(remote);
+        window.dispatchEvent(new Event('apex-trigger-layout-restore'));
+        setLayoutSyncMsg({
+          success: true,
+          text: `Layout restored! Module: "${remote.activeModule}", Scroll: ${remote.scrollPosition}px.`
+        });
+        addAudit('Restore Dashboard Layout', 'Current View', `Restored Module: ${remote.activeModule}`);
+      } else {
+        setLayoutSyncMsg({ success: false, text: 'No backup found in Firestore.' });
+      }
+    } catch (err: any) {
+      setLayoutSyncMsg({ success: false, text: err.message || 'Error restoring layout.' });
+    } finally {
+      setLayoutSyncLoading(false);
+    }
+  };
 
   // Change password states
   const [currentPassword, setCurrentPassword] = useState('');
@@ -1501,6 +1658,198 @@ export const SettingsModule: React.FC = () => {
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* WebAuthn / Passkeys Configuration Panel */}
+            <div className="glass-panel p-5 rounded-xl border border-brand-border mt-4">
+              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-brand-border/60">
+                <Fingerprint className="w-5 h-5 text-cyan-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-gray-200">WebAuthn & Passkey Biometrics</h3>
+                  <span className="text-[10px] text-gray-500 font-mono">Touch ID, Face ID, Windows Hello & Hardware Key Unlocking</span>
+                </div>
+              </div>
+
+              <div className="space-y-4 text-xs font-mono">
+                {/* Toggle Enable Biometric Lock */}
+                <div className="flex items-center justify-between p-3 bg-gray-950/40 rounded-xl border border-brand-border/60">
+                  <div>
+                    <span className="text-gray-200 font-semibold font-sans text-xs block">Enable Biometric Passkey Unlock</span>
+                    <span className="text-[9px] text-gray-500">Allow 1-click biometric scan to unlock session when application locks</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleTogglePasskey(!passkeyConfig.enabled)}
+                    className={`relative inline-flex h-5 w-10 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out outline-none ${
+                      passkeyConfig.enabled ? 'bg-cyan-500' : 'bg-gray-800'
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-gray-950 shadow ring-0 transition duration-200 ease-in-out ${
+                        passkeyConfig.enabled ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Passkey Credential Info Card */}
+                <div className="p-3.5 bg-gray-950/60 rounded-xl border border-cyan-500/20 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase text-gray-400 font-bold">Bound Credential Status</span>
+                    <span className={`px-2 py-0.5 text-[8px] font-mono font-bold rounded-full ${
+                      passkeyConfig.credential
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                    }`}>
+                      {passkeyConfig.credential ? 'PASSKEY REGISTERED' : 'NO PASSKEY BOUND'}
+                    </span>
+                  </div>
+
+                  {passkeyConfig.credential ? (
+                    <div className="space-y-1.5 pt-1 text-[11px] font-sans">
+                      <div className="flex items-center justify-between text-gray-300">
+                        <span className="text-gray-500 font-mono text-[10px]">Device Authenticator:</span>
+                        <span className="font-semibold text-cyan-400">{passkeyConfig.credential.deviceLabel}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-gray-300">
+                        <span className="text-gray-500 font-mono text-[10px]">Registered On:</span>
+                        <span className="font-mono text-[10px] text-gray-400">
+                          {new Date(passkeyConfig.credential.registeredAt).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-gray-500 font-sans leading-relaxed">
+                      No biometric passkey bound to account "{activeUser?.email}". Click "Register New Passkey" below to enroll device Touch ID, Face ID, or Windows Hello.
+                    </p>
+                  )}
+                </div>
+
+                {/* Status message */}
+                {passkeyStatusMsg && (
+                  <div className={`p-2.5 rounded-lg text-xs font-mono text-center ${
+                    passkeyStatusMsg.success ? 'bg-emerald-950/30 border border-emerald-500/30 text-emerald-400' : 'bg-rose-950/30 border border-rose-500/30 text-rose-400'
+                  }`}>
+                    {passkeyStatusMsg.text}
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleRegisterPasskey}
+                    disabled={passkeyLoading}
+                    className="flex-1 py-2.5 px-3 bg-cyan-500 hover:bg-cyan-400 text-gray-950 font-bold font-sans rounded-xl text-center shadow-lg transition text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    <Fingerprint className="w-4 h-4 shrink-0" />
+                    <span>{passkeyConfig.credential ? 'Re-register Passkey' : 'Register New Passkey'}</span>
+                  </button>
+
+                  {passkeyConfig.credential && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleTestPasskey}
+                        disabled={passkeyLoading}
+                        className="py-2.5 px-3 bg-gray-900 hover:bg-gray-800 border border-cyan-500/30 text-cyan-400 font-sans font-bold rounded-xl text-center transition text-xs cursor-pointer disabled:opacity-50"
+                      >
+                        Test Scan
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRemovePasskey}
+                        disabled={passkeyLoading}
+                        className="py-2.5 px-3 bg-rose-950/20 hover:bg-rose-900/30 border border-rose-500/30 text-rose-400 font-sans font-bold rounded-xl text-center transition text-xs cursor-pointer disabled:opacity-50"
+                      >
+                        Remove
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Firestore Dashboard Layout Backup & Sync Panel */}
+            <div className="glass-panel p-5 rounded-xl border border-brand-border mt-4">
+              <div className="flex items-center gap-2 mb-4 pb-3 border-b border-brand-border/60">
+                <Layout className="w-5 h-5 text-cyan-400" />
+                <div>
+                  <h3 className="text-sm font-bold text-gray-200">Firestore Cloud Workspace Backup</h3>
+                  <span className="text-[10px] text-gray-500 font-mono">Auto-sync sidebar state, active module & scroll offset across devices</span>
+                </div>
+              </div>
+
+              <div className="space-y-4 text-xs font-mono">
+                {/* Cloud Sync Status Info Box */}
+                <div className="p-3.5 bg-gray-950/60 rounded-xl border border-cyan-500/20 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase text-gray-400 font-bold">Cloud Backup Snapshot</span>
+                    <span className="px-2 py-0.5 text-[8px] font-mono font-bold rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                      FIRESTORE ACTIVE
+                    </span>
+                  </div>
+
+                  {layoutState ? (
+                    <div className="grid grid-cols-2 gap-2 pt-1 text-[11px] font-sans">
+                      <div className="p-2 bg-gray-900/50 rounded-lg border border-brand-border/40">
+                        <span className="text-[9px] text-gray-500 uppercase font-mono block">Active Module</span>
+                        <span className="font-semibold text-cyan-400 capitalize">{layoutState.activeModule}</span>
+                      </div>
+                      <div className="p-2 bg-gray-900/50 rounded-lg border border-brand-border/40">
+                        <span className="text-[9px] text-gray-500 uppercase font-mono block">Sidebar State</span>
+                        <span className="font-semibold text-gray-200">{layoutState.sidebarCollapsed ? 'Collapsed' : 'Expanded'}</span>
+                      </div>
+                      <div className="p-2 bg-gray-900/50 rounded-lg border border-brand-border/40">
+                        <span className="text-[9px] text-gray-500 uppercase font-mono block">Vertical Scroll Position</span>
+                        <span className="font-mono text-gray-300">{layoutState.scrollPosition || 0} px</span>
+                      </div>
+                      <div className="p-2 bg-gray-900/50 rounded-lg border border-brand-border/40">
+                        <span className="text-[9px] text-gray-500 uppercase font-mono block">Last Synced</span>
+                        <span className="font-mono text-[10px] text-gray-400">
+                          {layoutState.updatedAt ? new Date(layoutState.updatedAt).toLocaleTimeString() : 'Just now'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-gray-500 font-sans leading-relaxed">
+                      No cloud layout backup detected. Click "Backup Layout Now" to create your first Firestore workspace snapshot.
+                    </p>
+                  )}
+                </div>
+
+                {/* Status Message */}
+                {layoutSyncMsg && (
+                  <div className={`p-2.5 rounded-lg text-xs font-mono text-center ${
+                    layoutSyncMsg.success ? 'bg-emerald-950/30 border border-emerald-500/30 text-emerald-400' : 'bg-rose-950/30 border border-rose-500/30 text-rose-400'
+                  }`}>
+                    {layoutSyncMsg.text}
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleManualBackupLayout}
+                    disabled={layoutSyncLoading}
+                    className="flex-1 py-2.5 px-3 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-gray-950 font-bold font-sans rounded-xl text-center shadow-lg transition text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    <UploadCloud className="w-4 h-4 shrink-0" />
+                    <span>Backup Layout Now</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleManualRestoreLayout}
+                    disabled={layoutSyncLoading}
+                    className="flex-1 py-2.5 px-3 bg-gray-900 hover:bg-gray-800 border border-cyan-500/30 text-cyan-400 font-sans font-bold rounded-xl text-center transition text-xs cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    <DownloadCloud className="w-4 h-4 shrink-0" />
+                    <span>Restore Exact State</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Change Password Panel */}

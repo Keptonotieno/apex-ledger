@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { usePWA } from '../hooks/usePWA';
 import { UserRole } from '../types';
 import { GlobalSearchModal } from './GlobalSearchModal';
 import { 
   Bell, Check, RefreshCw, Clock, LogIn, LogOut,
   Wifi, HelpCircle, AlertTriangle, ShieldCheck, Menu, Search, ChevronDown,
-  Sun, Moon, X
+  Sun, Moon, X, Smartphone, Download
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -34,6 +35,7 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
     toggleTheme
   } = useApp();
 
+  const { isInstallable, installApp, isInstalled } = usePWA();
   const [showNotificationDrawer, setShowNotificationDrawer] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showBusinessDropdown, setShowBusinessDropdown] = useState(false);
@@ -233,6 +235,19 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
           </span>
           <span className="text-gray-400">Live Sync</span>
         </div>
+
+        {/* PWA Mobile App Install Button */}
+        {isInstallable && !isInstalled && (
+          <button
+            onClick={installApp}
+            className="p-2 sm:px-3 sm:py-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 transition cursor-pointer flex items-center gap-1.5 text-xs font-semibold shrink-0 animate-pulse"
+            title="Install Apex Ledger App on Mobile/Desktop"
+            id="header-pwa-install-btn"
+          >
+            <Smartphone className="w-4 h-4 text-amber-400" />
+            <span className="hidden sm:inline">Install App</span>
+          </button>
+        )}
 
         {/* Dynamic Theme Toggle */}
         <button

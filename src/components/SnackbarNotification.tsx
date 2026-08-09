@@ -10,6 +10,7 @@ interface ToastMessage {
 
 export function SnackbarNotification() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const timeoutsRef = React.useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
     const handleSystemError = (event: Event) => {
@@ -47,14 +48,17 @@ export function SnackbarNotification() {
       setToasts(prev => [...prev, newToast]);
 
       // Auto-remove after 6 seconds
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         setToasts(prev => prev.filter(t => t.id !== newToast.id));
       }, 6000);
+      timeoutsRef.current.push(timer);
     };
 
     window.addEventListener('system-api-error', handleSystemError);
     return () => {
       window.removeEventListener('system-api-error', handleSystemError);
+      timeoutsRef.current.forEach(t => clearTimeout(t));
+      timeoutsRef.current = [];
     };
   }, []);
 

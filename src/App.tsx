@@ -33,18 +33,111 @@ import { UserRole } from './types';
 import { motion, AnimatePresence } from 'motion/react';
 import { SessionManager } from './utils/SessionManager';
 import { dbManager, isSupabaseConfigured, supabase } from './lib/database';
+import { backupLayoutToFirestore, fetchLayoutFromFirestore } from './utils/dashboardLayoutBackup';
 import { AlertTriangle, Clock, LogOut } from 'lucide-react';
 import { LockScreen } from './components/LockScreen';
 import { SnackbarNotification } from './components/SnackbarNotification';
+import { PWAInstallBanner } from './components/PWAInstallBanner';
 
 function DashboardLayout() {
-  const { activeView, isLoggedIn, activeUser, logout, activeBusiness, isRestoringSession } = useApp();
+  const { activeView, setActiveView, isLoggedIn, activeUser, logout, activeBusiness, isRestoringSession } = useApp();
+  const mainRef = React.useRef<HTMLElement | null>(null);
+  const [scrollPosition, setScrollPosition] = useState<number>(0);
+  const [layoutRestored, setLayoutRestored] = useState<boolean>(false);
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
       return window.innerWidth < 1024;
     }
     return true;
   });
+
+  // Restore saved dashboard layout from Firestore upon login / session restore
+  React.useEffect(() => {
+    if (!isLoggedIn || !activeUser?.id || layoutRestored) return;
+
+    let isMounted = true;
+    const restoreLayout = async () => {
+      try {
+        const saved = await fetchLayoutFromFirestore(activeUser.id);
+        if (saved && isMounted) {
+          if (saved.sidebarCollapsed !== undefined) {
+            setSidebarCollapsed(saved.sidebarCollapsed);
+          }
+          if (saved.activeModule && saved.activeModule !== activeView) {
+            setActiveView(saved.activeModule);
+          }
+          if (saved.scrollPosition && saved.scrollPosition > 0) {
+            setScrollPosition(saved.scrollPosition);
+            setTimeout(() => {
+              if (mainRef.current) {
+                mainRef.current.scrollTop = saved.scrollPosition;
+              }
+            }, 150);
+          }
+        }
+      } catch (err) {
+        console.warn('Dashboard layout restoration notice:', err);
+      } finally {
+        if (isMounted) setLayoutRestored(true);
+      }
+    };
+
+    restoreLayout();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isLoggedIn, activeUser?.id, layoutRestored, activeView, setActiveView]);
+
+  // Listen for manual layout restoration trigger from Settings
+  React.useEffect(() => {
+    const handleManualRestore = async () => {
+      if (!activeUser?.id) return;
+      const saved = await fetchLayoutFromFirestore(activeUser.id);
+      if (saved) {
+        if (saved.sidebarCollapsed !== undefined) setSidebarCollapsed(saved.sidebarCollapsed);
+        if (saved.activeModule) setActiveView(saved.activeModule);
+        if (saved.scrollPosition && mainRef.current) {
+          mainRef.current.scrollTop = saved.scrollPosition;
+        }
+      }
+    };
+    window.addEventListener('apex-trigger-layout-restore', handleManualRestore);
+    return () => window.removeEventListener('apex-trigger-layout-restore', handleManualRestore);
+  }, [activeUser?.id, setActiveView]);
+
+  // Handle scroll tracking with debounced state update
+  const scrollTimeoutRef = React.useRef<any>(null);
+  React.useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    };
+  }, []);
+
+  const handleScroll = (e: React.UIEvent<HTMLElement>) => {
+    const top = e.currentTarget.scrollTop;
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    scrollTimeoutRef.current = setTimeout(() => {
+      setScrollPosition(top);
+    }, 200);
+  };
+
+  // Debounced auto-backup of dashboard layout to Firestore
+  React.useEffect(() => {
+    if (!isLoggedIn || !activeUser?.id || !layoutRestored) return;
+
+    const timer = setTimeout(() => {
+      backupLayoutToFirestore(activeUser.id, {
+        sidebarCollapsed,
+        activeModule: activeView,
+        scrollPosition: mainRef.current ? mainRef.current.scrollTop : scrollPosition,
+        businessId: activeBusiness?.id
+      });
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [isLoggedIn, activeUser?.id, sidebarCollapsed, activeView, scrollPosition, activeBusiness?.id, layoutRestored]);
 
   React.useEffect(() => {
     const handleResize = () => {
@@ -315,7 +408,11 @@ function DashboardLayout() {
         />
 
         {/* Scrollable View Area */}
-        <main className="flex-1 p-3 sm:p-6 md:p-8 overflow-y-auto max-w-[1600px] w-full mx-auto space-y-4 sm:space-y-6 min-w-0">
+        <main 
+          ref={mainRef}
+          onScroll={handleScroll}
+          className="flex-1 p-3 sm:p-6 md:p-8 overflow-y-auto max-w-[1600px] w-full mx-auto space-y-4 sm:space-y-6 min-w-0"
+        >
           
           {/* Module Transition Canvas */}
           <AnimatePresence mode="wait">
@@ -420,9 +517,12 @@ function DashboardLayout() {
 
 export default function App() {
   return (
-    <AppProvider>
-      <DashboardLayout />
-      <SnackbarNotification />
-    </AppProvider>
+    <ErrorBoundary isGlobal={true} moduleName="Apex Ledger Main System">
+      <AppProvider>
+        <DashboardLayout />
+        <SnackbarNotification />
+        <PWAInstallBanner />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }

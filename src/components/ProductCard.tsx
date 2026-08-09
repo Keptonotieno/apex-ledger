@@ -532,10 +532,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                   <span className="font-mono text-[10px] text-gray-500 block uppercase">Product Assets</span>
                   <div className="flex flex-wrap gap-2">
                     {product.images?.map((img, i) => (
-                      <span key={i} className="px-2 py-0.5 bg-gray-900 border border-brand-border text-[9px] font-mono text-gray-400 rounded-md">Image_{i+1}.png</span>
+                      <span key={`img-${product.id}-${i}`} className="px-2 py-0.5 bg-gray-900 border border-brand-border text-[9px] font-mono text-gray-400 rounded-md">Image_{i+1}.png</span>
                     ))}
                     {product.documents?.map((doc, i) => (
-                      <span key={i} className="px-2 py-0.5 bg-gray-950 border border-indigo-500/20 text-[9px] font-mono text-indigo-400 rounded-md">{doc.name} ({doc.type})</span>
+                      <span key={`doc-${product.id}-${doc.name || i}`} className="px-2 py-0.5 bg-gray-950 border border-indigo-500/20 text-[9px] font-mono text-indigo-400 rounded-md">{doc.name} ({doc.type})</span>
                     ))}
                   </div>
                 </div>

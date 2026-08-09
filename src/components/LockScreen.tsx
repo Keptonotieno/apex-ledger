@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { UserProfile, UserRole } from '../types';
 import { dbManager } from '../lib/database';
-import { Lock, Unlock, LogOut, ShieldAlert, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { Lock, Unlock, LogOut, ShieldAlert, ArrowRight, Eye, EyeOff, Fingerprint, ShieldCheck } from 'lucide-react';
 import { motion } from 'motion/react';
+import { getPasskeyConfig, authenticatePasskey } from '../utils/webauthn';
 
 interface LockScreenProps {
   activeUser: UserProfile | null;
@@ -23,6 +24,30 @@ export function LockScreen({ activeUser, logout, onUnlock }: LockScreenProps) {
       </div>
     );
   }
+
+  const passkeyConfig = getPasskeyConfig(activeUser.id);
+  const passkeyEnabled = passkeyConfig.enabled && !!passkeyConfig.credential;
+
+  const handlePasskeyUnlock = async () => {
+    setError('');
+    setIsLoading(true);
+    try {
+      const res = await authenticatePasskey({
+        id: activeUser.id,
+        name: activeUser.name,
+        email: activeUser.email
+      });
+      if (res.success) {
+        onUnlock();
+      } else {
+        setError(res.message || 'Passkey authentication failed.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Biometric authentication failed.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const isEmployee = activeUser.role === UserRole.EMPLOYEE;
 
@@ -126,6 +151,28 @@ export function LockScreen({ activeUser, logout, onUnlock }: LockScreenProps) {
               <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
               <span>{error}</span>
             </motion.div>
+          )}
+
+          {/* WebAuthn / Passkey Biometric Unlock Option */}
+          {passkeyEnabled && (
+            <div className="mb-5 p-3.5 bg-cyan-950/30 border border-cyan-500/30 rounded-2xl">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+                  WebAuthn Biometric Passkey
+                </span>
+                <span className="text-[9px] text-gray-400 font-mono">{passkeyConfig.credential?.deviceLabel}</span>
+              </div>
+              <button
+                type="button"
+                onClick={handlePasskeyUnlock}
+                disabled={isLoading}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-emerald-500/20 via-cyan-500/20 to-blue-500/20 hover:from-emerald-500/30 hover:to-blue-500/30 border border-cyan-500/40 text-cyan-300 font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer disabled:opacity-50"
+              >
+                <Fingerprint className="w-5 h-5 text-cyan-400 animate-pulse shrink-0" />
+                <span>Unlock with Biometrics / Touch ID / Face ID</span>
+              </button>
+            </div>
           )}
 
           {/* Unlock Form */}

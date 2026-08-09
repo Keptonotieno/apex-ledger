@@ -2333,7 +2333,7 @@ export const PerformanceDashboard: React.FC = () => {
                     <div className="text-right">
                       <div className="flex items-center gap-1 sm:justify-end text-yellow-400">
                         {Array.from({ length: Math.floor(starsRating) }).map((_, i) => (
-                          <Star key={i} className="w-4 h-4 fill-yellow-400" />
+                          <Star key={`star-${user.id || user.name}-${i}`} className="w-4 h-4 fill-yellow-400" />
                         ))}
                         {starsRating % 1 !== 0 && (
                           <Star className="w-4 h-4 text-yellow-400/40 fill-yellow-400/20" />

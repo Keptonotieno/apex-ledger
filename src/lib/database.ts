@@ -74,8 +74,13 @@ function getLocalItem<T>(key: string, defaultValue: T): T {
 function setLocalItem<T>(key: string, value: T): void {
   try {
     localStorage.setItem(`apex_ledger_${key}`, JSON.stringify(value));
-    // Trigger window storage event for instant multi-tab sync
+    IndexedDBCache.set(key, value).catch(() => {});
+    // Trigger window storage events for instant multi-tab & UI sync
     window.dispatchEvent(new Event('storage'));
+    window.dispatchEvent(new Event('apex-db-update'));
+    if (typeof dbManager !== 'undefined') {
+      dbManager.saveWorkspaceToServer();
+    }
   } catch (e) {
     console.error(`Error saving ${key}`, e);
   }
@@ -126,6 +131,17 @@ class ApexDatabaseManager {
         this.verifyAndSyncWithRetry();
       }
     });
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', () => {
+        this.forceSaveWorkspaceToServer();
+      });
+      window.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+          this.forceSaveWorkspaceToServer();
+        }
+      });
+    }
   }
 
   /**
@@ -353,21 +369,44 @@ class ApexDatabaseManager {
       'budgets', 'invoices', 'bank_transactions', 'reconciliations'
     ];
     keys.forEach(key => {
-      let val = workspace[key] || [];
-      if (key === 'businesses' && Array.isArray(val)) {
-        const profiles = workspace.profiles || [];
-        const ownerProfile = profiles.find((p: any) => 
-          p.role === UserRole.ADMIN || 
-          p.role === 'Owner / Admin' || 
-          p.role === 'Business Owner (Admin)'
-        );
-        const ownerId = ownerProfile ? ownerProfile.id : '';
-        val = val.map((b: any) => ({
-          ...b,
-          ownerId: b.ownerId || ownerId
-        }));
+      if (workspace[key] !== undefined && Array.isArray(workspace[key])) {
+        const serverItems = workspace[key];
+        const localItems = getLocalItem<any[]>(key, []);
+        
+        // Merge server and local items by ID so no locally added items are accidentally wiped out
+        const mergedMap = new Map<string, any>();
+        if (Array.isArray(localItems)) {
+          localItems.forEach((item: any) => {
+            if (item && item.id) mergedMap.set(String(item.id), item);
+          });
+        }
+        if (Array.isArray(serverItems)) {
+          serverItems.forEach((item: any) => {
+            if (item && item.id) {
+              const existing = mergedMap.get(String(item.id));
+              mergedMap.set(String(item.id), existing ? { ...existing, ...item } : item);
+            }
+          });
+        }
+        let val = Array.from(mergedMap.values());
+        
+        if (key === 'businesses' && Array.isArray(val)) {
+          const profiles = workspace.profiles || getLocalItem('profiles', []);
+          const ownerProfile = profiles.find((p: any) => 
+            p.role === UserRole.ADMIN || 
+            p.role === 'Owner / Admin' || 
+            p.role === 'Business Owner (Admin)'
+          );
+          const ownerId = ownerProfile ? ownerProfile.id : '';
+          val = val.map((b: any) => ({
+            ...b,
+            ownerId: b.ownerId || ownerId
+          }));
+        }
+        
+        localStorage.setItem(`apex_ledger_${key}`, JSON.stringify(val));
+        IndexedDBCache.set(key, val).catch(() => {});
       }
-      localStorage.setItem(`apex_ledger_${key}`, JSON.stringify(val));
     });
   }
 
@@ -375,7 +414,7 @@ class ApexDatabaseManager {
     if (this.saveTimeout) clearTimeout(this.saveTimeout);
     this.saveTimeout = setTimeout(async () => {
       await this.forceSaveWorkspaceToServer();
-    }, 500);
+    }, 200);
   }
 
   async forceSaveWorkspaceToServer() {
@@ -383,7 +422,12 @@ class ApexDatabaseManager {
       clearTimeout(this.saveTimeout);
       this.saveTimeout = null;
     }
-    if (!this.activeUserId || !this.activeBusinessId) return;
+    const token = SessionManager.getToken();
+    const bizId = this.activeBusinessId || localStorage.getItem('apex_ledger_active_business_id');
+    const userId = this.activeUserId || localStorage.getItem('apex_ledger_active_user_id');
+
+    if (!bizId || !userId || !token) return;
+
     try {
       const keys = [
         'businesses', 'branches', 'categories', 'profiles', 'products', 
@@ -812,6 +856,13 @@ class ApexDatabaseManager {
   async logout(isTimeout: boolean = false) {
     const user = this.getCurrentUser();
     
+    // 1. Force save all pending workspace edits to SQLite backend before ending session
+    try {
+      await this.forceSaveWorkspaceToServer();
+    } catch (err) {
+      console.error('Failed to auto-save workspace before logout:', err);
+    }
+
     try {
       await apiFetch('/api/auth/logout', { method: 'POST' });
     } catch (err) {
@@ -833,14 +884,17 @@ class ApexDatabaseManager {
       const actionStr = isTimeout ? 'Inactivity Session Timeout' : 'Logged Out';
       const detailStr = isTimeout ? 'Session auto-locked due to inactivity' : 'N/A';
       this.addAudit(actionStr, `${user.name} (${user.role})`, detailStr, clientIp);
+      // Persist the logout audit record as well
+      await this.forceSaveWorkspaceToServer().catch(() => {});
     }
 
-    // Clear local storage workspace securely so nothing is leaked, but SQL is intact!
+    // Clear active user session token & active identifiers
     this.clearLocalWorkspace();
     sessionStorage.clear();
 
-    // Notify other tabs
+    // Notify other tabs and trigger UI re-render
     window.dispatchEvent(new Event('storage'));
+    window.dispatchEvent(new Event('apex-db-update'));
   }
 
   private initDatabase() {

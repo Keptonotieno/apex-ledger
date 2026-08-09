@@ -25,20 +25,14 @@ export const ClientDirectory: React.FC = () => {
   // Set default selected customer if available
   useEffect(() => {
     const list = customers.filter(c => showArchived ? c.archived : !c.archived);
-    if (list.length > 0 && (!selectedCustomer || (selectedCustomer.archived !== showArchived))) {
-      setSelectedCustomer(list[0]);
-    } else if (list.length === 0) {
-      setSelectedCustomer(null);
-    } else if (selectedCustomer) {
-      // Keep selected customer in sync
-      const current = customers.find(c => c.id === selectedCustomer.id);
-      if (current) {
-        setSelectedCustomer(current);
-      } else {
-        setSelectedCustomer(list[0] || null);
+    setSelectedCustomer(prev => {
+      if (!prev || (prev.archived !== showArchived)) {
+        return list[0] || null;
       }
-    }
-  }, [customers, selectedCustomer, showArchived]);
+      const current = customers.find(c => c.id === prev.id);
+      return current || list[0] || null;
+    });
+  }, [customers, showArchived]);
 
   // Authorization check
   const isAuthorized = activeUser?.role === UserRole.ADMIN || activeUser?.role === UserRole.MANAGER;

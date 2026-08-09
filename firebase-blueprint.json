@@ -1,0 +1,147 @@
+{
+  "entities": {
+    "DashboardLayout": {
+      "title": "Dashboard Layout Backup",
+      "description": "User layout configuration including sidebar state, active module, and scroll position",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Unique profile user ID" },
+        "sidebarCollapsed": { "type": "boolean", "description": "Whether navigation sidebar is collapsed" },
+        "activeModule": { "type": "string", "description": "Current active view module" },
+        "scrollPosition": { "type": "number", "description": "Vertical scroll offset in pixels" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "ISO timestamp of sync" }
+      },
+      "required": ["userId", "sidebarCollapsed", "activeModule", "scrollPosition", "updatedAt"]
+    },
+    "Business": {
+      "title": "Business Entity",
+      "description": "Corporate tenant workspace record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "primaryBranch": { "type": "string" },
+        "currency": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "UserProfile": {
+      "title": "User Profile Entity",
+      "description": "Staff profile and authentication account metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" }
+      },
+      "required": ["id", "name", "email"]
+    },
+    "Product": {
+      "title": "Inventory Product Entity",
+      "description": "Stock item item record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "sellingPrice": { "type": "number" }
+      },
+      "required": ["id", "name"]
+    },
+    "GenericRecord": {
+      "title": "Generic Collection Record",
+      "description": "Firestore sync entity wrapper",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" }
+      },
+      "required": ["id"]
+    }
+  },
+  "firestore": {
+    "/dashboard_layouts/{userId}": {
+      "schema": { "$ref": "#/entities/DashboardLayout" },
+      "description": "User specific dashboard layout backups"
+    },
+    "/businesses/{businessId}": {
+      "schema": { "$ref": "#/entities/Business" },
+      "description": "Corporate business tenant records"
+    },
+    "/profiles/{profileId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profiles and credentials"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Public user accounts"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Inventory product records"
+    },
+    "/sales/{saleId}": {
+      "schema": { "$ref": "#/entities/GenericRecord" },
+      "description": "Sales transactions"
+    },
+    "/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/GenericRecord" },
+      "description": "Client directory records"
+    },
+    "/debts/{debtId}": {
+      "schema": { "$ref": "#/entities/GenericRecord" },
+      "description": "Debt and credit records"
+    },
+    "/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/GenericRecord" },
+      "description": "Corporate expense records"
+    },
+    "/procurements/{procurementId}": {
+      "schema": { "$ref": "#/entities/GenericRecord" },
+      "description": "Supplier procurements"
+    },
+    "/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/GenericRecord" },
+      "description": "Staff task assignments"
+    },
+    "/events/{eventId}": {
+      "schema": { "$ref": "#/entities/GenericRecord" },
+      "description": "Calendar schedule events"
+    },
+    "/timelogs/{timelogId}": {
+      "schema": { "$ref": "#/entities/GenericRecord" },
+      "description": "Employee attendance time logs"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/GenericRecord" },
+      "description": "System notification alerts"
+    },
+    "/audits/{auditId}": {
+      "schema": { "$ref": "#/entities/GenericRecord" },
+      "description": "Audit security ledger logs"
+    },
+    "/branches/{branchId}": {
+      "schema": { "$ref": "#/entities/GenericRecord" },
+      "description": "Corporate branch registries"
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/GenericRecord" },
+      "description": "Product and expense categories"
+    },
+    "/budgets/{budgetId}": {
+      "schema": { "$ref": "#/entities/GenericRecord" },
+      "description": "Department budget allocations"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": { "$ref": "#/entities/GenericRecord" },
+      "description": "Billing invoices"
+    },
+    "/bank_transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/GenericRecord" },
+      "description": "Bank transaction records"
+    },
+    "/reconciliations/{reconciliationId}": {
+      "schema": { "$ref": "#/entities/GenericRecord" },
+      "description": "Financial reconciliation entries"
+    }
+  }
+}
