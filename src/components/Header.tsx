@@ -5,7 +5,7 @@ import { UserRole } from '../types';
 import { GlobalSearchModal } from './GlobalSearchModal';
 import { 
   Bell, Check, RefreshCw, Clock, LogIn, LogOut,
-  Wifi, HelpCircle, AlertTriangle, ShieldCheck, Menu, Search, ChevronDown,
+  Wifi, WifiOff, HelpCircle, AlertTriangle, ShieldCheck, Menu, Search, ChevronDown,
   Sun, Moon, X, Smartphone, Download
 } from 'lucide-react';
 
@@ -40,6 +40,22 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showBusinessDropdown, setShowBusinessDropdown] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState<boolean>(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   useEffect(() => {
     const handleShortcut = (e: KeyboardEvent) => {
@@ -227,13 +243,28 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
           <span>{isClockedIn ? 'Clock Out' : 'Clock In'}</span>
         </button>
 
-        {/* Real-time network active status dot */}
-        <div className="hidden lg:flex items-center gap-2 bg-gray-950/40 border border-brand-border px-3 py-1.5 rounded-xl text-[11px] font-mono">
+        {/* Real-time network & sync status indicator */}
+        <div 
+          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-mono font-medium border transition-colors ${
+            isOnline 
+              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
+              : 'bg-amber-500/15 border-amber-500/30 text-amber-300 animate-pulse'
+          }`}
+          title={isOnline ? "Connected - Real-time cloud sync active" : "Offline mode - Changes saved locally and will sync when reconnected"}
+          id="header-connectivity-status-indicator"
+        >
           <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+            {isOnline && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />}
+            <span className={`relative inline-flex rounded-full h-2 w-2 ${isOnline ? 'bg-emerald-500' : 'bg-amber-400'}`} />
           </span>
-          <span className="text-gray-400">Live Sync</span>
+          {isOnline ? (
+            <Wifi className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+          ) : (
+            <WifiOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          )}
+          <span className="hidden sm:inline font-semibold">
+            {isOnline ? 'Online' : 'Offline'}
+          </span>
         </div>
 
         {/* PWA Mobile App Install Button */}

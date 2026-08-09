@@ -1,6 +1,23 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, query, where, onSnapshot, Firestore } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager,
+  enableIndexedDbPersistence,
+  doc, 
+  getDoc, 
+  setDoc, 
+  updateDoc, 
+  deleteDoc, 
+  collection, 
+  getDocs, 
+  query, 
+  where, 
+  onSnapshot, 
+  Firestore 
+} from 'firebase/firestore';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 
 const metaEnv = (import.meta as any).env || {};
@@ -22,12 +39,34 @@ googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
 
-// Initialize Firestore with specific database ID if configured
+// Initialize Firestore with offline persistence caching across sessions and multi-tab sync
 const databaseId = firebaseConfigJson.firestoreDatabaseId && firebaseConfigJson.firestoreDatabaseId !== '(default)'
   ? firebaseConfigJson.firestoreDatabaseId
   : undefined;
 
-export const db: Firestore = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
+let dbInstance: Firestore;
+
+try {
+  const settings = {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    })
+  };
+  dbInstance = databaseId ? initializeFirestore(app, settings, databaseId) : initializeFirestore(app, settings);
+  console.log('[Firestore Persistence] Persistent multi-tab local cache initialized successfully.');
+} catch (e) {
+  console.warn('[Firestore Persistence] Fallback to getFirestore with IndexedDB persistence:', e);
+  dbInstance = databaseId ? getFirestore(app, databaseId) : getFirestore(app);
+  enableIndexedDbPersistence(dbInstance).catch((err) => {
+    if (err.code === 'failed-precondition') {
+      console.warn('[Firestore Persistence] Multi-tab conflict: Persistence enabled in primary tab only.');
+    } else if (err.code === 'unimplemented') {
+      console.warn('[Firestore Persistence] Current browser context lacks IndexedDB persistence support.');
+    }
+  });
+}
+
+export const db: Firestore = dbInstance;
 
 export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
 
