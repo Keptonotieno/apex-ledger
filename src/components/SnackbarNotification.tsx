@@ -67,7 +67,7 @@ export function SnackbarNotification() {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-[200] max-w-sm w-full pointer-events-none flex flex-col gap-3">
+    <div className="fixed bottom-6 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-sm z-[200] pointer-events-none flex flex-col gap-3">
       <AnimatePresence>
         {toasts.map((toast) => (
           <motion.div

@@ -313,7 +313,7 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
 
           {/* Notifications Drawer */}
           {showNotificationDrawer && (
-            <div className="absolute right-0 top-full mt-2 w-[88vw] max-w-xs sm:w-80 p-2 bg-gray-900/95 border border-brand-border rounded-xl shadow-2xl z-50">
+            <div className="absolute right-0 top-full mt-2 w-[88vw] max-w-[calc(100vw-1.5rem)] sm:w-80 p-2 bg-gray-900/95 border border-brand-border rounded-xl shadow-2xl z-50">
               <div className="flex items-center justify-between p-2 border-b border-brand-border">
                 <span className="text-xs font-bold text-gray-200">System Messages</span>
                 <span className="text-[10px] text-cyan-400 font-mono">Live Logs</span>
@@ -354,7 +354,7 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
         <div className="relative">
           <button 
             onClick={() => setShowUserDropdown(!showUserDropdown)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-950/40 border border-brand-border hover:border-cyan-500/30 transition text-left"
+            className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-xl bg-gray-950/40 border border-brand-border hover:border-cyan-500/30 transition text-left"
           >
             <div className="hidden sm:block">
               <div className="text-[9px] text-gray-500 font-mono leading-none">SECURE WORKSPACE</div>
@@ -364,7 +364,7 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
             </div>
             
             {/* User Avatar with green indicator circle */}
-            <div className="relative w-9 h-9 rounded-full bg-cyan-950/60 border border-cyan-500/30 flex items-center justify-center font-bold text-xs text-cyan-400 glow-cyan shrink-0 overflow-hidden">
+            <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-cyan-950/60 border border-cyan-500/30 flex items-center justify-center font-bold text-xs text-cyan-400 glow-cyan shrink-0 overflow-hidden">
               {activeUser.avatarUrl ? (
                 <img src={activeUser.avatarUrl} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               ) : (
@@ -377,7 +377,7 @@ export const Header: React.FC<HeaderProps> = ({ sidebarCollapsed, toggleSidebar 
 
           {/* Interactive Profile switcher for quick role simulation */}
           {showUserDropdown && (
-            <div className="absolute right-0 top-full mt-2 w-56 p-1 bg-gray-900/95 border border-brand-border rounded-xl shadow-2xl z-50">
+            <div className="absolute right-0 top-full mt-2 w-56 max-w-[calc(100vw-1.5rem)] p-1 bg-gray-900/95 border border-brand-border rounded-xl shadow-2xl z-50">
               <div className="px-2.5 py-1.5 text-[10px] text-gray-500 font-mono uppercase border-b border-brand-border/60">
                 Switch demo profile
               </div>
