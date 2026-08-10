@@ -597,8 +597,8 @@ class ApexDatabaseManager {
     if (!email || !password) {
       // Allow demo bypass only if a userId is provided and we can locate a matching employee profile
       if (userId) {
-        const profiles = this.getProfiles();
-        const found = profiles.find(p => p.id === userId);
+        const allProfiles = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
+        const found = allProfiles.find(p => p.id === userId);
         if (found) {
           if (found.status === 'Deleted' || found.status === 'Archived') {
             throw new Error('This employee account has been deleted/decommissioned. Access is restricted.');
@@ -738,9 +738,9 @@ class ApexDatabaseManager {
         }
       }
 
-      // Check local workspace profiles
-      const profiles = this.getProfiles();
-      const found = profiles.find(p => p.email && p.email.toLowerCase().trim() === normalizedEmail);
+      // Check local workspace profiles across ALL tenants/businesses
+      const allProfiles = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
+      const found = allProfiles.find(p => p.email && p.email.toLowerCase().trim() === normalizedEmail);
 
       if (found) {
         if (found.status === 'Suspended' || found.status === 'Archived' || found.status === 'Deleted') {
@@ -749,8 +749,13 @@ class ApexDatabaseManager {
         if (found.role === 'Employee') {
           throw new Error('Employees must log in using their unique Employee ID on the Employee login tab.');
         }
-        if (found.password && found.password !== password) {
+        if (found.password && password && found.password !== password) {
           throw new Error('Incorrect password.');
+        }
+
+        if (!found.password && password) {
+          found.password = password;
+          setLocalItem('profiles', allProfiles);
         }
 
         this.activeUserId = found.id;
@@ -760,8 +765,22 @@ class ApexDatabaseManager {
           localStorage.setItem('apex_ledger_active_business_id', found.businessId);
         }
         SessionManager.setToken('session_' + Date.now());
+
+        // Sync local profile back to server DB asynchronously so server DB stays in sync
+        apiFetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fullName: found.name,
+            businessName: (found as any).businessName || 'Corporate Workspace',
+            email: normalizedEmail,
+            password: password
+          })
+        }).catch(() => {});
+
         this.addAudit('Logged In', `${found.name} (Owner)`, 'N/A');
         window.dispatchEvent(new Event('storage'));
+        window.dispatchEvent(new Event('apex-db-update'));
         return true;
       }
 
@@ -819,8 +838,8 @@ class ApexDatabaseManager {
     }
 
     // 2. Client-side fallback lookup in local workspace profiles
-    const profiles = this.getProfiles();
-    const found = profiles.find(p => {
+    const allProfiles = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
+    const found = allProfiles.find(p => {
       const num = p.badgeNumber || p.employeeNumber;
       return num && typeof num === 'string' && num.trim().toUpperCase() === empNumClean;
     });
@@ -2621,7 +2640,20 @@ class ApexDatabaseManager {
     try {
       // Check for duplicate email in local profiles
       const existingProfiles = getLocalItem<UserProfile[]>('profiles', DEFAULT_PROFILES);
-      if (existingProfiles.some(p => p.email && p.email.toLowerCase().trim() === normalizedEmail)) {
+      const existingUser = existingProfiles.find(p => p.email && p.email.toLowerCase().trim() === normalizedEmail);
+      if (existingUser) {
+        if (password && existingUser.password && existingUser.password === password) {
+          this.activeUserId = existingUser.id;
+          this.activeBusinessId = existingUser.businessId || '';
+          localStorage.setItem('apex_ledger_active_user_id', existingUser.id);
+          if (existingUser.businessId) {
+            localStorage.setItem('apex_ledger_active_business_id', existingUser.businessId);
+          }
+          SessionManager.setToken('session_' + Date.now());
+          window.dispatchEvent(new Event('storage'));
+          window.dispatchEvent(new Event('apex-db-update'));
+          return true;
+        }
         throw new Error('An account with this email already exists. Please sign in.');
       }
 

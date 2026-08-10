@@ -160,8 +160,26 @@ app.post('/api/auth/register', async (req, res) => {
 
   try {
     // Check duplication
-    const existing = await dbGet('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+    const existing = await dbGet('SELECT * FROM users WHERE LOWER(email) = ?', [normalizedEmail]);
     if (existing) {
+      // If the provided password matches, log the user in directly!
+      if (password && existing.password_hash && bcrypt.compareSync(password, existing.password_hash)) {
+        const workspaceRow = await dbGet('SELECT workspace_data FROM workspaces WHERE business_id = ?', [existing.business_id]);
+        const workspace = workspaceRow ? JSON.parse(workspaceRow.workspace_data) : null;
+        const token = crypto.randomBytes(24).toString('hex');
+        const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+        await dbRun('INSERT INTO sessions (token, user_id, business_id, workspace_id, role, expires_at) VALUES (?, ?, ?, ?, ?, ?)', [
+          token, existing.id, existing.business_id, existing.workspace_id || 'w_work_default', 'Owner / Admin', expiresAt
+        ]);
+        return res.json({
+          success: true,
+          token,
+          userId: existing.id,
+          businessId: existing.business_id,
+          workspace,
+          user: { id: existing.id, name: existing.full_name, email: existing.email, role: 'Owner / Admin' }
+        });
+      }
       return res.status(400).json({ 
         success: false, 
         error: 'An account with this email already exists. Please sign in.' 
