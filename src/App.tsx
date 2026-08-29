@@ -471,8 +471,28 @@ function DashboardLayout() {
                 />
               </div>
 
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/10 text-amber-400 mb-4 animate-bounce">
-                <AlertTriangle className="h-6 w-6" id="warning-icon" />
+              <div className="relative mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/10 text-amber-400 mb-4" id="warning-icon-wrapper">
+                {/* Subtle pulsing glow ring behind the warning icon */}
+                <motion.div
+                  className="absolute inset-0 rounded-full bg-amber-500/25"
+                  animate={{ scale: [1, 1.4, 1], opacity: [0.7, 0, 0.7] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                />
+                {/* Pulsing warning icon container */}
+                <motion.div
+                  animate={{ 
+                    scale: [1, 1.12, 1],
+                    filter: [
+                      'drop-shadow(0 0 0px rgba(245,158,11,0))',
+                      'drop-shadow(0 0 8px rgba(245,158,11,0.6))',
+                      'drop-shadow(0 0 0px rgba(245,158,11,0))'
+                    ]
+                  }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                  className="relative z-10 flex items-center justify-center"
+                >
+                  <AlertTriangle className="h-6 w-6 text-amber-400" id="warning-icon" />
+                </motion.div>
               </div>
 
               <h3 className="text-lg font-semibold text-center text-white mb-2 tracking-tight" id="warning-heading">
